@@ -566,7 +566,8 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
 
             if path in {
                 "/", "/index.html", "/app.js", "/style.css", "/road-camera.js",
-                "/road-model.js", "/road-workplace.js", "/road.css", "/favicon.ico",
+                "/road-model.js", "/road-workplace.js", "/road.css",
+                "/road-cartoon.css", "/road-sfx.js", "/road-game.js", "/favicon.ico",
             }:
                 self._serve_web(path)
                 return
@@ -614,6 +615,9 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             "/road-model.js": "road-model.js",
             "/road-workplace.js": "road-workplace.js",
             "/road.css": "road.css",
+            "/road-cartoon.css": "road-cartoon.css",
+            "/road-sfx.js": "road-sfx.js",
+            "/road-game.js": "road-game.js",
         }
         if path not in mapping:
             raise _ApiFault(404, "not_found", "The requested local resource does not exist.")

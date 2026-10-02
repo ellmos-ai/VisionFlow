@@ -36,6 +36,7 @@
   let roadMount = null;
   let roadModelMount = null;
   let roadWorkplaceMount = null;
+  let roadGameMount = null;
   let roadWorkspaceReady = false;
   let roadRefreshTimer = null;
   let roadRefreshInFlight = false;
@@ -884,6 +885,9 @@
             ...client,
             timelineContainer: $("road-controller-trace"),
           });
+          if (window.RoadGame && !roadGameMount) {
+            roadGameMount = window.RoadGame.mountCartoonGame($("workspace-road"));
+          }
           roadWorkspaceReady = true;
           await refreshRoadViews();
           scheduleRoadRefresh();
@@ -924,6 +928,7 @@
   $("analysis-tab").addEventListener("click", () => showWorkspace("analysis"));
   $("road-tab").addEventListener("click", activateRoadWorkspace);
   window.addEventListener("pagehide", () => {
+    if (roadGameMount) roadGameMount.destroy();
     if (roadMount) roadMount.destroy();
     if (roadModelMount) roadModelMount.destroy();
     if (roadWorkplaceMount) roadWorkplaceMount.destroy();

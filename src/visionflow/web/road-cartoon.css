@@ -1,0 +1,713 @@
+/* ==========================================================================
+   FlowVision Emergency Leitstelle – Cartoon / Trickfilm Style
+   Inspired by Emergency / Bibi Blocksberg / Benjamin Blümchen Rettungszentrale
+   Bold comic outlines, cheerful tones, chunky 3D buttons, animated cables
+   ========================================================================== */
+
+:root {
+  --comic-border: 3px solid #1e293b;
+  --comic-shadow: 0 8px 0 rgba(15, 23, 42, 0.22);
+  --comic-shadow-sm: 0 4px 0 rgba(15, 23, 42, 0.2);
+  --comic-shadow-pressed: 0 2px 0 rgba(15, 23, 42, 0.2);
+  --comic-radius: 18px;
+  --comic-radius-sm: 10px;
+
+  /* Cheerful Cartoon Palette */
+  --bg-sky: #e0f2fe;
+  --bg-station: #f8fafc;
+  --bg-datacenter: #0f172a;
+  --bg-dispatch: #1e293b;
+  --accent-yellow: #fde047;
+  --accent-orange: #fb923c;
+  --accent-green: #4ade80;
+  --accent-red: #f87171;
+  --accent-blue: #38bdf8;
+  --police-blue: #0284c7;
+}
+
+/* Base Wrapper for the Cartoon Mission Control */
+.cartoon-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Comic Sans MS", cursive, sans-serif;
+  color: #0f172a;
+}
+
+/* ==========================================================================
+   Top Header & Sound/Language Bar
+   ========================================================================== */
+.cartoon-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: #ffffff;
+  border: var(--comic-border);
+  box-shadow: var(--comic-shadow);
+  border-radius: var(--comic-radius);
+  padding: 1rem 1.5rem;
+}
+
+.cartoon-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cartoon-brand__badge {
+  font-size: 2rem;
+  line-height: 1;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.15));
+}
+
+.cartoon-brand__title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #0369a1;
+  letter-spacing: -0.02em;
+}
+
+.cartoon-brand__subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.cartoon-top-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cartoon-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #f1f5f9;
+  color: #1e293b;
+  border: 2px solid #334155;
+  border-radius: 9999px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--comic-shadow-sm);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.cartoon-pill-btn:hover {
+  background: #e2e8f0;
+  transform: translateY(-2px);
+  box-shadow: var(--comic-shadow);
+}
+
+.cartoon-pill-btn:active {
+  transform: translateY(2px);
+  box-shadow: var(--comic-shadow-pressed);
+}
+
+/* ==========================================================================
+   Cartoon Conduit / Cable Flow Navigation
+   ========================================================================== */
+.cartoon-conduit-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: #0f172a;
+  border: var(--comic-border);
+  box-shadow: var(--comic-shadow);
+  border-radius: var(--comic-radius);
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+}
+
+.cartoon-station-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  background: #1e293b;
+  border: 2px solid #475569;
+  border-radius: var(--comic-radius-sm);
+  padding: 0.6rem 0.9rem;
+  color: #e2e8f0;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: var(--comic-shadow-sm);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.cartoon-station-node:hover {
+  border-color: #38bdf8;
+  transform: translateY(-3px);
+  color: #ffffff;
+}
+
+.cartoon-station-node.active {
+  background: #0284c7;
+  border-color: #38bdf8;
+  color: #ffffff;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.6), var(--comic-shadow-sm);
+  transform: translateY(-2px);
+}
+
+.cartoon-station-icon {
+  font-size: 1.5rem;
+}
+
+/* Cable connector between rooms */
+.cartoon-cable-segment {
+  flex: 1;
+  min-width: 30px;
+  height: 12px;
+  background: #334155;
+  border-radius: 9999px;
+  border: 2px solid #1e293b;
+  position: relative;
+  overflow: hidden;
+}
+
+.cartoon-cable-segment.pulsing {
+  background: #eab308;
+  box-shadow: 0 0 12px #facc15;
+  border-color: #ca8a04;
+}
+
+.cartoon-cable-segment.pulsing::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 50%;
+  height: 100%;
+  background: #ffffff;
+  border-radius: 9999px;
+  animation: cableZap 1s infinite linear;
+}
+
+@keyframes cableZap {
+  0% { left: -50%; }
+  100% { left: 150%; }
+}
+
+/* ==========================================================================
+   Room Container
+   ========================================================================== */
+.cartoon-room {
+  background: #ffffff;
+  border: var(--comic-border);
+  box-shadow: var(--comic-shadow);
+  border-radius: var(--comic-radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.cartoon-room[hidden] {
+  display: none !important;
+}
+
+.cartoon-room__stage {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* ==========================================================================
+   Character & Speech Bubble Component
+   ========================================================================== */
+.cartoon-character-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  background: #eff6ff;
+  border: 2px solid #bfdbfe;
+  border-radius: var(--comic-radius);
+  padding: 1rem 1.25rem;
+}
+
+.cartoon-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid #1e293b;
+  background: #fed7aa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  flex-shrink: 0;
+  box-shadow: var(--comic-shadow-sm);
+}
+
+.cartoon-speech-bubble {
+  position: relative;
+  background: #ffffff;
+  border: 2px solid #1e293b;
+  border-radius: var(--comic-radius-sm);
+  padding: 0.9rem 1.2rem;
+  box-shadow: var(--comic-shadow-sm);
+  flex: 1;
+}
+
+.cartoon-speech-bubble::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 24px;
+  border-width: 6px 12px 6px 0;
+  border-style: solid;
+  border-color: transparent #1e293b transparent transparent;
+}
+
+.cartoon-speech-bubble::after {
+  content: "";
+  position: absolute;
+  left: -9px;
+  top: 25px;
+  border-width: 5px 10px 5px 0;
+  border-style: solid;
+  border-color: transparent #ffffff transparent transparent;
+}
+
+.cartoon-speaker-name {
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: #0369a1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.cartoon-speech-text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: #1e293b;
+}
+
+/* ==========================================================================
+   Room 1: Traffic Outpost Viewport & Trigger Pad
+   ========================================================================== */
+.traffic-screen-wrap {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 860px) {
+  .traffic-screen-wrap {
+    grid-template-columns: 1fr;
+  }
+}
+
+.traffic-monitor {
+  background: #020617;
+  border: var(--comic-border);
+  border-radius: var(--comic-radius);
+  box-shadow: var(--comic-shadow);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.traffic-monitor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.5rem;
+  color: #e2e8f0;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.traffic-feed-box {
+  position: relative;
+  background: #0f172a;
+  border-radius: var(--comic-radius-sm);
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.traffic-feed-box img,
+.traffic-feed-box canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Control Panel with Chunky Buttons */
+.traffic-control-panel {
+  background: #f8fafc;
+  border: 2px solid #cbd5e1;
+  border-radius: var(--comic-radius);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.traffic-control-panel h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.cartoon-btn-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.chunky-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border: 2px solid #0f172a;
+  border-radius: var(--comic-radius-sm);
+  font-weight: 800;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: var(--comic-shadow-sm);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+  user-select: none;
+}
+
+.chunky-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--comic-shadow);
+}
+
+.chunky-btn:active {
+  transform: translateY(2px);
+  box-shadow: var(--comic-shadow-pressed);
+}
+
+.chunky-btn--power {
+  background: #38bdf8;
+  color: #0f172a;
+}
+.chunky-btn--leaf {
+  background: #86efac;
+  color: #064e3b;
+}
+.chunky-btn--bird {
+  background: #fde047;
+  color: #713f12;
+}
+.chunky-btn--wrongway {
+  background: #f87171;
+  color: #450a0a;
+  grid-column: span 2;
+}
+.chunky-btn--next {
+  background: #a855f7;
+  color: #ffffff;
+  padding: 1rem;
+  font-size: 1.05rem;
+  grid-column: span 2;
+  margin-top: 0.5rem;
+}
+
+/* ==========================================================================
+   Room 2: Datacenter & AI Model
+   ========================================================================== */
+.datacenter-layout {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 860px) {
+  .datacenter-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.datacenter-card {
+  background: #0f172a;
+  border: var(--comic-border);
+  border-radius: var(--comic-radius);
+  box-shadow: var(--comic-shadow);
+  padding: 1rem;
+  color: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.datacenter-card__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.datacenter-queue-list {
+  background: #1e293b;
+  border-radius: var(--comic-radius-sm);
+  padding: 0.75rem;
+  min-height: 180px;
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.queue-item {
+  background: #334155;
+  border-radius: 6px;
+  padding: 0.5rem;
+  border-left: 4px solid #38bdf8;
+}
+.queue-item.high-risk {
+  border-left-color: #f87171;
+  background: #450a0a;
+}
+
+.datacenter-console {
+  background: #020617;
+  border: 2px solid #334155;
+  border-radius: var(--comic-radius-sm);
+  padding: 0.75rem;
+  min-height: 180px;
+  max-height: 240px;
+  overflow-y: auto;
+  font-family: Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #4ade80;
+}
+
+.datacenter-verdict {
+  background: #1e293b;
+  border-radius: var(--comic-radius-sm);
+  padding: 1rem;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.5rem;
+}
+
+.verdict-badge {
+  font-size: 1.1rem;
+  font-weight: 800;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+}
+.verdict-badge.safe {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+}
+.verdict-badge.danger {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.15);
+  animation: pulseBadge 1.2s infinite;
+}
+
+@keyframes pulseBadge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* ==========================================================================
+   Room 3: Polizeileitstelle Alpha (Officer Schmidt)
+   ========================================================================== */
+.dispatch-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 860px) {
+  .dispatch-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dispatch-desk {
+  background: #f8fafc;
+  border: var(--comic-border);
+  border-radius: var(--comic-radius);
+  box-shadow: var(--comic-shadow);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dispatch-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chunky-btn--radio {
+  background: #38bdf8;
+  color: #0f172a;
+}
+.chunky-btn--coffee {
+  background: #fed7aa;
+  color: #7c2d12;
+}
+
+/* ==========================================================================
+   Room 4: Polizeileitstelle Beta (Fallback & Auto-Eskalation)
+   ========================================================================== */
+.beta-alert-box {
+  background: #fef2f2;
+  border: 3px solid #f87171;
+  border-radius: var(--comic-radius);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1rem;
+  box-shadow: var(--comic-shadow);
+}
+
+.beta-countdown-display {
+  font-size: 3.5rem;
+  font-weight: 900;
+  font-family: monospace;
+  color: #dc2626;
+  background: #ffffff;
+  border: 3px solid #f87171;
+  border-radius: var(--comic-radius-sm);
+  padding: 0.5rem 1.5rem;
+  box-shadow: var(--comic-shadow-sm);
+  animation: countdownPulse 1s infinite alternate;
+}
+
+@keyframes countdownPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.03); }
+}
+
+.sticky-note {
+  background: #fef08a;
+  border: 2px solid #ca8a04;
+  border-radius: 4px;
+  padding: 0.75rem 1.25rem;
+  font-weight: 700;
+  color: #854d0e;
+  transform: rotate(-3deg);
+  box-shadow: 2px 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================================================
+   Emergency Vehicle (Einsatzwagen) Animation Bar
+   ========================================================================== */
+.patrol-car-stage {
+  background: #334155;
+  border: var(--comic-border);
+  border-radius: var(--comic-radius);
+  box-shadow: var(--comic-shadow);
+  padding: 1rem 1.5rem;
+  overflow: hidden;
+  position: relative;
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+}
+
+.patrol-car-road {
+  position: absolute;
+  bottom: 12px;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, #ffffff 0, #ffffff 20px, transparent 20px, transparent 40px);
+}
+
+.patrol-car {
+  position: absolute;
+  bottom: 16px;
+  left: -160px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: transform 0.1s linear;
+}
+
+.patrol-car.dispatching {
+  animation: rollOutCar 4s forwards cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@keyframes rollOutCar {
+  0% { left: -160px; }
+  35% { left: 45%; }
+  60% { left: 45%; }
+  100% { left: 110%; }
+}
+
+.patrol-car-siren-light {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 16px #0284c7;
+  animation: sirenFlash 0.3s infinite alternate;
+}
+
+@keyframes sirenFlash {
+  0% { background: #38bdf8; box-shadow: 0 0 20px #0284c7; }
+  100% { background: #ef4444; box-shadow: 0 0 20px #b91c1c; }
+}
+
+/* Floating Follow-Cable Button */
+.cable-follow-btn {
+  background: #facc15;
+  color: #713f12;
+  border: 3px solid #ca8a04;
+  border-radius: 9999px;
+  padding: 0.8rem 1.5rem;
+  font-weight: 800;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: var(--comic-shadow);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: center;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.cable-follow-btn:hover {
+  background: #fde047;
+  transform: translateY(-3px);
+  box-shadow: 0 10px 0 rgba(15, 23, 42, 0.25);
+}
+
+.cable-follow-btn:active {
+  transform: translateY(2px);
+  box-shadow: var(--comic-shadow-pressed);
+}
