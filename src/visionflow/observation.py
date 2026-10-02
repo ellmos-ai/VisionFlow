@@ -280,15 +280,47 @@ def observe(
 
     findings: list[Finding] = []
     interval = 1.0 / normalized.sample_fps
+    read_at = getattr(source, "read_at", None)
+    media_position = getattr(source, "timeline_position_seconds", None)
+    uses_media_timeline = callable(read_at) and media_position is not None
+    media_window_end: float | None = None
+    if uses_media_timeline:
+        if isinstance(media_position, bool) or not isinstance(media_position, (int, float)):
+            raise ObservationRejected("source timeline position must be a finite number")
+        media_position = float(media_position)
+        if not math.isfinite(media_position) or media_position < 0:
+            raise ObservationRejected("source timeline position must be non-negative and finite")
+        previous_window_end = getattr(source, "observation_timeline_position_seconds", None)
+        if previous_window_end is not None:
+            if (
+                isinstance(previous_window_end, bool)
+                or not isinstance(previous_window_end, (int, float))
+                or not math.isfinite(float(previous_window_end))
+                or previous_window_end < 0
+            ):
+                raise ObservationRejected("observation timeline position must be finite")
+            media_position = max(media_position, float(previous_window_end))
+        media_window_end = media_position + normalized.duration_seconds
+        if not math.isfinite(media_window_end):
+            raise ObservationRejected("observation timeline end is not finite")
+
     for index in range(requested_frames):
-        target = started_at + index * interval
-        if not _wait_for_slot(clock, target, deadline, cancelled):
-            break
+        if uses_media_timeline:
+            if cancelled():
+                break
+        else:
+            target = started_at + index * interval
+            if not _wait_for_slot(clock, target, deadline, cancelled):
+                break
         if cancelled():
             break
 
         budget.consume(frames=1)
-        frame = source.read()
+        if uses_media_timeline:
+            assert media_position is not None
+            frame = read_at(media_position + index * interval)
+        else:
+            frame = source.read()
         if frame is None:
             budget._refund(frames=1)
             break
@@ -318,6 +350,9 @@ def observe(
                     timestamp_seconds=frame.timestamp_seconds,
                 )
             findings.extend(_as_findings(analyzer(analysis_frame, normalized)))
+
+    if uses_media_timeline and not cancelled():
+        source.observation_timeline_position_seconds = media_window_end
 
     return findings
 

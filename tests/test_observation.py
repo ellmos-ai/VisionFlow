@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 
@@ -116,6 +118,21 @@ def make_frames(count: int, *, height: int = 6, width: int = 8) -> list[Frame]:
         )
         for index in range(count)
     ]
+
+
+def write_30fps_video(path: Path, frame_count: int = 90) -> None:
+    writer = cv2.VideoWriter(
+        str(path),
+        cv2.VideoWriter_fourcc(*"MJPG"),
+        30.0,
+        (32, 24),
+    )
+    assert writer.isOpened()
+    try:
+        for index in range(frame_count):
+            writer.write(np.full((24, 32, 3), index % 255, dtype=np.uint8))
+    finally:
+        writer.release()
 
 
 def test_model_cannot_switch_camera(config=None):
@@ -250,6 +267,112 @@ def test_observe_returns_actual_frame_evidence_refunds_eof_and_keeps_cursor_open
         "llm_calls": 0,
     }
     assert clock.sleeps and max(clock.sleeps) <= 0.25
+
+
+def test_file_video_observation_uses_one_second_media_timeline_after_initial_reads(tmp_path):
+    from visionflow.media import VideoSource
+
+    path = tmp_path / "sampled-30fps.avi"
+    write_30fps_video(path)
+    source = VideoSource("clip.avi", path, max_frames=10)
+    first = source.read()
+    second = source.read()
+    assert first.frame_id == "clip.avi:0"
+    assert second.frame_id == "clip.avi:1"
+    start = source.timeline_position_seconds
+    budget = Budget(max_observation_seconds=2, max_frames=10)
+
+    findings = observe(
+        source,
+        make_request(
+            source_id="clip.avi",
+            region=None,
+            duration_seconds=2,
+            sample_fps=1,
+        ),
+        budget,
+        cancelled=lambda: False,
+        clock=FakeClock(),
+    )
+
+    assert [finding.frame_ids for finding in findings] == [["clip.avi:2"], ["clip.avi:32"]]
+    timestamps = [finding.metrics["timestamp_seconds"] for finding in findings]
+    assert timestamps[1] - timestamps[0] == pytest.approx(1.0, abs=0.04)
+    assert budget.snapshot()["used"] == {
+        "frames": 2,
+        "observation_seconds": 2.0,
+        "llm_calls": 0,
+    }
+    assert source.timeline_position_seconds == pytest.approx(33 / 30, abs=0.04)
+    assert source.observation_timeline_position_seconds == pytest.approx(start + 2)
+    source.close()
+
+
+def test_file_video_observation_window_end_persists_across_requests(tmp_path):
+    from visionflow.media import VideoSource
+
+    path = tmp_path / "persistent-timeline.avi"
+    write_30fps_video(path)
+    source = VideoSource("clip.avi", path, max_frames=10)
+    budget = Budget(max_observation_seconds=3, max_frames=4)
+    request = make_request(
+        source_id="clip.avi",
+        region=None,
+        duration_seconds=1.5,
+        sample_fps=1,
+    )
+
+    first = observe(source, request, budget, lambda: False, FakeClock())
+    second = observe(source, request, budget, lambda: False, FakeClock())
+
+    timestamps = [
+        finding.metrics["timestamp_seconds"]
+        for finding in first + second
+    ]
+    assert timestamps == pytest.approx([0.0, 1.0, 1.5, 2.5], abs=0.04)
+    assert [finding.frame_ids for finding in first + second] == [
+        ["clip.avi:0"],
+        ["clip.avi:30"],
+        ["clip.avi:45"],
+        ["clip.avi:75"],
+    ]
+    assert source.observation_timeline_position_seconds == pytest.approx(3.0)
+    assert budget.snapshot()["used"]["frames"] == 4
+    assert budget.snapshot()["used"]["observation_seconds"] == 3.0
+    source.close()
+
+
+def test_video_observation_eof_refunds_only_the_undelivered_sample(tmp_path):
+    from visionflow.media import VideoSource
+
+    path = tmp_path / "short-timeline.avi"
+    write_30fps_video(path)
+    source = VideoSource("clip.avi", path, max_frames=10)
+    budget = Budget(max_observation_seconds=3.5, max_frames=4)
+
+    findings = observe(
+        source,
+        make_request(
+            source_id="clip.avi",
+            region=None,
+            duration_seconds=3.5,
+            sample_fps=1,
+        ),
+        budget,
+        lambda: False,
+        FakeClock(),
+    )
+
+    assert len(findings) == 3
+    assert [finding.frame_ids for finding in findings] == [
+        ["clip.avi:0"],
+        ["clip.avi:30"],
+        ["clip.avi:60"],
+    ]
+    assert budget.snapshot()["used"]["frames"] == 3
+    assert budget.snapshot()["used"]["observation_seconds"] == 3.5
+    assert source.observation_timeline_position_seconds == pytest.approx(3.5)
+    source.close()
 
 
 def test_cancel_before_read_consumes_no_frames():

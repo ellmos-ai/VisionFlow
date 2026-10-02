@@ -125,13 +125,16 @@ class _CaptureSource:
         *,
         expected_frames: int | None,
         fail_on_end: bool,
+        media_timeline: bool = False,
     ) -> None:
         self.source_id = source_id
         self._capture = capture
         self._max_frames = max_frames
         self._expected_frames = expected_frames
         self._fail_on_end = fail_on_end
+        self._media_timeline = media_timeline
         self._frames_read = 0
+        self._next_frame_index = 0
         self._closed = False
         try:
             fps = float(capture.get(cv2.CAP_PROP_FPS))
@@ -141,9 +144,19 @@ class _CaptureSource:
         self._started_at = time.monotonic()
 
     def read(self) -> Frame | None:
+        return self._read_current_position()
+
+    def _read_current_position(self, *, expected_frame_index: int | None = None) -> Frame | None:
         if self._closed:
             return None
         if self._frames_read >= self._max_frames:
+            self.close()
+            return None
+        if (
+            self._media_timeline
+            and self._expected_frames is not None
+            and self._next_frame_index >= self._expected_frames
+        ):
             self.close()
             return None
 
@@ -154,16 +167,26 @@ class _CaptureSource:
             raise MediaError(f"failed to decode frame from source {self.source_id}") from exc
 
         if not success or image is None:
-            unexpected_end = (
-                self._fail_on_end
-                or self._frames_read == 0
-                or (
-                    self._expected_frames is not None
-                    and self._frames_read < self._expected_frames
+            if expected_frame_index is not None:
+                unexpected_end = (
+                    self._expected_frames is None
+                    or expected_frame_index < self._expected_frames
                 )
-            )
+            else:
+                unexpected_end = (
+                    self._fail_on_end
+                    or self._frames_read == 0
+                    or (
+                        self._expected_frames is not None
+                        and self._next_frame_index < self._expected_frames
+                    )
+                )
             self.close()
             if unexpected_end:
+                if expected_frame_index is not None:
+                    raise MediaError(
+                        f"video decoder failed at reported frame {expected_frame_index}: {self.source_id}"
+                    )
                 raise MediaError(f"source ended before a usable frame: {self.source_id}")
             return None
 
@@ -173,13 +196,31 @@ class _CaptureSource:
             self.close()
             raise MediaError(f"invalid frame from source {self.source_id}: {exc}") from exc
 
-        frame_index = self._frames_read
+        if self._media_timeline:
+            try:
+                frame_index = self._capture_frame_index(
+                    expected_frame_index,
+                    require_position=expected_frame_index is not None,
+                )
+            except MediaError:
+                self.close()
+                raise
+            if expected_frame_index is not None and frame_index != expected_frame_index:
+                self.close()
+                raise MediaError(
+                    f"video decoder did not reach requested frame {expected_frame_index}: {self.source_id}"
+                )
+        else:
+            frame_index = self._frames_read
         self._frames_read += 1
+        self._next_frame_index = frame_index + 1
         try:
             position_ms = float(self._capture.get(cv2.CAP_PROP_POS_MSEC))
         except cv2.error:
             position_ms = 0.0
-        if math.isfinite(position_ms) and position_ms > 0:
+        if self._media_timeline and self._fps > 0:
+            timestamp = frame_index / self._fps
+        elif math.isfinite(position_ms) and position_ms > 0:
             timestamp = position_ms / 1000.0
         elif self._fps > 0:
             timestamp = frame_index / self._fps
@@ -194,6 +235,31 @@ class _CaptureSource:
         if self._frames_read >= self._max_frames:
             self.close()
         return frame
+
+    def _capture_frame_index(
+        self,
+        fallback: int | None,
+        *,
+        require_position: bool = False,
+    ) -> int:
+        try:
+            position = float(self._capture.get(cv2.CAP_PROP_POS_FRAMES))
+        except (cv2.error, AttributeError, TypeError, ValueError) as exc:
+            if require_position:
+                raise MediaError("video decoder cannot report its decoded frame position") from exc
+            position = 0.0
+        if math.isfinite(position) and position >= 1:
+            frame_index = int(round(position)) - 1
+            if require_position and (
+                fallback is None or not math.isclose(position, fallback + 1, abs_tol=1e-6)
+            ):
+                raise MediaError("video decoder did not report the requested decoded frame position")
+            return max(0, frame_index)
+        if require_position:
+            raise MediaError("video decoder did not report a valid decoded frame position")
+        if fallback is not None:
+            return fallback
+        return self._next_frame_index
 
     def close(self) -> None:
         if self._closed:
@@ -242,7 +308,87 @@ class VideoSource(_CaptureSource):
             max_frames,
             expected_frames=expected_frames,
             fail_on_end=False,
+            media_timeline=True,
         )
+        self._observation_timeline_position_seconds: float | None = None
+
+    @property
+    def timeline_position_seconds(self) -> float:
+        """Timestamp of the next native video frame at the current cursor."""
+        if self._fps <= 0:
+            raise MediaError("video frame rate is unavailable for timestamp sampling")
+        position = self._next_frame_index / self._fps
+        if not math.isfinite(position):
+            raise MediaError("video timeline position is not finite")
+        return position
+
+    @property
+    def observation_timeline_position_seconds(self) -> float | None:
+        """End of the last completed observation window, if one exists."""
+        return self._observation_timeline_position_seconds
+
+    @observation_timeline_position_seconds.setter
+    def observation_timeline_position_seconds(self, value: float | None) -> None:
+        if value is None:
+            self._observation_timeline_position_seconds = None
+            return
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise MediaError("observation timeline position must be a finite number")
+        position = float(value)
+        if not math.isfinite(position) or position < 0:
+            raise MediaError("observation timeline position must be non-negative and finite")
+        previous = self._observation_timeline_position_seconds
+        if previous is not None and position < previous:
+            raise MediaError("observation timeline position cannot move backward")
+        self._observation_timeline_position_seconds = position
+
+    def read_at(self, timestamp_seconds: float) -> Frame | None:
+        """Read the first native frame at or after an absolute media timestamp.
+
+        The file cursor only moves forward. ``max_frames`` counts delivered frames,
+        including sparse samples, and skipped native frames do not consume it.
+        """
+        if isinstance(timestamp_seconds, bool) or not isinstance(timestamp_seconds, (int, float)):
+            raise MediaError("video timestamp must be a finite non-negative number")
+        timestamp = float(timestamp_seconds)
+        if not math.isfinite(timestamp) or timestamp < 0:
+            raise MediaError("video timestamp must be a finite non-negative number")
+        if self._fps <= 0:
+            raise MediaError("video frame rate is unavailable for timestamp sampling")
+        if self._closed or self._frames_read >= self._max_frames:
+            self.close()
+            return None
+
+        requested_product = timestamp * self._fps
+        if not math.isfinite(requested_product):
+            raise MediaError("requested video frame position is not finite")
+        frame_index = int(math.ceil(requested_product - 1e-7))
+        if self._expected_frames is not None and frame_index >= self._expected_frames:
+            self.close()
+            return None
+        if frame_index < self._next_frame_index:
+            raise MediaError("video timestamp sampling cannot move the cursor backward")
+        if frame_index > self._next_frame_index:
+            try:
+                positioned = self._capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+            except (cv2.error, AttributeError, TypeError, ValueError) as exc:
+                self.close()
+                raise MediaError("video decoder does not support timestamp seeking") from exc
+            if not positioned:
+                self.close()
+                raise MediaError("video decoder does not support timestamp seeking")
+            try:
+                position = float(self._capture.get(cv2.CAP_PROP_POS_FRAMES))
+            except (cv2.error, AttributeError, TypeError, ValueError):
+                position = 0.0
+            if not math.isfinite(position) or not math.isclose(
+                position,
+                frame_index,
+                abs_tol=1e-6,
+            ):
+                self.close()
+                raise MediaError("video decoder did not honor the requested seek position")
+        return self._read_current_position(expected_frame_index=frame_index)
 
 
 class CameraSource(_CaptureSource):

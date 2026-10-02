@@ -207,6 +207,210 @@ def test_video_source_cursor_advances_and_close_is_terminal(tmp_path, monkeypatc
     assert source.read() is None
 
 
+def test_video_source_can_seek_forward_on_the_native_media_timeline(tmp_path):
+    from visionflow.media import VideoSource
+
+    path = tmp_path / "timeline-30fps.avi"
+    fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+    writer = cv2.VideoWriter(str(path), fourcc, 30.0, (32, 24))
+    assert writer.isOpened()
+    try:
+        for index in range(90):
+            writer.write(np.full((24, 32, 3), index % 255, dtype=np.uint8))
+    finally:
+        writer.release()
+
+    source = VideoSource("clip", path, max_frames=4)
+    try:
+        assert source.read().frame_id == "clip:0"
+        assert source.read().frame_id == "clip:1"
+        start = source.timeline_position_seconds
+        assert start == pytest.approx(2 / 30, abs=0.01)
+        assert source.observation_timeline_position_seconds is None
+
+        first_sample = source.read_at(start)
+        second_sample = source.read_at(start + 1.0)
+
+        assert first_sample.frame_id == "clip:2"
+        assert second_sample.frame_id == "clip:32"
+        assert first_sample.timestamp_seconds == pytest.approx(2 / 30, abs=0.01)
+        assert second_sample.timestamp_seconds - first_sample.timestamp_seconds == pytest.approx(1.0, abs=0.04)
+        assert source.timeline_position_seconds == pytest.approx(33 / 30, abs=0.04)
+        assert source.read() is None  # The limit counts four delivered frames, not skipped native frames.
+    finally:
+        source.close()
+
+
+def test_video_read_at_reports_unsupported_frame_rate_as_media_error(tmp_path, monkeypatch):
+    from visionflow import media
+
+    path = tmp_path / "unsupported-fps.avi"
+    path.write_bytes(b"placeholder")
+
+    class CaptureWithoutFps:
+        def isOpened(self):
+            return True
+
+        def get(self, property_id):
+            if property_id == cv2.CAP_PROP_FPS:
+                return 0.0
+            if property_id == cv2.CAP_PROP_FRAME_COUNT:
+                return 90.0
+            return 0.0
+
+        def set(self, property_id, value):
+            return False
+
+        def read(self):
+            return False, None
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(media.cv2, "VideoCapture", lambda _: CaptureWithoutFps())
+    source = media.VideoSource("clip", path, max_frames=10)
+    try:
+        with pytest.raises(MediaError, match="frame rate|FPS|fps"):
+            source.read_at(0.0)
+    finally:
+        source.close()
+
+
+def test_video_read_at_rejects_backend_that_does_not_reach_requested_frame(tmp_path, monkeypatch):
+    from visionflow import media
+
+    path = tmp_path / "lying-seek.avi"
+    path.write_bytes(b"placeholder")
+
+    class CaptureThatIgnoresSeek:
+        def isOpened(self):
+            return True
+
+        def get(self, property_id):
+            if property_id == cv2.CAP_PROP_FPS:
+                return 30.0
+            if property_id == cv2.CAP_PROP_FRAME_COUNT:
+                return 90.0
+            if property_id == cv2.CAP_PROP_POS_FRAMES:
+                return 0.0
+            return 0.0
+
+        def set(self, property_id, value):
+            return True
+
+        def read(self):
+            return True, np.zeros((24, 32, 3), dtype=np.uint8)
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(media.cv2, "VideoCapture", lambda _: CaptureThatIgnoresSeek())
+    source = media.VideoSource("clip", path, max_frames=10)
+    try:
+        with pytest.raises(MediaError, match="seek|position|reach"):
+            source.read_at(1.0)
+    finally:
+        source.close()
+
+
+def test_video_read_at_rejects_missing_decoded_position_instead_of_forging_frame_id(
+    tmp_path, monkeypatch
+):
+    from visionflow import media
+
+    path = tmp_path / "missing-decoded-position.avi"
+    path.write_bytes(b"placeholder")
+
+    class CaptureLosingPositionAfterRead:
+        position = 0.0
+
+        def isOpened(self):
+            return True
+
+        def get(self, property_id):
+            if property_id == cv2.CAP_PROP_FPS:
+                return 30.0
+            if property_id == cv2.CAP_PROP_FRAME_COUNT:
+                return 90.0
+            if property_id == cv2.CAP_PROP_POS_FRAMES:
+                return self.position
+            return 0.0
+
+        def set(self, property_id, value):
+            self.position = float(value)
+            return True
+
+        def read(self):
+            self.position = 0.0
+            return True, np.zeros((24, 32, 3), dtype=np.uint8)
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(media.cv2, "VideoCapture", lambda _: CaptureLosingPositionAfterRead())
+    source = media.VideoSource("clip", path, max_frames=10)
+    try:
+        with pytest.raises(MediaError, match="position|frame"):
+            source.read_at(1.0)
+    finally:
+        source.close()
+
+
+def test_video_read_at_decode_failure_inside_reported_duration_is_media_error(
+    tmp_path, monkeypatch
+):
+    from visionflow import media
+
+    path = tmp_path / "failed-decode.avi"
+    path.write_bytes(b"placeholder")
+
+    class CaptureWithDecodeFailure:
+        position = 0.0
+
+        def isOpened(self):
+            return True
+
+        def get(self, property_id):
+            if property_id == cv2.CAP_PROP_FPS:
+                return 30.0
+            if property_id == cv2.CAP_PROP_FRAME_COUNT:
+                return 90.0
+            if property_id == cv2.CAP_PROP_POS_FRAMES:
+                return self.position
+            return 0.0
+
+        def set(self, property_id, value):
+            self.position = float(value)
+            return True
+
+        def read(self):
+            return False, None
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(media.cv2, "VideoCapture", lambda _: CaptureWithDecodeFailure())
+    source = media.VideoSource("clip", path, max_frames=10)
+    try:
+        with pytest.raises(MediaError, match="decoder failed|reported frame"):
+            source.read_at(1.0)
+    finally:
+        source.close()
+
+
+def test_video_read_at_treats_targets_past_reported_duration_as_eof(tmp_path):
+    from visionflow.media import VideoSource
+
+    path = tmp_path / "timeline-eof.avi"
+    _write_video(path, values=tuple(range(15)))
+    source = VideoSource("clip", path, max_frames=10)
+    try:
+        assert source.read_at(3.1) is None
+        assert source.read() is None
+    finally:
+        source.close()
+
+
 def test_camera_source_requires_an_explicit_allowed_mapping(tmp_path, monkeypatch):
     from visionflow import media
 
