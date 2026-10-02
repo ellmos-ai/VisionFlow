@@ -858,3 +858,232 @@
   border-radius: 4px;
 }
 
+/* ==========================================================================
+   Clean Mission Control: Hide redundant legacy forms below the cartoon game
+   ========================================================================== */
+.road-camera__heading,
+.road-camera__case-options,
+.road-camera__toolbar,
+.road-camera__status,
+.road-camera__source,
+.road-camera__run,
+.road-camera__secondary,
+.road-camera__player-panel,
+.road-camera__live > h3,
+.road-camera__live > .road-camera__frame-meta,
+.road-workspace-grid {
+  display: none !important;
+}
+
+.road-camera {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  min-height: 1px !important;
+  min-width: 1px !important;
+}
+
+/* ==========================================================================
+   Room 2: Honest Model & Fallback Transparency Card
+   ========================================================================== */
+.inference-transparency-card {
+  background: #0b1329;
+  border: 2px solid #0284c7;
+  border-radius: var(--comic-radius-sm);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  color: #f8fafc;
+  box-shadow: var(--comic-shadow-sm);
+}
+
+.transparency-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.transparency-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #d97706; /* amber fallback tone */
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.3rem 0.75rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.transparency-pill.live-llm {
+  background: #16a34a;
+}
+
+.transparency-pill .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+}
+
+.transparency-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  margin-bottom: 0.75rem;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+}
+
+.transparency-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.transparency-item .label {
+  color: #94a3b8;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.transparency-item .value {
+  color: #38bdf8;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.transparency-notice {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+  border-top: 1px solid #1e293b;
+  padding-top: 0.6rem;
+}
+
+/* ==========================================================================
+   Room 3: Interactive Ticket Inbox & Video Inspector on Schmidt's Desk
+   ========================================================================== */
+.schmidt-ticket-inbox {
+  background: #0b1329;
+  border: 2px solid #334155;
+  border-radius: var(--comic-radius-sm);
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.schmidt-ticket-inbox__title {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #38bdf8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.schmidt-ticket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.schmidt-ticket-card {
+  background: #1e293b;
+  border: 2px solid #475569;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: #f8fafc;
+}
+
+.schmidt-ticket-card:hover {
+  border-color: #38bdf8;
+  background: #24344d;
+}
+
+.schmidt-ticket-card.active-ticket {
+  border-color: #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+  background: #1e293b;
+}
+
+.schmidt-ticket-card.danger-ticket {
+  border-left: 5px solid #ef4444;
+}
+
+.schmidt-ticket-card.safe-ticket {
+  border-left: 5px solid #22c55e;
+}
+
+.ticket-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.ticket-badge {
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+
+.ticket-badge.danger {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.ticket-badge.safe {
+  background: #15803d;
+  color: #ffffff;
+}
+
+.ticket-clip-title {
+  font-family: monospace;
+  font-size: 0.74rem;
+  color: #94a3b8;
+}
+.video-player-controls-hint {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.4rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.inference-interface-hint {
+  color: #94a3b8;
+  display: block;
+  margin-top: 4px;
+}
+
+.review-clip-meta {
+  color: #94a3b8;
+  margin-top: 6px;
+  display: inline-block;
+}
+
+.transparency-sub {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}

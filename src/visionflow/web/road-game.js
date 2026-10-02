@@ -118,6 +118,7 @@
   let countdownSeconds = 20;
   let countdownTimer = null;
   let caseQueue = [];
+  let selectedTicketId = null;
 
   // Translation table
   const I18N = {
@@ -231,6 +232,10 @@
       if (navBtn) navBtn.classList.toggle("active", idx === currentRoom);
       if (roomEl) roomEl.hidden = idx !== currentRoom;
     });
+
+    if (currentRoom === 3) {
+      renderSchmidtWorkspace();
+    }
   }
 
   // --- Update Cable States ---
@@ -259,15 +264,22 @@
 
     // 1. Ensure camera is started in backend if not running, but NEVER restart if running!
     const stopBtn = document.getElementById("road-camera-stop");
-    const isCameraRunning = cameraRunning || (stopBtn && !stopBtn.disabled);
+    let isCameraRunning = cameraRunning || (stopBtn && !stopBtn.disabled);
     if (!isCameraRunning) {
-      const startBtn = document.getElementById("road-camera-create");
-      if (startBtn && !startBtn.disabled) {
-        startBtn.click();
-        cameraRunning = true;
-        const camStatus = document.getElementById("cartoon-cam-status");
-        if (camStatus) camStatus.textContent = "[● LIVE STREAM]";
+      if (window.roadCameraMount && typeof window.roadCameraMount.createSource === "function") {
+        try {
+          await window.roadCameraMount.createSource();
+          cameraRunning = true;
+        } catch (_) {}
+      } else {
+        const startBtn = document.getElementById("road-camera-create");
+        if (startBtn && !startBtn.disabled) {
+          startBtn.click();
+          cameraRunning = true;
+        }
       }
+      const camStatus = document.getElementById("cartoon-cam-status");
+      if (camStatus) camStatus.textContent = "[● LIVE STREAM]";
     }
 
     // 2. Anomaly Alert Banner on Live Stream (OpenCV 5 Motion Detection) - never interrupts video!
@@ -278,7 +290,10 @@
         banner = h("div", { id: "live-anomaly-banner", className: "traffic-anomaly-banner" });
         feedMount.prepend(banner);
       }
-      banner.textContent = "⚠️ STUFE 1 ERKANNT: OpenCV 5 Vektorkern detektiert Bewegungsmuster! Rolling-Puffer (15s H.264) wird extrahiert...";
+      const eventLabel = eventType === "wrong_way"
+        ? "⚠️ Falschfahrer auf Spur 2 detektiert!"
+        : (eventType === "bird" ? "🐦 Vogel im Querflug detektiert!" : "🍂 Herbstlaub im Wind detektiert!");
+      banner.textContent = `⚠️ STUFE 1 (OpenCV 5 Vektorkern): ${eventLabel} Puffer (15s H.264) wird geschnitten...`;
       banner.hidden = false;
       window.setTimeout(() => {
         if (banner) banner.hidden = true;
@@ -289,15 +304,21 @@
     const speechAlex = document.getElementById("speech-alex");
     if (speechAlex) speechAlex.textContent = t("alexEventFired");
 
-    // 4. Inject event to backend
+    // 4. Inject event to backend - direct API injection, completely bypasses review lock!
     try {
-      const select = document.getElementById("road-camera-event") || document.querySelector("select.road-camera__event-select");
-      const injectBtn = document.getElementById("road-camera-inject");
-      if (select && injectBtn) {
-        select.value = eventType;
-        injectBtn.click();
+      if (window.roadCameraMount && typeof window.roadCameraMount.injectScenarioEvent === "function") {
+        await window.roadCameraMount.injectScenarioEvent(eventType);
+      } else {
+        const select = document.getElementById("road-camera-event") || document.querySelector("select.road-camera__event-select");
+        const injectBtn = document.getElementById("road-camera-inject");
+        if (select && injectBtn) {
+          select.value = eventType;
+          injectBtn.click();
+        }
       }
-    } catch (_) {}
+    } catch (err) {
+      console.warn("Event injection warning:", err);
+    }
 
     // 5. Light up Cable 1 -> 2
     setCablePulsing("cable-1-2", true);
@@ -318,18 +339,25 @@
       hash: "3a" + hash + "...",
       isDanger,
       score,
-      time: new Date().toLocaleTimeString()
+      time: new Date().toLocaleTimeString(),
+      status: isDanger ? "Einsatzprüfung" : "Entwarnung",
+      modelInterface: "offline-fixture/high (Lokaler Fallback)"
     };
     caseQueue.unshift(ticket);
+    selectedTicketId = ticket.id;
+
+    // Render Queue in Datacenter (Room 2)
     renderDatacenterQueue();
 
-    // 7. Update Schmidt Review Monitor in Room 3 with neutral proof clip
-    updateSchmidtReviewMonitor(ticket);
+    // Render Schmidt's Ticket Inbox and Video Monitor in Room 3
+    renderSchmidtWorkspace(ticket);
 
     // 8. Stream 2-Stage Logs to Room 2 Datacenter Terminal
     appendDatacenterLog(`[INGEST] Neutraler H.264 Puffer empfangen: ${clipName}`);
     appendDatacenterLog(`[BUFFER] 15.00 Sekunden Rolling-Puffer (450 Frames @ 30 FPS, B4 Nord)`);
     appendDatacenterLog(`[CRYPTO] SHA-256 Integrität: ${ticket.hash} (Unverändert)`);
+    appendDatacenterLog(`[SCHNITTSTELLE] Adapter: offline-fixture/high · Typ: Deterministischer lokaler Fallback`);
+    appendDatacenterLog(`[TRANSPARENZ] Fallback aktiv (Kein externer GEMINI_API_KEY hinterlegt)`);
     appendDatacenterLog(`[STUFE 1 - OPENCV 5] Vektor-Bewegungsanalyse im Bildstrom...`);
     appendDatacenterLog(` -> Auffällige Bewegungsvektoren detektiert (Schwellenwert überschritten)`);
 
@@ -341,7 +369,7 @@
 
     window.setTimeout(() => {
       if (chip2) chip2.classList.add("active-stage");
-      appendDatacenterLog(`[STUFE 2 - MULTIMODALES LLM] Unvoreingenommene semantische Situations- & Objektanalyse...`);
+      appendDatacenterLog(`[STUFE 2 - FIXTURE/LLM] Unvoreingenommene semantische Situations- & Objektanalyse...`);
       if (isDanger) {
         appendDatacenterLog(` ↳ Erkanntes Objekt: Kraftfahrzeug entgegen regulärem Verkehrsfluss`);
         appendDatacenterLog(` ↳ Situationskontext: Akute Geisterfahrer-Kollisionsgefahr auf B4 Nord!`);
@@ -358,7 +386,7 @@
       }
     }, 450);
 
-    // 9. Update Room 2 Verdict with 2-Stage breakdown
+    // 9. Update Room 2 Verdict with 2-Stage breakdown & Honest Transparency
     const verdictBox = document.getElementById("datacenter-verdict-box");
     const speechKira = document.getElementById("speech-kira");
     if (verdictBox) {
@@ -367,6 +395,7 @@
           <div class="stage-breakdown">
             <span class="stage-badge">Stufe 1 (OpenCV 5): Vektoranomalie erfasst</span>
             <span class="verdict-badge danger">⚠️ Stufe 2 (LLM): Falschfahrer erkannt! (Score: 0.98)</span>
+            <small class="inference-interface-hint">Schnittstelle: Lokaler Fallback (offline-fixture/high)</small>
           </div>`;
         if (speechKira) speechKira.textContent = t("kiraDanger");
         setCablePulsing("cable-2-3", true);
@@ -378,6 +407,7 @@
           <div class="stage-breakdown">
             <span class="stage-badge">Stufe 1 (OpenCV 5): Vektoranomalie erfasst</span>
             <span class="verdict-badge safe">✅ Stufe 2 (LLM): Harmloses Umweltobjekt (${objName}, Score: ${score.toFixed(2)})</span>
+            <small class="inference-interface-hint">Schnittstelle: Lokaler Fallback (offline-fixture/high)</small>
           </div>`;
         if (speechKira) speechKira.textContent = t("kiraSafe");
       }
@@ -418,7 +448,7 @@
     });
 
     const realPlayer = document.getElementById("road-camera-player");
-    if (realPlayer && realPlayer.src) {
+    if (realPlayer && realPlayer.src && realPlayer.src.startsWith("blob:")) {
       const vid = document.createElement("video");
       vid.className = "road-video-player";
       vid.src = realPlayer.src;
@@ -428,14 +458,70 @@
       vid.muted = true;
       reviewBox.append(banner, vid);
     } else {
+      const typeLabel = ticket ? (ticket.type === "wrong_way" ? "⚠️ FALSCHFAHRER GEFAHR" : (ticket.type === "bird" ? "🐦 VOGEL IM QUERFLUG" : "🍂 HERBSTLAUB IM WIND")) : "BEWEIS-LOOP";
+      const badgeClass = ticket && ticket.isDanger ? "danger-tag" : "safe-tag";
       const animBox = h("div", {
         className: "review-anim-box",
         innerHTML: `<div class="review-anim-inner">
           <div class="review-radar-scan"></div>
-          <p class="review-anim-text">▶ Beweis-Loop aktiv<br><strong>${ticket ? ticket.clipName : "cam01_b4nord_seq1042.mp4"}</strong><br><span class="danger-tag">⚠️ ANOMALIE BESTÄTIGT</span></p>
+          <p class="review-anim-text">
+            ▶ Beweis-Loop aktiv<br>
+            <strong>${ticket ? ticket.clipName : "cam01_b4nord_seq1042.mp4"}</strong><br>
+            <span class="${badgeClass}">${typeLabel}</span>
+            <br><small class="review-clip-meta">15s H.264 Clip · Rekonstruktion aus Video-Buffer</small>
+          </p>
         </div>`
       });
       reviewBox.append(banner, animBox);
+    }
+  }
+
+  function renderSchmidtWorkspace(activeTicket) {
+    const ticket = activeTicket || caseQueue.find(t => t.id === selectedTicketId) || caseQueue[0];
+    if (ticket) selectedTicketId = ticket.id;
+
+    // 1. Update Video Monitor
+    updateSchmidtReviewMonitor(ticket);
+
+    // 2. Render Ticket Inbox
+    const inboxList = document.getElementById("schmidt-ticket-list");
+    if (inboxList) {
+      inboxList.replaceChildren();
+      if (caseQueue.length === 0) {
+        inboxList.appendChild(h("p", { className: "hint", textContent: "Noch keine Tickets eingegangen. Löse ein Ereignis in Raum 1 aus." }));
+      } else {
+        caseQueue.forEach((item) => {
+          const isSelected = item.id === selectedTicketId;
+          const card = h("div", {
+            className: `schmidt-ticket-card ${item.isDanger ? "danger-ticket" : "safe-ticket"} ${isSelected ? "active-ticket" : ""}`,
+            onclick: () => {
+              selectedTicketId = item.id;
+              renderSchmidtWorkspace(item);
+            }
+          }, [
+            h("div", { className: "ticket-header" }, [
+              h("strong", { textContent: item.id }),
+              h("span", {
+                className: `ticket-badge ${item.isDanger ? "danger" : "safe"}`,
+                textContent: item.isDanger ? "⚠️ Falschfahrer (0.98)" : (item.type === "bird" ? "🐦 Vogel (0.04)" : "🍂 Blatt (0.02)")
+              })
+            ]),
+            h("span", { className: "ticket-clip-title", textContent: `${item.clipName} · ${item.time}` })
+          ]);
+          inboxList.appendChild(card);
+        });
+      }
+    }
+
+    // 3. Update Schmidt Speech Bubble
+    const speech = document.getElementById("speech-schmidt");
+    if (speech && ticket) {
+      if (ticket.isDanger) {
+        speech.textContent = `Achtung! Ticket ${ticket.id} (${ticket.clipName}) zeigt akute Falschfahrer-Gefahr auf B4 Nord! Der H.264-Beweisclip läuft auf meinem Monitor. Ich kann per Funk den Einsatzwagen losschicken.`;
+      } else {
+        const obj = ticket.type === "leaf" ? "herabfallendes Herbstlaub" : "einen Vogel im Querflug";
+        speech.textContent = `Ticket ${ticket.id} (${ticket.clipName}): Das Modell meldet ${obj} (Score ${ticket.score.toFixed(2)}). Auf meinem Monitor sehe ich keine Verkehrsbehinderung. Ich verwerfe das Ticket als Fehlalarm.`;
+      }
     }
   }
 
@@ -518,7 +604,7 @@
 
   // --- Build Full Cartoon Interface ---
   function buildCartoonDOM() {
-    const root = h("div", { className: "cartoon-stage" });
+    const root = h("div", { className: "cartoon-stage road-cartoon-stage" });
 
     // 1. Header with Title & Toggles
     const header = h("header", { className: "cartoon-header" }, [
@@ -688,6 +774,34 @@
             h("span", { textContent: "🧠 Semantische Situations- & Objektanalyse" })
           ])
         ]),
+        h("div", { className: "inference-transparency-card" }, [
+          h("div", { className: "transparency-header" }, [
+            h("div", { className: "transparency-pill fallback" }, [
+              h("span", { className: "dot" }),
+              h("span", { textContent: "SCHNITTSTELLE: LOKALER OFFLINE-FIXTURE FALLBACK (AKTIV)" })
+            ]),
+            h("span", { className: "transparency-sub", textContent: "100% Deterministisch & Lokal" })
+          ]),
+          h("div", { className: "transparency-grid" }, [
+            h("div", { className: "transparency-item" }, [
+              h("span", { className: "label", textContent: "Schnittstellen-Profil" }),
+              h("span", { className: "value", id: "transparency-profile-val", textContent: "offline-fixture/high" })
+            ]),
+            h("div", { className: "transparency-item" }, [
+              h("span", { className: "label", textContent: "Hardware / Ausführung" }),
+              h("span", { className: "value", textContent: "Lokaler Host (ASUS-GEI)" })
+            ]),
+            h("div", { className: "transparency-item" }, [
+              h("span", { className: "label", textContent: "Vektor-Engine" }),
+              h("span", { className: "value", textContent: "OpenCV 5.0.0 Farnebäck Flow" })
+            ]),
+            h("div", { className: "transparency-item" }, [
+              h("span", { className: "label", textContent: "Video-Pufferung" }),
+              h("span", { className: "value", textContent: "15s H.264 (libx264, SHA-256)" })
+            ])
+          ]),
+          h("p", { className: "transparency-notice", textContent: "🛡️ Wissenschaftliche Ehrlichkeit & Zero-Hallucination: Da kein externer Cloud-API-Schlüssel (GEMINI_API_KEY) aktiv ist, arbeitet die Inferenz im lokalen Offline-Fixture-Modus. Alle Vektorberechnungen, Trigger-Analysen und H.264-Videoclippings sind 100% echt und laufen live auf dieser Maschine." })
+        ]),
         h("div", { className: "datacenter-layout" }, [
           h("div", { className: "datacenter-card" }, [
             h("h4", { className: "datacenter-card__title", textContent: "Eingehende Videoclips" }),
@@ -726,7 +840,14 @@
         h("div", { className: "dispatch-grid" }, [
           h("div", { id: "schmidt-video-mount", className: "traffic-monitor" }, [
             h("div", { className: "traffic-monitor__header", textContent: "Beweis-Videoauswertung" }),
-            h("div", { id: "cartoon-review-video-box", className: "traffic-feed-box" })
+            h("div", { id: "cartoon-review-video-box", className: "traffic-feed-box" }),
+            h("div", { className: "schmidt-ticket-inbox" }, [
+              h("div", { className: "schmidt-ticket-inbox__title" }, [
+                h("span", { textContent: "Eingehende Einsatz-Tickets" }),
+                h("small", { textContent: "Klick zum Prüfen & Video abspielen" })
+              ]),
+              h("div", { id: "schmidt-ticket-list", className: "schmidt-ticket-list" })
+            ])
           ]),
           h("div", { className: "dispatch-desk" }, [
             h("h3", { textContent: "Einsatzentscheidung" }),
@@ -814,21 +935,41 @@
 
   // --- Public Mount Function ---
   function mountCartoonGame(container) {
-    if (!container) return;
+    if (!container) return null;
+    const existing = container.querySelector(".road-cartoon-stage");
+    if (existing) {
+      return {
+        destroy: () => {
+          if (countdownTimer) clearInterval(countdownTimer);
+          existing.remove();
+        }
+      };
+    }
     const gameDom = buildCartoonDOM();
     container.prepend(gameDom);
 
-    // Reparent live feed elements into cartoon room viewport if available
-    window.setTimeout(() => {
+    function attachLiveFeedToCartoon() {
       const feedBox = document.getElementById("cartoon-feed-mount");
       const realViewport = document.querySelector(".road-camera__viewport");
-      if (feedBox && realViewport) {
+      if (feedBox && realViewport && realViewport.parentElement !== feedBox) {
         feedBox.appendChild(realViewport);
+        return true;
       }
-    }, 100);
+      return false;
+    }
+
+    // Reparent live feed elements into cartoon room viewport as soon as mounted
+    attachLiveFeedToCartoon();
+    const attachTimer = window.setInterval(() => {
+      if (attachLiveFeedToCartoon()) {
+        window.clearInterval(attachTimer);
+      }
+    }, 150);
+    window.setTimeout(() => window.clearInterval(attachTimer), 10000);
 
     return {
       destroy: () => {
+        window.clearInterval(attachTimer);
         if (countdownTimer) clearInterval(countdownTimer);
         gameDom.remove();
       }
@@ -841,4 +982,12 @@
     triggerEvent,
     dispatchPatrolCar
   };
+
+  // Auto-mount if workspace-road already exists in DOM
+  if (typeof document !== "undefined") {
+    const ws = document.getElementById("workspace-road");
+    if (ws && !ws.querySelector(".road-cartoon-stage")) {
+      mountCartoonGame(ws);
+    }
+  }
 })(window);

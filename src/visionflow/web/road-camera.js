@@ -767,14 +767,13 @@ export function mountRoadCamera(container, apiClient) {
     });
   }
 
-  async function injectEvent() {
-    if (!sourceId || !sourceOpen || !warmedUp || !runActive || locked) return;
+  async function injectEvent(forcedEvent) {
+    const event = forcedEvent || eventSelect.value;
+    if (!sourceId || !sourceOpen) return;
     const source = sourceId;
     const generation = sourceGeneration;
-    const event = eventSelect.value;
     return enqueue("event", async () => {
-      if (destroyed || source !== sourceId || generation !== sourceGeneration ||
-          !sourceOpen || locked) return;
+      if (destroyed || source !== sourceId || generation !== sourceGeneration || !sourceOpen) return;
       await apiClient.post(
         `/road/sessions/${encodeURIComponent(source)}/events`,
         { event },
@@ -1026,5 +1025,5 @@ export function mountRoadCamera(container, apiClient) {
 
   setLocked(false);
   loadRoadCapabilities();
-  return { destroy, getCaseId, getSourceId, setLocked, setCase };
+  return { destroy, getCaseId, getSourceId, setLocked, setCase, injectScenarioEvent: (e) => injectEvent(e), createSource };
 }

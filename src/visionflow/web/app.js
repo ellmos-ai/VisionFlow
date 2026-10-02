@@ -885,13 +885,15 @@
             ...client,
             timelineContainer: $("road-controller-trace"),
           });
-          if (window.RoadGame && !roadGameMount) {
-            roadGameMount = window.RoadGame.mountCartoonGame($("workspace-road"));
-          }
+          window.roadCameraMount = roadMount;
+          window.roadApiClient = client;
           roadWorkspaceReady = true;
           await refreshRoadViews();
           scheduleRoadRefresh();
         }
+      }
+      if (window.RoadGame && !roadGameMount) {
+        roadGameMount = window.RoadGame.mountCartoonGame($("workspace-road"), { roadMount, apiClient: window.roadApiClient });
       }
     } catch (error) {
       $("road-camera-root").textContent = error.message || "Die Straßenkamera-Oberfläche konnte nicht geladen werden.";
