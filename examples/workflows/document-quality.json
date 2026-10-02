@@ -12,10 +12,36 @@
   },
   "nodes": [
     {
-      "id": "analyze",
+      "id": "analyze_initial",
       "type": "analyze",
       "params": {
-        "tool": "quality"
+        "tool": "quality",
+        "tool_params": {
+          "initial_frames": 1
+        }
+      },
+      "next": [
+        "request_replacement"
+      ]
+    },
+    {
+      "id": "request_replacement",
+      "type": "request_input",
+      "params": {
+        "reason": "Bitte stelle eine schärfere Aufnahme bereit."
+      },
+      "next": [
+        "analyze_replacement"
+      ]
+    },
+    {
+      "id": "analyze_replacement",
+      "type": "analyze",
+      "params": {
+        "tool": "quality",
+        "tool_params": {
+          "initial_frames": 1
+        }
       },
       "next": [
         "report"
@@ -34,10 +60,6 @@
     {
       "type": "display",
       "requires_approval": false
-    },
-    {
-      "type": "notification_draft",
-      "requires_approval": true
     }
   ]
 }

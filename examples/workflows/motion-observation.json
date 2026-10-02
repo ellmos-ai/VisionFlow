@@ -12,14 +12,37 @@
   },
   "nodes": [
     {
-      "id": "analyze",
+      "id": "analyze_initial",
       "type": "analyze",
       "params": {
-        "tool": "motion"
+        "tool": "motion",
+        "tool_params": {
+          "initial_frames": 2
+        }
+      },
+      "next": [
+        "ask_model"
+      ]
+    },
+    {
+      "id": "ask_model",
+      "type": "ask_model",
+      "params": {
+        "question": "Hat sich das Objekt bewegt? Prüfe bei Bedarf einen kurzen Folgeausschnitt."
       },
       "next": [
         "report"
       ]
+    },
+    {
+      "id": "observe_policy",
+      "type": "observe",
+      "params": {
+        "duration_seconds": 1.5,
+        "sample_fps": 2,
+        "region": null
+      },
+      "next": []
     },
     {
       "id": "report",
@@ -34,10 +57,6 @@
     {
       "type": "display",
       "requires_approval": false
-    },
-    {
-      "type": "notification_draft",
-      "requires_approval": true
     }
   ]
 }
