@@ -130,13 +130,8 @@ class DirectionAnalyzer:
             return
         if frame.timestamp_seconds <= self._previous_timestamp:
             raise ValueError("frame timestamps must advance monotonically")
-        previous_index = _numeric_frame_suffix(self._previous_frame_id)
-        current_index = _numeric_frame_suffix(frame.frame_id)
-        if previous_index is not None and current_index is not None:
-            if current_index <= previous_index:
-                raise ValueError("frame IDs must advance monotonically")
-        elif frame.frame_id == self._previous_frame_id:
-            raise ValueError("frame IDs must advance monotonically")
+        if frame.frame_id == self._previous_frame_id:
+            raise ValueError("consecutive frame IDs must be distinct")
 
     def _lane_candidates(
         self,
@@ -460,11 +455,6 @@ def _integer_vector(value: Any, length: int, name: str) -> tuple[int, ...]:
             raise ValueError(f"{name} must contain {length} integers")
         values.append(item)
     return tuple(values)
-
-
-def _numeric_frame_suffix(frame_id: str) -> int | None:
-    suffix = frame_id.rsplit(":", 1)[-1]
-    return int(suffix) if suffix.isdecimal() else None
 
 
 def _cluster_features(

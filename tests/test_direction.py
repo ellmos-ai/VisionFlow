@@ -200,7 +200,7 @@ def test_invalid_lane_geometry_and_nonfinite_or_boolean_parameters_are_rejected(
         DirectionAnalyzer().update(frame, params)
 
 
-def test_frame_ids_and_timestamps_must_advance_monotonically():
+def test_immediate_duplicate_frame_ids_and_timestamp_rollback_are_rejected():
     DirectionAnalyzer, _direction_handler = _load_direction_types()
     params = default_lane_params()
     frames = road_frames(None, count=3, seed=37)
@@ -216,6 +216,32 @@ def test_frame_ids_and_timestamps_must_advance_monotonically():
     earlier_time = Frame(frames[1].frame_id, frames[1].image, frames[0].timestamp_seconds)
     with pytest.raises(ValueError):
         analyzer.update(earlier_time, params)
+
+
+def test_handler_accepts_nonmonotonic_numeric_frame_ids_for_same_context_source():
+    _DirectionAnalyzer, direction_handler = _load_direction_types()
+    params = default_lane_params()
+    rendered_frames = road_frames(None, count=2, seed=39)
+    frames = [
+        Frame(
+            "opaque-road:731",
+            rendered_frames[0].image,
+            rendered_frames[0].timestamp_seconds,
+        ),
+        Frame(
+            "opaque-road:122",
+            rendered_frames[1].image,
+            rendered_frames[1].timestamp_seconds,
+        ),
+    ]
+    context = {"source_id": "camera-source", "state": {}}
+
+    first = direction_handler(frames[0], params, context)
+    second = direction_handler(frames[1], params, context)
+
+    assert first["warmup"] is True
+    assert second["warmup"] is False
+    assert second["coordinate_system"] == "crop_pixels"
 
 
 def test_handler_resets_on_context_source_change_and_keeps_run_state_isolated():
