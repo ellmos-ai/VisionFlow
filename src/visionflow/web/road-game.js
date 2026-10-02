@@ -134,12 +134,12 @@
       followCableTo2: "Dem Datenkabel ins Rechenzentrum folgen ➔",
       followCableTo3: "Dem Alarmkabel zur Leitstelle folgen ➔",
       followCableTo4: "Dem Kabel zu Tisch 2 folgen ➔",
-      alexIntro: "Hallo! Ich bin Techniker Alex am B4-Nord Kontrollposten. Der OpenCV 5 Vektor-Kernel überwacht kontinuierlich alle Fahrspuren und puffert die letzten 15 Sekunden. Teste das System mit den Event-Buttons!",
-      alexEventFired: "Ereignis erfasst! Der 15s-H.264 Buffer wurde geschnitten, gehasht und über das Datenkabel übertragen. Folge dem Kabel!",
-      kiraIntro: "Willkommen im KI-Rechenzentrum! Hier trifft der H.264-Videoclip ein. Unser Vision-Modell analysiert Vektoren und semantische Gefahren.",
-      kiraSafe: "Entwarnung! Das Modell stuft das Ereignis als harmlos ein (Score < 0.1). Kein Eingriff nötig.",
-      kiraDanger: "Achtung! Akute Gefahr durch Falschfahrer erkannt (Score 0.98)! Der Fall wird mit höchster Priorität an die Leitstelle übergeben!",
-      schmidtIntro: "Polizeileitstelle Alpha. Officer Schmidt am Apparat. Ich prüfe den eingehenden Beweisclip...",
+      alexIntro: "Hallo! Ich bin Techniker Alex am B4-Nord Kontrollposten. Der OpenCV 5 Vektor-Kernel überwacht kontinuierlich alle Fahrspuren und puffert die letzten 15 Sekunden. Das Live-Video läuft dauerhaft. Teste das System mit den Event-Buttons!",
+      alexEventFired: "Auffällige Bewegung erkannt! Der OpenCV 5 Vektor-Kernel hat eine Anomalie im Live-Bild erfasst. Das Live-Video läuft unterbrechungsfrei weiter! Der neutrale 15s-H.264 Buffer wurde geschnitten, gehasht und an das Rechenzentrum übertragen. Folge dem Datenkabel!",
+      kiraIntro: "Willkommen im KI-Rechenzentrum! Hier trifft der neutrale H.264-Buffer ein. In 2 Stufen analysieren wir: Stufe 1 (OpenCV 5 Vektorkern) filtert Bewegungsmuster, Stufe 2 (Multimodales LLM) analysiert unvoreingenommen Objekt und Verkehrssituation.",
+      kiraSafe: "Stufe 2 Entwarnung! Das multimodale LLM identifiziert ein harmloses Umweltobjekt (Score < 0.1). Kein Polizeieinsatz erforderlich.",
+      kiraDanger: "Stufe 2 Alarm! Das multimodale LLM erkennt akute Lebensgefahr durch Falschfahrer (Score 0.98)! Sofortige Übergabe an die Leitstelle!",
+      schmidtIntro: "Polizeileitstelle Alpha. Officer Schmidt am Apparat. Ich prüfe den eingehenden neutralen Beweisclip...",
       schmidtRadio: "📻 Funkgerät: Einsatzwagen alarmieren!",
       schmidtFalseAlarm: "❌ Fehlalarm verwerfen",
       schmidtCoffee: "☕ Kaffeepause (Logout & Weiterleiten)",
@@ -164,12 +164,12 @@
       followCableTo2: "Follow Data Cable to Datacenter ➔",
       followCableTo3: "Follow Alert Cable to Dispatch ➔",
       followCableTo4: "Follow Cable to Desk 2 ➔",
-      alexIntro: "Hello! I am Field Technician Alex at the B4 North station. The OpenCV 5 vector kernel monitors traffic lanes and keeps a rolling 15s buffer. Test the system using the event buttons!",
-      alexEventFired: "Event captured! The 15s H.264 buffer was clipped, hashed, and sent over the optic cable. Follow the cable!",
-      kiraIntro: "Welcome to the AI Datacenter! The H.264 clip arrives here. Our Vision Model inspects vector consistency and semantic hazard.",
-      kiraSafe: "All clear! The model evaluated this as a harmless environmental event (Score < 0.1). No dispatch required.",
-      kiraDanger: "Warning! Acute wrong-way driver hazard detected (Score 0.98)! High priority dispatch forwarded to Police Command!",
-      schmidtIntro: "Police Dispatch Alpha. Officer Schmidt on duty. Reviewing the incoming video proof clip...",
+      alexIntro: "Hello! I am Field Technician Alex at the B4 North station. The OpenCV 5 vector kernel continuously monitors traffic lanes and keeps a rolling 15s buffer. The live stream runs uninterrupted. Test the system using the event buttons!",
+      alexEventFired: "Motion anomaly detected! The OpenCV 5 vector kernel identified abnormal vectors in the live stream. The live video continues to play without stopping! The neutral 15s H.264 buffer was clipped, hashed, and sent over the optic cable. Follow the cable!",
+      kiraIntro: "Welcome to the AI Datacenter! The neutral H.264 buffer arrives here. We run a 2-stage analysis: Stage 1 (OpenCV 5 Vector Kernel) validates motion vectors, Stage 2 (Multimodal LLM) unbiasedly reasons over object semantics and traffic hazard.",
+      kiraSafe: "Stage 2 All-Clear! The multimodal LLM classified a harmless environmental object (Score < 0.1). No dispatch required.",
+      kiraDanger: "Stage 2 Emergency! The multimodal LLM identified acute danger from a wrong-way driver (Score 0.98)! High priority dispatch forwarded to Police Command!",
+      schmidtIntro: "Police Dispatch Alpha. Officer Schmidt on duty. Reviewing the incoming neutral video proof clip...",
       schmidtRadio: "📻 Radio: Dispatch Patrol Car!",
       schmidtFalseAlarm: "❌ Dismiss False Alarm",
       schmidtCoffee: "☕ Coffee Break (Logout & Forward)",
@@ -242,23 +242,56 @@
     }
   }
 
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function generateNeutralClipName() {
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
+    const seq = Math.floor(1000 + Math.random() * 9000);
+    return `cam01_b4nord_${stamp}_seq${seq}.mp4`;
+  }
+
   // --- Handle Real Event Trigger ---
   async function triggerEvent(eventType) {
     if (global.RoadSFX) global.RoadSFX.playEventTrigger();
 
-    // 1. Ensure camera is started in backend if not running
-    const startBtn = document.getElementById("road-camera-create");
-    if (startBtn && !startBtn.disabled) {
-      startBtn.click();
+    // 1. Ensure camera is started in backend if not running, but NEVER restart if running!
+    const stopBtn = document.getElementById("road-camera-stop");
+    const isCameraRunning = cameraRunning || (stopBtn && !stopBtn.disabled);
+    if (!isCameraRunning) {
+      const startBtn = document.getElementById("road-camera-create");
+      if (startBtn && !startBtn.disabled) {
+        startBtn.click();
+        cameraRunning = true;
+        const camStatus = document.getElementById("cartoon-cam-status");
+        if (camStatus) camStatus.textContent = "[● LIVE STREAM]";
+      }
     }
 
-    // 2. Update Alex's Speech Bubble
+    // 2. Anomaly Alert Banner on Live Stream (OpenCV 5 Motion Detection) - never interrupts video!
+    const feedMount = document.getElementById("cartoon-feed-mount");
+    if (feedMount) {
+      let banner = document.getElementById("live-anomaly-banner");
+      if (!banner) {
+        banner = h("div", { id: "live-anomaly-banner", className: "traffic-anomaly-banner" });
+        feedMount.prepend(banner);
+      }
+      banner.textContent = "⚠️ STUFE 1 ERKANNT: OpenCV 5 Vektorkern detektiert Bewegungsmuster! Rolling-Puffer (15s H.264) wird extrahiert...";
+      banner.hidden = false;
+      window.setTimeout(() => {
+        if (banner) banner.hidden = true;
+      }, 5000);
+    }
+
+    // 3. Update Alex's Speech Bubble
     const speechAlex = document.getElementById("speech-alex");
     if (speechAlex) speechAlex.textContent = t("alexEventFired");
 
-    // 3. Inject event to backend
+    // 4. Inject event to backend
     try {
-      const select = document.getElementById("road-camera-event");
+      const select = document.getElementById("road-camera-event") || document.querySelector("select.road-camera__event-select");
       const injectBtn = document.getElementById("road-camera-inject");
       if (select && injectBtn) {
         select.value = eventType;
@@ -266,19 +299,21 @@
       }
     } catch (_) {}
 
-    // 4. Light up Cable 1 -> 2
+    // 5. Light up Cable 1 -> 2
     setCablePulsing("cable-1-2", true);
     const followBtn1 = document.getElementById("follow-btn-1");
     if (followBtn1) followBtn1.hidden = false;
 
-    // 5. Add ticket to queue in Datacenter (Room 2)
+    // 6. Generate neutral ticket (Filename NEVER contains event name to ensure unbiased model test!)
     const ticketId = "T-" + Math.floor(1000 + Math.random() * 9000);
+    const clipName = generateNeutralClipName();
     const hash = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
     const isDanger = eventType === "wrong_way";
-    const score = isDanger ? 0.98 : 0.04;
+    const score = isDanger ? 0.98 : (eventType === "bird" ? 0.04 : 0.02);
 
     const ticket = {
       id: ticketId,
+      clipName,
       type: eventType,
       hash: "3a" + hash + "...",
       isDanger,
@@ -288,24 +323,62 @@
     caseQueue.unshift(ticket);
     renderDatacenterQueue();
 
-    // 6. Log to Room 2 Terminal
-    appendDatacenterLog(`[INGEST] Clip received: event_${eventType}_${ticketId}.mp4`);
-    appendDatacenterLog(`[HASH] SHA-256: ${ticket.hash}`);
-    appendDatacenterLog(`[MODEL] Running RoadModelExchange inference...`);
-    appendDatacenterLog(`[RESULT] Hazard score: ${score.toFixed(2)} (${isDanger ? "CRITICAL RISK" : "CLEARED"})`);
+    // 7. Update Schmidt Review Monitor in Room 3 with neutral proof clip
+    updateSchmidtReviewMonitor(ticket);
 
-    // 7. Update Room 2 Verdict
+    // 8. Stream 2-Stage Logs to Room 2 Datacenter Terminal
+    appendDatacenterLog(`[INGEST] Neutraler H.264 Puffer empfangen: ${clipName}`);
+    appendDatacenterLog(`[BUFFER] 15.00 Sekunden Rolling-Puffer (450 Frames @ 30 FPS, B4 Nord)`);
+    appendDatacenterLog(`[CRYPTO] SHA-256 Integrität: ${ticket.hash} (Unverändert)`);
+    appendDatacenterLog(`[STUFE 1 - OPENCV 5] Vektor-Bewegungsanalyse im Bildstrom...`);
+    appendDatacenterLog(` -> Auffällige Bewegungsvektoren detektiert (Schwellenwert überschritten)`);
+
+    // Highlighting Stage Chips in Room 2
+    const chip1 = document.getElementById("stage-chip-1");
+    const chip2 = document.getElementById("stage-chip-2");
+    if (chip1) chip1.classList.add("active-stage");
+    if (chip2) chip2.classList.remove("active-stage");
+
+    window.setTimeout(() => {
+      if (chip2) chip2.classList.add("active-stage");
+      appendDatacenterLog(`[STUFE 2 - MULTIMODALES LLM] Unvoreingenommene semantische Situations- & Objektanalyse...`);
+      if (isDanger) {
+        appendDatacenterLog(` ↳ Erkanntes Objekt: Kraftfahrzeug entgegen regulärem Verkehrsfluss`);
+        appendDatacenterLog(` ↳ Situationskontext: Akute Geisterfahrer-Kollisionsgefahr auf B4 Nord!`);
+        appendDatacenterLog(`[BEWERTUNG] Gefahren-Score: 0.98 -> KRITISCHER NOTFALL (Menschliche Prüfung)`);
+        appendDatacenterLog(`[FORWARD] Fall ${ticketId} mit neutralem Beweisclip an Leitstelle Alpha übergeben!`);
+      } else if (eventType === "leaf") {
+        appendDatacenterLog(` ↳ Erkanntes Objekt: Herabfallendes Herbstlaub im Wind`);
+        appendDatacenterLog(` ↳ Situationskontext: Harmloses Umweltpartikel ohne Verkehrsgefährdung`);
+        appendDatacenterLog(`[BEWERTUNG] Gefahren-Score: 0.02 -> HARMLOS / ENTWARNUNG (Kein Einsatz)`);
+      } else {
+        appendDatacenterLog(` ↳ Erkanntes Objekt: Vogel im Querflug über der Trasse`);
+        appendDatacenterLog(` ↳ Situationskontext: Temporäre Luftraumbewegung, Fahrbahn frei`);
+        appendDatacenterLog(`[BEWERTUNG] Gefahren-Score: 0.04 -> HARMLOS / ENTWARNUNG (Kein Einsatz)`);
+      }
+    }, 450);
+
+    // 9. Update Room 2 Verdict with 2-Stage breakdown
     const verdictBox = document.getElementById("datacenter-verdict-box");
     const speechKira = document.getElementById("speech-kira");
     if (verdictBox) {
       if (isDanger) {
-        verdictBox.innerHTML = `<span class="verdict-badge danger">⚠️ ${t("kiraDanger")}</span>`;
+        verdictBox.innerHTML = `
+          <div class="stage-breakdown">
+            <span class="stage-badge">Stufe 1 (OpenCV 5): Vektoranomalie erfasst</span>
+            <span class="verdict-badge danger">⚠️ Stufe 2 (LLM): Falschfahrer erkannt! (Score: 0.98)</span>
+          </div>`;
         if (speechKira) speechKira.textContent = t("kiraDanger");
         setCablePulsing("cable-2-3", true);
         const followBtn2 = document.getElementById("follow-btn-2");
         if (followBtn2) followBtn2.hidden = false;
       } else {
-        verdictBox.innerHTML = `<span class="verdict-badge safe">✅ ${t("kiraSafe")}</span>`;
+        const objName = eventType === "leaf" ? "Herbstlaub" : "Vogel";
+        verdictBox.innerHTML = `
+          <div class="stage-breakdown">
+            <span class="stage-badge">Stufe 1 (OpenCV 5): Vektoranomalie erfasst</span>
+            <span class="verdict-badge safe">✅ Stufe 2 (LLM): Harmloses Umweltobjekt (${objName}, Score: ${score.toFixed(2)})</span>
+          </div>`;
         if (speechKira) speechKira.textContent = t("kiraSafe");
       }
     }
@@ -328,10 +401,42 @@
     caseQueue.slice(0, 5).forEach((item) => {
       const div = h("div", {
         className: `queue-item ${item.isDanger ? "high-risk" : ""}`,
-        innerHTML: `<strong>${item.id}</strong> · ${item.type.toUpperCase()} · ${item.time}<br><small>SHA256: ${item.hash}</small>`
+        innerHTML: `<strong>${item.clipName}</strong> · ${item.time}<br><small>CAM-01 · 15.0s H.264 · SHA256: ${item.hash}</small>`
       });
       listEl.appendChild(div);
     });
+  }
+
+  function updateSchmidtReviewMonitor(ticket) {
+    const reviewBox = document.getElementById("cartoon-review-video-box");
+    if (!reviewBox) return;
+    reviewBox.replaceChildren();
+
+    const banner = h("div", {
+      className: "review-clip-meta",
+      innerHTML: `<span class="proof-badge">Neutraler Beweisclip: ${ticket ? ticket.clipName : "cam01_b4nord_current.mp4"}</span><br><small>15s H.264 Buffer · SHA-256: ${ticket ? ticket.hash : "–"}</small>`
+    });
+
+    const realPlayer = document.getElementById("road-camera-player");
+    if (realPlayer && realPlayer.src) {
+      const vid = document.createElement("video");
+      vid.className = "road-video-player";
+      vid.src = realPlayer.src;
+      vid.autoplay = true;
+      vid.loop = true;
+      vid.controls = true;
+      vid.muted = true;
+      reviewBox.append(banner, vid);
+    } else {
+      const animBox = h("div", {
+        className: "review-anim-box",
+        innerHTML: `<div class="review-anim-inner">
+          <div class="review-radar-scan"></div>
+          <p class="review-anim-text">▶ Beweis-Loop aktiv<br><strong>${ticket ? ticket.clipName : "cam01_b4nord_seq1042.mp4"}</strong><br><span class="danger-tag">⚠️ ANOMALIE BESTÄTIGT</span></p>
+        </div>`
+      });
+      reviewBox.append(banner, animBox);
+    }
   }
 
   // --- Room 3 Actions ---
@@ -570,6 +675,17 @@
           h("div", { className: "cartoon-speech-bubble" }, [
             h("div", { className: "cartoon-speaker-name", textContent: "Dr. Kira · Lead Vision AI" }),
             h("p", { id: "speech-kira", className: "cartoon-speech-text", textContent: t("kiraIntro") })
+          ])
+        ]),
+        h("div", { className: "pipeline-flow-banner" }, [
+          h("div", { id: "stage-chip-1", className: "pipeline-stage-chip active-stage" }, [
+            h("span", { className: "stage-badge", textContent: "STUFE 1 (OpenCV 5 Vektorkern)" }),
+            h("span", { textContent: "📹 Vektor-Bewegungsanalyse im Live-Stream" })
+          ]),
+          h("span", { className: "pipeline-arrow", textContent: "➔" }),
+          h("div", { id: "stage-chip-2", className: "pipeline-stage-chip" }, [
+            h("span", { className: "stage-badge", textContent: "STUFE 2 (Multimodales LLM)" }),
+            h("span", { textContent: "🧠 Semantische Situations- & Objektanalyse" })
           ])
         ]),
         h("div", { className: "datacenter-layout" }, [

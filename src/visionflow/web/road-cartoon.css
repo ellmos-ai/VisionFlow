@@ -351,6 +351,83 @@
   display: block;
 }
 
+/* Anomaly Detection Banner on Live Stream */
+.traffic-anomaly-banner {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  background: rgba(220, 38, 38, 0.92);
+  color: #ffffff;
+  border: 2px solid #fecaca;
+  border-radius: var(--comic-radius-sm);
+  padding: 0.5rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  animation: bannerPulse 0.8s infinite alternate;
+}
+
+@keyframes bannerPulse {
+  from { opacity: 0.9; }
+  to { opacity: 1; transform: scale(1.01); }
+}
+
+/* 2-Stage Pipeline Visualizer in Room 2 */
+.pipeline-flow-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  background: #1e293b;
+  border: 2px solid #38bdf8;
+  border-radius: var(--comic-radius);
+  padding: 0.8rem 1.25rem;
+  color: #e2e8f0;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.pipeline-stage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #0f172a;
+  border: 1px solid #475569;
+  border-radius: 9999px;
+  padding: 0.35rem 0.8rem;
+  color: #38bdf8;
+}
+
+.pipeline-stage-chip.active-stage {
+  border-color: #facc15;
+  color: #fde047;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.3);
+}
+
+.pipeline-arrow {
+  color: #94a3b8;
+  font-size: 1.2rem;
+}
+
+.stage-badge {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.stage-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
+
 /* Control Panel with Chunky Buttons */
 .traffic-control-panel {
   background: #f8fafc;
@@ -711,3 +788,73 @@
   transform: translateY(2px);
   box-shadow: var(--comic-shadow-pressed);
 }
+
+/* Review Video Player in Room 3 */
+.review-clip-meta {
+  background: #1e293b;
+  border-radius: var(--comic-radius-sm);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.proof-badge {
+  font-weight: 800;
+  color: #38bdf8;
+  font-size: 0.85rem;
+}
+
+.review-anim-box {
+  background: #090d16;
+  border: 2px dashed #475569;
+  border-radius: var(--comic-radius-sm);
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.review-anim-inner {
+  position: relative;
+  z-index: 2;
+}
+
+.review-radar-scan {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 70%);
+  animation: radarScan 2.5s infinite linear;
+}
+
+@keyframes radarScan {
+  0% { transform: scale(0.8); opacity: 0.3; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+  100% { transform: scale(0.8); opacity: 0.3; }
+}
+
+.review-anim-text {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #e2e8f0;
+  line-height: 1.5;
+}
+
+.danger-tag {
+  display: inline-block;
+  margin-top: 0.4rem;
+  background: #dc2626;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+}
+

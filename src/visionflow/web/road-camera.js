@@ -199,12 +199,10 @@ export function mountRoadCamera(container, apiClient) {
 
   const eventPanel = element("section", "road-camera__events");
   eventPanel.append(element("h3", "", "Szenarioereignis"));
-  const selectId = `road-event-${instanceId}`;
   const eventLabel = element("label", "", "Ereignis für die Szene");
-  eventLabel.htmlFor = selectId;
+  eventLabel.htmlFor = "road-camera-event";
   const eventSelect = element("select", "road-camera__event-select");
   eventSelect.id = "road-camera-event";
-  eventSelect.id = selectId;
   for (const [value, label] of [
     ["wrong_way", "Falschfahrer"],
     ["bird", "Vogel"],

@@ -916,6 +916,7 @@
       $("connection-status").textContent = "Lokaler Server verbunden · Sitzung aktiv";
       $("road-tab").disabled = false;
       $("start-button").disabled = false;
+      void activateRoadWorkspace();
     } catch (error) {
       sessionReady = false;
       $("road-tab").disabled = true;

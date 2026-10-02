@@ -25,10 +25,10 @@
 
     <main class="workspace-shell">
       <nav class="workspace-tabs" aria-label="Arbeitsbereiche">
-        <button id="analysis-tab" class="button secondary" type="button" aria-pressed="true">Analyse</button>
-        <button id="road-tab" class="button secondary" type="button" aria-pressed="false" disabled>Straßenkamera</button>
+        <button id="road-tab" class="button primary" type="button" aria-pressed="true" disabled>🚨 Emergency Leitstelle (Mission Control)</button>
+        <button id="analysis-tab" class="button secondary" type="button" aria-pressed="false">📁 Archiv / Einzellauf-Analyse</button>
       </nav>
-      <div id="workspace-analysis" class="layout workspace-analysis">
+      <div id="workspace-analysis" class="layout workspace-analysis" hidden>
       <section class="panel setup-panel" aria-labelledby="setup-title">
         <div class="section-heading">
           <div>
@@ -189,7 +189,7 @@
         </section>
       </section>
       </div>
-      <section id="workspace-road" class="road-workspace" aria-label="Straßenkamera-Demonstration" hidden>
+      <section id="workspace-road" class="road-workspace" aria-label="Straßenkamera-Demonstration">
         <p id="road-workspace-status" class="road-workspace-status" role="status" aria-live="polite"></p>
         <div id="road-camera-root" class="road-camera-root"></div>
         <div class="road-workspace-grid">
