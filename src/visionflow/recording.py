@@ -4,14 +4,16 @@ import hashlib
 import json
 import math
 import os
+import queue
 import shutil
 import statistics
 import subprocess
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass, field
 from functools import wraps
-from threading import RLock
+from threading import Event, RLock, Thread
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +34,10 @@ FFMPEG_TIMEOUT_SECONDS = 30
 FFMPEG_VERSION_TIMEOUT_SECONDS = 5
 JPEG_QUALITY = 95
 MIN_MP4_BYTES = 1024
+MAX_CONCURRENT_EXPORTS = 2
+MAX_CLIP_OUTPUT_BYTES = MAX_RECORDING_BYTES
+FFMPEG_PIPE_CHUNK_BYTES = 64 * 1024
+FFMPEG_PIPE_QUEUE_CHUNKS = 4
 
 
 def _synchronized(method):
@@ -99,6 +105,7 @@ class _SourceSession:
     clip_versions_by_event: dict[str, int] = field(default_factory=dict)
     latest_clip_by_event: dict[str, ClipRef] = field(default_factory=dict)
     clip_history: list[ClipRef] = field(default_factory=list)
+    pending_export_bytes: int = 0
     finish_ref: ClipRef | None = None
     dimensions: tuple[int, int] | None = None
     finished: bool = False
@@ -139,6 +146,7 @@ class RecordingStore:
         self._active_by_source: dict[str, tuple[str, str]] = {}
         self._clips: dict[str, tuple[tuple[str, str], ClipRef]] = {}
         self._ffmpeg_executable: str | None = None
+        self._active_exports = 0
 
     @_synchronized
     def open(self, owner_id: str, source_id: str) -> None:
@@ -437,6 +445,33 @@ class RecordingStore:
         end_seconds: float,
         available_preroll: float,
     ) -> ClipRef:
+        with self._lock:
+            if self._active_exports >= MAX_CONCURRENT_EXPORTS:
+                raise RecordingError("export_busy", "Zu viele Videoexporte laufen gleichzeitig.")
+            self._active_exports += 1
+        try:
+            return self._export_with_slot(
+                session,
+                event_key=event_key,
+                frames=frames,
+                start_seconds=start_seconds,
+                end_seconds=end_seconds,
+                available_preroll=available_preroll,
+            )
+        finally:
+            with self._lock:
+                self._active_exports -= 1
+
+    def _export_with_slot(
+        self,
+        session: _SourceSession,
+        *,
+        event_key: str,
+        frames: list[_FrameRecord],
+        start_seconds: float,
+        end_seconds: float,
+        available_preroll: float,
+    ) -> ClipRef:
         self._require_encoder()
         fps = self._source_fps(frames)
         clip_id = uuid.uuid4().hex
@@ -481,6 +516,7 @@ class RecordingStore:
             raise RecordingError("byte_limit", "Für den Clip ist das Speicherlimit erreicht.")
 
         payload_parts: list[bytes] = []
+        input_size = 0
         for record in frames:
             frame_path = self._safe_path(session.frames_directory / record.file_name)
             try:
@@ -493,13 +529,15 @@ class RecordingStore:
             ):
                 raise RecordingError("source_corrupt", "Ein gespeichertes Quellenbild wurde verändert.")
             payload_parts.append(frame_bytes)
-        input_bytes = b"".join(payload_parts)
+            input_size += len(frame_bytes)
+        if input_size > min(self.max_bytes, MAX_RECORDING_BYTES):
+            raise RecordingError("byte_limit", "Der Quellclip überschreitet die Speichergrenze für den Export.")
 
-        temp_path = self._safe_path(
-            session.clips_directory / f".{clip_id}.{uuid.uuid4().hex}.tmp.mp4"
-        )
         executable = self._ffmpeg_executable
         assert executable is not None
+        output_limit = min(remaining, MAX_CLIP_OUTPUT_BYTES)
+        if output_limit < MIN_MP4_BYTES:
+            raise RecordingError("byte_limit", "Für den Clip ist das Speicherlimit erreicht.")
         args = [
             executable,
             "-hide_banner",
@@ -524,149 +562,132 @@ class RecordingStore:
             "veryfast",
             "-crf",
             "23",
+            "-bf",
+            "0",
             "-pix_fmt",
             "yuv420p",
             "-movflags",
-            "+faststart",
+            "+empty_moov+frag_keyframe+default_base_moof",
             "-fs",
-            str(remaining),
+            str(output_limit),
             "-f",
             "mp4",
-            str(temp_path),
+            "pipe:1",
         ]
-        try:
-            result = subprocess.run(
-                args,
-                input=input_bytes,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                timeout=FFMPEG_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            self._unlink_if_exists(temp_path)
-            raise RecordingError("encoder_timeout", "Der Videoexport hat das Zeitlimit überschritten.") from exc
-        except OSError as exc:
-            self._unlink_if_exists(temp_path)
-            raise RecordingError("encoder_failed", "Der Videoexport konnte nicht gestartet werden.") from exc
-
-        try:
-            output_size = temp_path.stat().st_size if temp_path.exists() else 0
-        except OSError:
-            output_size = 0
-        if result.returncode != 0 or output_size == 0:
-            self._unlink_if_exists(temp_path)
-            if output_size >= remaining:
-                raise RecordingError("byte_limit", "Das Speicherlimit erlaubt keinen vollständigen Clip.")
+        output_bytes = self._encode_mp4_to_memory(args, payload_parts, output_limit)
+        output_size = len(output_bytes)
+        if output_size == 0:
             raise RecordingError("encoder_failed", "FFmpeg konnte keinen gültigen Videoexport erstellen.")
-        if output_size > remaining:
-            self._unlink_if_exists(temp_path)
-            raise RecordingError("byte_limit", "Der Clip würde das Speicherlimit überschreiten.")
-        if not self._decode_count_matches(temp_path, len(frames)):
-            self._unlink_if_exists(temp_path)
-            if output_size >= remaining:
-                raise RecordingError("byte_limit", "Das Speicherlimit erlaubt keinen vollständigen Clip.")
-            raise RecordingError("encoder_failed", "Der Videoexport ist unvollständig oder beschädigt.")
+        if output_size >= output_limit:
+            raise RecordingError("byte_limit", "Das Speicherlimit erlaubt keinen vollständigen Clip.")
 
-        with self._lock:
-            latest = session.latest_clip_by_event.get(event_key)
-            if latest is not None and latest.end_seconds >= end_seconds:
-                self._unlink_if_exists(temp_path)
-                return latest
+        temp_path = self._safe_path(
+            session.clips_directory / f".{clip_id}.{uuid.uuid4().hex}.tmp.mp4"
+        )
+        pending_reserved = False
+        try:
+            with self._lock:
+                latest = session.latest_clip_by_event.get(event_key)
+                if latest is not None and latest.end_seconds >= end_seconds:
+                    return latest
+                if self._usage(session) + output_size > self.max_bytes:
+                    raise RecordingError("byte_limit", "Der Clip würde das Speicherlimit überschreiten.")
+                session.pending_export_bytes += output_size
+                pending_reserved = True
 
-            version = session.clip_versions_by_event.get(event_key, 0) + 1
-            final_path = self._safe_path(
-                session.clips_directory / f"{clip_id}.v{version}.mp4"
-            )
-            planned_ref = ClipRef(
-                clip_id=clip_id,
-                source_id=session.source_id,
-                version=version,
-                path=final_path,
-                sha256="0" * 64,
-                start_seconds=start_seconds,
-                end_seconds=end_seconds,
-                frame_ids=tuple(record.frame_id for record in frames),
-                source_fps=fps,
-                available_preroll=available_preroll,
-            )
-            manifest_path = self._safe_path(session.directory / "manifest.json")
-            manifest_size_before = self._optional_file_size(manifest_path)
-            manifest_reservation_before = max(
-                manifest_size_before,
-                session.manifest_reserved_bytes,
-            )
-            manifest_size_after = self._manifest_size(
-                session,
-                next_clip=planned_ref,
-                export_bytes=sum(session.clip_sizes.values()) + output_size,
-            )
-            projected_usage = (
-                self._usage(session)
-                + output_size
-                + manifest_size_after
-                - manifest_reservation_before
-            )
-            if projected_usage > self.max_bytes:
-                self._unlink_if_exists(temp_path)
-                raise RecordingError("byte_limit", "Der Clip würde das Speicherlimit überschreiten.")
-            if final_path.exists():
-                self._unlink_if_exists(temp_path)
-                raise RecordingError("clip_exists", "Der Clip-Zielpfad ist bereits belegt.")
             try:
-                os.link(temp_path, final_path)
-                temp_path.unlink()
-            except FileExistsError as exc:
-                self._unlink_if_exists(temp_path)
-                raise RecordingError("clip_exists", "Der Clip-Zielpfad ist bereits belegt.") from exc
+                with temp_path.open("xb") as output:
+                    output.write(output_bytes)
+                    output.flush()
             except OSError as exc:
-                self._unlink_if_exists(temp_path)
-                raise RecordingError("export_commit_failed", "Der Clip konnte nicht unveränderlich gespeichert werden.") from exc
+                raise RecordingError("storage_unavailable", "Der Clip konnte nicht zwischengespeichert werden.") from exc
 
-            clip_hash = self._sha256_file(final_path)
-            clip_ref = ClipRef(
-                clip_id=clip_id,
-                source_id=session.source_id,
-                version=version,
-                path=final_path,
-                sha256=clip_hash,
-                start_seconds=start_seconds,
-                end_seconds=end_seconds,
-                frame_ids=tuple(record.frame_id for record in frames),
-                source_fps=fps,
-                available_preroll=available_preroll,
-            )
-            previous_latest = session.latest_clip_by_event.get(event_key)
-            previous_clip_id = session.clip_ids_by_event.get(event_key)
-            previous_version = session.clip_versions_by_event.get(event_key)
-            session.clip_sizes[clip_id] = output_size
-            session.clip_manifest_item_bytes += len(self._clip_manifest_item_bytes(clip_ref))
-            session.clip_ids_by_event[event_key] = clip_id
-            session.clip_versions_by_event[event_key] = version
-            session.latest_clip_by_event[event_key] = clip_ref
-            session.clip_history.append(clip_ref)
-            session_key = (session.owner_id, session.source_id)
-            self._clips[clip_id] = (session_key, clip_ref)
-            try:
-                self._write_manifest(session)
-            except RecordingError:
-                session.clip_sizes.pop(clip_id, None)
-                session.clip_manifest_item_bytes -= len(self._clip_manifest_item_bytes(clip_ref))
-                session.clip_ids_by_event.pop(event_key, None)
-                session.clip_versions_by_event.pop(event_key, None)
-                session.latest_clip_by_event.pop(event_key, None)
-                if previous_latest is not None:
-                    session.latest_clip_by_event[event_key] = previous_latest
-                if previous_clip_id is not None:
-                    session.clip_ids_by_event[event_key] = previous_clip_id
-                if previous_version is not None:
-                    session.clip_versions_by_event[event_key] = previous_version
-                if session.clip_history and session.clip_history[-1].clip_id == clip_id:
-                    session.clip_history.pop()
-                self._clips.pop(clip_id, None)
-                self._unlink_if_exists(final_path)
-                raise
-            return clip_ref
+            if not self._decode_count_matches(temp_path, len(frames)):
+                if output_size >= output_limit:
+                    raise RecordingError("byte_limit", "Das Speicherlimit erlaubt keinen vollständigen Clip.")
+                raise RecordingError("encoder_failed", "Der Videoexport ist unvollständig oder beschädigt.")
+
+            with self._lock:
+                latest = session.latest_clip_by_event.get(event_key)
+                if latest is not None and latest.end_seconds >= end_seconds:
+                    self._unlink_if_exists(temp_path)
+                    session.pending_export_bytes -= output_size
+                    pending_reserved = False
+                    return latest
+
+                version = session.clip_versions_by_event.get(event_key, 0) + 1
+                final_path = self._safe_path(
+                    session.clips_directory / f"{clip_id}.v{version}.mp4"
+                )
+                if final_path.exists():
+                    raise RecordingError("clip_exists", "Der Clip-Zielpfad ist bereits belegt.")
+                linked_final = False
+                try:
+                    os.link(temp_path, final_path)
+                    linked_final = True
+                    temp_path.unlink()
+                except FileExistsError as exc:
+                    raise RecordingError("clip_exists", "Der Clip-Zielpfad ist bereits belegt.") from exc
+                except OSError as exc:
+                    if linked_final:
+                        self._unlink_if_exists(final_path)
+                    raise RecordingError("export_commit_failed", "Der Clip konnte nicht unveränderlich gespeichert werden.") from exc
+
+                try:
+                    clip_hash = self._sha256_file(final_path)
+                except RecordingError:
+                    self._unlink_if_exists(final_path)
+                    raise
+                clip_ref = ClipRef(
+                    clip_id=clip_id,
+                    source_id=session.source_id,
+                    version=version,
+                    path=final_path,
+                    sha256=clip_hash,
+                    start_seconds=start_seconds,
+                    end_seconds=end_seconds,
+                    frame_ids=tuple(record.frame_id for record in frames),
+                    source_fps=fps,
+                    available_preroll=available_preroll,
+                )
+                previous_latest = session.latest_clip_by_event.get(event_key)
+                previous_clip_id = session.clip_ids_by_event.get(event_key)
+                previous_version = session.clip_versions_by_event.get(event_key)
+                session.pending_export_bytes -= output_size
+                pending_reserved = False
+                session.clip_sizes[clip_id] = output_size
+                session.clip_manifest_item_bytes += len(self._clip_manifest_item_bytes(clip_ref))
+                session.clip_ids_by_event[event_key] = clip_id
+                session.clip_versions_by_event[event_key] = version
+                session.latest_clip_by_event[event_key] = clip_ref
+                session.clip_history.append(clip_ref)
+                session_key = (session.owner_id, session.source_id)
+                self._clips[clip_id] = (session_key, clip_ref)
+                try:
+                    self._write_manifest(session)
+                except RecordingError:
+                    session.clip_sizes.pop(clip_id, None)
+                    session.clip_manifest_item_bytes -= len(self._clip_manifest_item_bytes(clip_ref))
+                    session.clip_ids_by_event.pop(event_key, None)
+                    session.clip_versions_by_event.pop(event_key, None)
+                    session.latest_clip_by_event.pop(event_key, None)
+                    if previous_latest is not None:
+                        session.latest_clip_by_event[event_key] = previous_latest
+                    if previous_clip_id is not None:
+                        session.clip_ids_by_event[event_key] = previous_clip_id
+                    if previous_version is not None:
+                        session.clip_versions_by_event[event_key] = previous_version
+                    if session.clip_history and session.clip_history[-1].clip_id == clip_id:
+                        session.clip_history.pop()
+                    self._clips.pop(clip_id, None)
+                    self._unlink_if_exists(final_path)
+                    raise
+                return clip_ref
+        finally:
+            self._unlink_if_exists(temp_path)
+            if pending_reserved:
+                with self._lock:
+                    session.pending_export_bytes -= output_size
 
     def _require_encoder(self) -> None:
         if self._ffmpeg_executable is not None:
@@ -691,6 +712,154 @@ class RecordingStore:
         if "libx264" not in result.stdout and "libx264" not in result.stderr:
             raise RecordingError("encoder_unavailable", "Der benötigte H.264-Encoder ist nicht verfügbar.")
         self._ffmpeg_executable = executable
+
+    def _encode_mp4_to_memory(
+        self,
+        args: list[str],
+        input_parts: list[bytes],
+        max_output_bytes: int,
+    ) -> bytearray:
+        """Run FFmpeg with bounded in-memory output and no disk destination."""
+        deadline = time.monotonic() + FFMPEG_TIMEOUT_SECONDS
+        try:
+            process = subprocess.Popen(
+                args,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                bufsize=0,
+            )
+        except OSError as exc:
+            raise RecordingError("encoder_failed", "Der Videoexport konnte nicht gestartet werden.") from exc
+
+        output_queue: queue.Queue[bytes | None] = queue.Queue(maxsize=FFMPEG_PIPE_QUEUE_CHUNKS)
+        stop_reader = Event()
+        reader_errors: list[OSError] = []
+        writer_errors: list[OSError] = []
+
+        def read_output() -> None:
+            try:
+                assert process.stdout is not None
+                while not stop_reader.is_set():
+                    chunk = process.stdout.read(FFMPEG_PIPE_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    while not stop_reader.is_set():
+                        try:
+                            output_queue.put(chunk, timeout=0.05)
+                            break
+                        except queue.Full:
+                            continue
+            except OSError as exc:
+                if not stop_reader.is_set():
+                    reader_errors.append(exc)
+            finally:
+                while not stop_reader.is_set():
+                    try:
+                        output_queue.put(None, timeout=0.05)
+                        break
+                    except queue.Full:
+                        continue
+
+        def write_input() -> None:
+            try:
+                assert process.stdin is not None
+                for part in input_parts:
+                    offset = 0
+                    while offset < len(part):
+                        if stop_reader.is_set():
+                            return
+                        chunk = part[offset : offset + FFMPEG_PIPE_CHUNK_BYTES]
+                        written = process.stdin.write(chunk)
+                        if written is None or written <= 0:
+                            raise OSError("FFmpeg closed its input pipe")
+                        offset += written
+            except (BrokenPipeError, OSError) as exc:
+                if not stop_reader.is_set():
+                    writer_errors.append(exc)
+            finally:
+                if process.stdin is not None:
+                    try:
+                        process.stdin.close()
+                    except OSError:
+                        pass
+
+        reader = Thread(target=read_output, name="visionflow-ffmpeg-stdout", daemon=True)
+        writer = Thread(target=write_input, name="visionflow-ffmpeg-stdin", daemon=True)
+        reader.start()
+        writer.start()
+
+        captured = bytearray()
+        timed_out = False
+        overflow = False
+        unexpected_error: BaseException | None = None
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    break
+                try:
+                    chunk = output_queue.get(timeout=remaining)
+                except queue.Empty:
+                    timed_out = True
+                    break
+                if chunk is None:
+                    break
+                if len(captured) + len(chunk) > max_output_bytes:
+                    overflow = True
+                    break
+                captured.extend(chunk)
+
+            if not timed_out and not overflow:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                else:
+                    try:
+                        process.wait(timeout=remaining)
+                    except subprocess.TimeoutExpired:
+                        timed_out = True
+        except BaseException as exc:
+            unexpected_error = exc
+        finally:
+            must_kill = timed_out or overflow or unexpected_error is not None
+            if process.poll() is None and must_kill:
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+            if process.poll() is None:
+                try:
+                    process.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
+                    try:
+                        process.wait(timeout=1.0)
+                    except subprocess.TimeoutExpired:
+                        pass
+            stop_reader.set()
+            for pipe in (process.stdin, process.stdout):
+                if pipe is not None:
+                    try:
+                        pipe.close()
+                    except OSError:
+                        pass
+            writer.join(timeout=1.0)
+            reader.join(timeout=1.0)
+
+        if timed_out:
+            raise RecordingError("encoder_timeout", "Der Videoexport hat das Zeitlimit überschritten.")
+        if overflow:
+            raise RecordingError("byte_limit", "Der Videoexport überschreitet die Speichergrenze.")
+        if unexpected_error is not None:
+            raise RecordingError("encoder_failed", "Der Videoexport konnte nicht abgeschlossen werden.") from unexpected_error
+        if reader_errors or writer_errors or process.returncode != 0:
+            raise RecordingError("encoder_failed", "FFmpeg konnte keinen gültigen Videoexport erstellen.")
+        return captured
 
     def _decode_count_matches(self, path: Path, expected: int) -> bool:
         capture = cv2.VideoCapture(str(path))
@@ -900,7 +1069,16 @@ class RecordingStore:
     def _write_manifest(self, session: _SourceSession) -> None:
         payload = self._manifest_bytes(session)
         manifest_path = self._safe_path(session.directory / "manifest.json")
-        projected_usage = self._usage_without_manifest(session) + len(payload)
+        old_manifest_size = self._optional_file_size(manifest_path)
+        # os.replace is atomic to readers, but both files occupy disk until it
+        # completes. Reserve the old and new manifest together while accounting
+        # for any staged clip files that are being validated concurrently.
+        new_manifest_reservation = max(len(payload), session.manifest_reserved_bytes)
+        projected_usage = (
+            self._usage_without_manifest(session)
+            + old_manifest_size
+            + new_manifest_reservation
+        )
         if projected_usage > self.max_bytes:
             raise RecordingError("byte_limit", "Das Speicherlimit dieser Aufzeichnung ist erreicht.")
 
@@ -949,6 +1127,7 @@ class RecordingStore:
             session.compressed_bytes
             + session.journal_bytes
             + sum(session.clip_sizes.values())
+            + session.pending_export_bytes
         )
 
     def _optional_file_size(self, path: Path) -> int:

@@ -5,6 +5,7 @@ import json
 import shutil
 import threading
 import subprocess
+import sys
 from pathlib import Path
 
 import cv2
@@ -499,16 +500,13 @@ def test_frame_producer_can_append_while_ffmpeg_encodes_a_snapshot(
     encoding_started = threading.Event()
     finish_encoding = threading.Event()
 
-    def blocked_encode(args, **kwargs):
-        if "-encoders" in args:
-            return subprocess.CompletedProcess(args, 0, stdout="libx264", stderr="")
+    def blocked_encode(_args, _input_parts, _max_output_bytes):
         encoding_started.set()
         if not finish_encoding.wait(5):
-            raise subprocess.TimeoutExpired(args, 5)
-        Path(args[-1]).write_bytes(b"test-container" * 512)
-        return subprocess.CompletedProcess(args, 0)
+            raise TimeoutError("test encoder release timed out")
+        return bytearray(b"test-container" * 512)
 
-    monkeypatch.setattr("visionflow.recording.subprocess.run", blocked_encode)
+    monkeypatch.setattr(store, "_encode_mp4_to_memory", blocked_encode)
     monkeypatch.setattr(store, "_decode_count_matches", lambda _path, _count: True)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -651,3 +649,391 @@ def test_manifest_reservation_matches_utf8_manifest_after_append_and_export(
     store.manifest("alice", "camera-manifest-size")
     manifest_path = next(store.root.rglob("manifest.json"))
     assert manifest_path.stat().st_size == session.manifest_reserved_bytes
+
+
+def test_concurrent_exports_and_manifest_replace_stay_within_disk_quota(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    store = RecordingStore(
+        root=tmp_path / "recording",
+        ffmpeg_path=ffmpeg_path(),
+        max_bytes=8 * 1024 * 1024,
+    )
+    store.open("alice", "camera-quota-race")
+    image = np.zeros((48, 64, 3), dtype=np.uint8)
+    for index in range(4):
+        store.append(
+            "camera-quota-race",
+            Frame(f"before-{index}", image, timestamp_seconds=float(index)),
+        )
+
+    source_directory = next(store.root.rglob("manifest.json")).parent
+    baseline_bytes = _persisted_source_bytes(source_directory)
+    # Each export individually fits, but two staged clips plus frame/manifest
+    # growth do not. This distinguishes aggregate reservation from a per-call
+    # check against the same stale remaining-space value.
+    store.max_bytes = baseline_bytes + 12 * 1024
+    output_size = 8 * 1024
+    release_encoders = threading.Event()
+    both_outputs_ready = threading.Event()
+    encoder_count = 0
+    encoder_count_lock = threading.Lock()
+    manifest_replace_sizes: list[int] = []
+
+    def blocked_encode(_args, _input_parts, _max_output_bytes):
+        nonlocal encoder_count
+        with encoder_count_lock:
+            encoder_count += 1
+            if encoder_count >= 2:
+                both_outputs_ready.set()
+        if not release_encoders.wait(5):
+            raise TimeoutError("test encoder release timed out")
+        return bytearray(b"x" * output_size)
+
+    original_replace = __import__("os").replace
+
+    def observe_manifest_replace(source, destination):
+        if Path(destination).name == "manifest.json":
+            manifest_replace_sizes.append(_persisted_source_bytes(source_directory))
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(store, "_encode_mp4_to_memory", blocked_encode)
+    monkeypatch.setattr("visionflow.recording.os.replace", observe_manifest_replace)
+    monkeypatch.setattr(store, "_decode_count_matches", lambda _path, _count: True)
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        exports = [
+            executor.submit(store.event_clip, "alice", "camera-quota-race", event, 0.5, 0.5)
+            for event in (1.0, 1.5)
+        ]
+        try:
+            assert both_outputs_ready.wait(3), "both encoders should reach their blocked output point"
+            assert not list(source_directory.rglob("*.tmp.mp4")), (
+                "FFmpeg output must stay in bounded memory until exact bytes are reserved"
+            )
+            store.append(
+                "camera-quota-race",
+                Frame("during-encode", image, timestamp_seconds=4.0),
+            )
+            store.manifest("alice", "camera-quota-race")
+        finally:
+            release_encoders.set()
+
+        successful_clips = []
+        for export in exports:
+            try:
+                successful_clips.append(export.result(timeout=5))
+            except RecordingError as exc:
+                assert exc.code == "byte_limit"
+
+    assert manifest_replace_sizes, "the test must observe the replacement while old and new manifest coexist"
+    assert max(manifest_replace_sizes) <= store.max_bytes, (
+        f"manifest replacement overlapped {max(manifest_replace_sizes)} persisted bytes "
+        f"against a {store.max_bytes}-byte quota"
+    )
+    assert successful_clips, "at least one of the individually fitting exports should commit"
+    assert _persisted_source_bytes(source_directory) <= store.max_bytes
+
+
+def test_manifest_replace_requires_room_for_old_and_new_files(tmp_path: Path) -> None:
+    store = RecordingStore(
+        root=tmp_path / "recording",
+        ffmpeg_path=ffmpeg_path(),
+        max_bytes=2 * 1024 * 1024,
+    )
+    store.open("alice", "camera-manifest-overlap")
+    image = np.zeros((48, 64, 3), dtype=np.uint8)
+    for index in range(3):
+        store.append(
+            "camera-manifest-overlap",
+            Frame(f"overlap-{index}", image, timestamp_seconds=float(index)),
+        )
+
+    source_directory = next(store.root.rglob("manifest.json")).parent
+    manifest_path = source_directory / "manifest.json"
+    prior_manifest = manifest_path.read_bytes()
+    session = store._sessions[("alice", "camera-manifest-overlap")]
+    non_manifest_bytes = store._usage_without_manifest(session)
+    old_manifest_size = len(prior_manifest)
+    next_manifest_size = session.manifest_reserved_bytes
+    store.max_bytes = non_manifest_bytes + old_manifest_size + next_manifest_size - 1
+    assert non_manifest_bytes + next_manifest_size < store.max_bytes
+    assert non_manifest_bytes + old_manifest_size + next_manifest_size > store.max_bytes
+
+    with pytest.raises(RecordingError) as overlap:
+        store.manifest("alice", "camera-manifest-overlap")
+
+    assert overlap.value.code == "byte_limit"
+    assert manifest_path.read_bytes() == prior_manifest
+    assert not list(source_directory.glob(".manifest-*.tmp"))
+
+
+def test_append_accounts_for_staged_clip_bytes_during_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    store = RecordingStore(root=tmp_path / "recording", ffmpeg_path=ffmpeg_path())
+    store.open("alice", "camera-staged-clip")
+    image = np.zeros((48, 64, 3), dtype=np.uint8)
+    for index in range(3):
+        store.append(
+            "camera-staged-clip",
+            Frame(f"staged-{index}", image, timestamp_seconds=float(index)),
+        )
+    source_directory = next(store.root.rglob("manifest.json")).parent
+    session = store._sessions[("alice", "camera-staged-clip")]
+    output_size = 3000
+    store.max_bytes = store._usage(session) + output_size + 900
+    validator_entered = threading.Event()
+    release_validator = threading.Event()
+
+    monkeypatch.setattr(
+        store,
+        "_encode_mp4_to_memory",
+        lambda _args, _parts, _limit: bytearray(b"x" * output_size),
+    )
+
+    def blocked_validation(path: Path, _frame_count: int) -> bool:
+        assert path.is_file()
+        assert path.stat().st_size == output_size
+        validator_entered.set()
+        if not release_validator.wait(5):
+            raise TimeoutError("test validator release timed out")
+        return True
+
+    monkeypatch.setattr(store, "_decode_count_matches", blocked_validation)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        export = executor.submit(
+            store.event_clip,
+            "alice",
+            "camera-staged-clip",
+            1.0,
+            0.5,
+            0.5,
+        )
+        try:
+            assert validator_entered.wait(3), "validation should run after the disk reservation is made"
+            assert session.pending_export_bytes == output_size
+            assert _persisted_source_bytes(source_directory) <= store.max_bytes
+            with pytest.raises(RecordingError) as append_error:
+                store.append(
+                    "camera-staged-clip",
+                    Frame("would-exceed-with-staged-clip", image, timestamp_seconds=3.0),
+                )
+            assert append_error.value.code == "byte_limit"
+        finally:
+            release_validator.set()
+
+        clip = export.result(timeout=5)
+
+    assert clip.path.is_file()
+    assert session.pending_export_bytes == 0
+    assert _persisted_source_bytes(source_directory) <= store.max_bytes
+
+
+def test_failed_validation_releases_temp_file_and_quota_reservation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = RecordingStore(root=tmp_path / "recording", ffmpeg_path=ffmpeg_path())
+    store.open("alice", "camera-validation-cleanup")
+    image = np.zeros((48, 64, 3), dtype=np.uint8)
+    for index in range(3):
+        store.append(
+            "camera-validation-cleanup",
+            Frame(f"cleanup-{index}", image, timestamp_seconds=float(index)),
+        )
+    source_directory = next(store.root.rglob("manifest.json")).parent
+    session = store._sessions[("alice", "camera-validation-cleanup")]
+    monkeypatch.setattr(
+        store,
+        "_encode_mp4_to_memory",
+        lambda _args, _parts, _limit: bytearray(b"x" * 2048),
+    )
+    monkeypatch.setattr(store, "_decode_count_matches", lambda _path, _count: False)
+
+    with pytest.raises(RecordingError) as invalid:
+        store.event_clip("alice", "camera-validation-cleanup", 1.0, 0.5, 0.5)
+
+    assert invalid.value.code == "encoder_failed"
+    assert session.pending_export_bytes == 0
+    assert not list(source_directory.rglob("*.tmp.mp4"))
+    assert _persisted_source_bytes(source_directory) <= store.max_bytes
+
+
+def test_encoder_output_overflow_kills_and_reaps_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = RecordingStore(root=tmp_path / "recording", ffmpeg_path=Path(sys.executable))
+    real_popen = subprocess.Popen
+    children: list[subprocess.Popen] = []
+
+    def capture_child(*args, **kwargs):
+        child = real_popen(*args, **kwargs)
+        children.append(child)
+        return child
+
+    monkeypatch.setattr("visionflow.recording.subprocess.Popen", capture_child)
+    command = [
+        sys.executable,
+        "-c",
+        "import sys,time; sys.stdout.buffer.write(b'x' * 2000000); sys.stdout.flush(); time.sleep(5)",
+    ]
+
+    with pytest.raises(RecordingError) as too_large:
+        store._encode_mp4_to_memory(command, [], max_output_bytes=1024)
+
+    assert too_large.value.code == "byte_limit"
+    assert len(children) == 1
+    assert children[0].poll() is not None, "the overflowing encoder must be terminated and reaped"
+
+
+def test_encoder_timeout_kills_and_reaps_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import visionflow.recording as recording_module
+
+    store = RecordingStore(root=tmp_path / "recording", ffmpeg_path=Path(sys.executable))
+    real_popen = subprocess.Popen
+    children: list[subprocess.Popen] = []
+
+    def capture_child(*args, **kwargs):
+        child = real_popen(*args, **kwargs)
+        children.append(child)
+        return child
+
+    monkeypatch.setattr("visionflow.recording.subprocess.Popen", capture_child)
+    monkeypatch.setattr(recording_module, "FFMPEG_TIMEOUT_SECONDS", 0.15)
+    command = [sys.executable, "-c", "import time; time.sleep(5)"]
+
+    with pytest.raises(RecordingError) as timeout:
+        store._encode_mp4_to_memory(command, [], max_output_bytes=1024)
+
+    assert timeout.value.code == "encoder_timeout"
+    assert len(children) == 1
+    assert children[0].poll() is not None, "the timed-out encoder must be terminated and reaped"
+
+
+def test_export_count_is_bounded_without_waiting_for_a_third_encoder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    store = RecordingStore(root=tmp_path / "recording", ffmpeg_path=ffmpeg_path())
+    store.open("alice", "camera-export-slots")
+    image = np.zeros((48, 64, 3), dtype=np.uint8)
+    for index in range(5):
+        store.append(
+            "camera-export-slots",
+            Frame(f"slot-{index}", image, timestamp_seconds=float(index)),
+        )
+
+    two_started = threading.Event()
+    release_encoders = threading.Event()
+    call_count = 0
+    call_lock = threading.Lock()
+
+    def blocked_encode(_args, _input_parts, _max_output_bytes):
+        nonlocal call_count
+        with call_lock:
+            call_count += 1
+            if call_count == 2:
+                two_started.set()
+        if not release_encoders.wait(5):
+            raise TimeoutError("test encoder release timed out")
+        return bytearray(b"x" * 2048)
+
+    monkeypatch.setattr(store, "_encode_mp4_to_memory", blocked_encode)
+    monkeypatch.setattr(store, "_decode_count_matches", lambda _path, _count: True)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        exports = [
+            executor.submit(store.event_clip, "alice", "camera-export-slots", event, 0.5, 0.5)
+            for event in (1.0, 1.5)
+        ]
+        try:
+            assert two_started.wait(3), "the two permitted encoders should start concurrently"
+            with pytest.raises(RecordingError) as busy:
+                store.event_clip("alice", "camera-export-slots", 2.0, 0.5, 0.5)
+            assert busy.value.code == "export_busy"
+            assert call_count == 2
+        finally:
+            release_encoders.set()
+
+        clips = [export.result(timeout=5) for export in exports]
+
+    assert len(clips) == 2
+
+
+def test_fragmented_export_pts_start_at_zero_and_match_decoded_frame_order(
+    tmp_path: Path,
+) -> None:
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe is None:
+        pytest.skip("ffprobe is required to verify encoded presentation timestamps")
+
+    store = RecordingStore(
+        root=tmp_path / "recording",
+        ffmpeg_path=ffmpeg_path(),
+        max_seconds=10,
+        max_bytes=2 * 1024 * 1024,
+    )
+    store.open("alice", "camera-pts")
+    colors = np.random.default_rng(20261002).integers(0, 256, size=(21, 3), dtype=np.uint8)
+    for index, color in enumerate(colors):
+        image = np.empty((90, 160, 3), dtype=np.uint8)
+        image[:] = color
+        store.append(
+            "camera-pts",
+            Frame(f"pts-{index:02d}", image, timestamp_seconds=index / 10),
+        )
+
+    clip = store.event_clip("alice", "camera-pts", event_time=1.0, before=1.0, after=1.0)
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "frame=best_effort_timestamp_time",
+            "-of",
+            "json",
+            str(clip.path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    decoded_pts = [
+        float(frame["best_effort_timestamp_time"])
+        for frame in json.loads(result.stdout)["frames"]
+    ]
+    expected_pts = [index / clip.source_fps for index in range(len(clip.frame_ids))]
+
+    assert len(decoded_pts) == 21
+    assert len(set(decoded_pts)) == 21
+    assert decoded_pts[0] == pytest.approx(0.0, abs=0.001)
+    assert decoded_pts == pytest.approx(expected_pts, abs=0.001)
+
+    decoded_images = decode_all_frames(clip.path)
+    assert len(decoded_images) == len(clip.frame_ids)
+    chosen_source_indices = []
+    for decoded in decoded_images:
+        center = decoded[decoded.shape[0] // 2, decoded.shape[1] // 2].astype(np.int16)
+        distances = np.linalg.norm(colors.astype(np.int16) - center, axis=1)
+        chosen_source_indices.append(int(np.argmin(distances)))
+    assert chosen_source_indices == list(range(21))
