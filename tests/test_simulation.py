@@ -1,0 +1,355 @@
+from __future__ import annotations
+
+import threading
+import time
+
+import numpy as np
+import pytest
+
+from road_helpers import road_frames, vars_for_frame
+from visionflow.contracts import Frame
+
+
+def _load_road_world():
+    try:
+        from visionflow.road_scene import RoadWorld
+    except ModuleNotFoundError as exc:
+        if exc.name == "visionflow.road_scene":
+            pytest.fail("Task 1 RED: RoadWorld is missing from visionflow.road_scene")
+        raise
+    return RoadWorld
+
+
+def _load_simulation_types():
+    try:
+        from visionflow.simulation import SimulationSession, SimulationStore
+    except ModuleNotFoundError as exc:
+        if exc.name == "visionflow.simulation":
+            pytest.fail("Task 1 RED: SimulationSession and SimulationStore are missing")
+        raise
+    return SimulationSession, SimulationStore
+
+
+def _event_motion(event: str, times: tuple[float, ...], seed: int = 17):
+    RoadWorld = _load_road_world()
+    baseline = RoadWorld(seed=seed)
+    candidate = RoadWorld(seed=seed)
+    candidate.inject(event)
+    centers: list[float] = []
+    areas: list[int] = []
+    for source_time in times:
+        plain = baseline.render(source_time).astype(np.int16)
+        with_event = candidate.render(source_time).astype(np.int16)
+        mask = np.max(np.abs(with_event - plain), axis=2) > 30
+        ys, _xs = np.where(mask)
+        assert ys.size > 20, f"{event} should add a visible object"
+        centers.append(float(ys.mean()))
+        areas.append(int(ys.size))
+    return centers, areas
+
+
+def test_road_world_renders_a_plausible_animated_road():
+    RoadWorld = _load_road_world()
+    world = RoadWorld(seed=7)
+
+    first = world.render(0.0)
+    later = world.render(0.2)
+
+    assert first.shape == (540, 960, 3)
+    assert first.dtype == np.uint8
+    assert np.unique(first.reshape(-1, 3), axis=0).shape[0] > 30
+    assert np.count_nonzero(np.any(first != later, axis=2)) > 500
+    assert not np.array_equal(first[300, 300], first[20, 20])
+
+
+def test_wrong_way_event_moves_against_both_normal_lane_directions():
+    sample_times = (0.2, 0.4, 0.6, 0.8, 1.0)
+    down_lane_centers, _down_areas = _event_motion(
+        "wrong_way", sample_times, seed=17
+    )
+    up_lane_centers, _up_areas = _event_motion(
+        "wrong_way", sample_times, seed=18
+    )
+
+    # The odd seed selects a car normally travelling down; even selects up.
+    assert down_lane_centers[-1] < down_lane_centers[0] - 25
+    assert up_lane_centers[-1] > up_lane_centers[0] + 25
+
+
+def test_bird_and_leaf_are_distinct_moving_direction_candidates():
+    bird_centers, bird_areas = _event_motion("bird", (0.2, 0.4, 0.6, 0.8, 1.0))
+    leaf_centers, leaf_areas = _event_motion("leaf", (0.2, 0.4, 0.6, 0.8, 1.0))
+    _car_centers, car_areas = _event_motion("wrong_way", (0.2, 0.4, 0.6, 0.8, 1.0))
+
+    assert bird_centers[-1] < bird_centers[0] - 25
+    assert leaf_centers[-1] > leaf_centers[0] + 25
+    assert min(bird_areas) > 20
+    assert min(leaf_areas) > 20
+    assert min(car_areas) > max(bird_areas) * 2
+
+
+def test_unknown_event_is_rejected_before_the_scene_changes():
+    RoadWorld = _load_road_world()
+    expected = RoadWorld(seed=23)
+    actual = RoadWorld(seed=23)
+    expected.render(0.0)
+    actual.render(0.0)
+
+    with pytest.raises(ValueError):
+        actual.inject("meteor")
+
+    assert np.array_equal(actual.render(0.2), expected.render(0.2))
+
+
+def test_road_helpers_return_only_unmodified_frame_fields():
+    frames = road_frames("bird", count=4, seed=7)
+
+    assert len(frames) == 4
+    assert all(isinstance(frame, Frame) for frame in frames)
+    assert all(set(vars_for_frame(frame)) == {"frame_id", "image", "timestamp_seconds"} for frame in frames)
+    assert vars_for_frame(frames[0])["image"] is frames[0].image
+    assert [frame.timestamp_seconds for frame in frames] == pytest.approx([0.0, 0.2, 0.4, 0.6])
+    assert len({frame.frame_id.split(":")[0] for frame in frames}) == 1
+    assert all(frame.image.shape == (540, 960, 3) for frame in frames)
+
+
+def test_session_frames_share_one_source_identity_and_close_as_end_of_stream():
+    SimulationSession, _SimulationStore = _load_simulation_types()
+    session = SimulationSession(owner_id="alice", seed=7)
+    reader = session.open_reader()
+    try:
+        session.start()
+        before = reader.read()
+        assert before is not None
+
+        session.inject("wrong_way")
+        after = reader.read()
+        latest = session.latest_frame()
+
+        assert after is not None
+        assert latest is not None
+        assert before.frame_id != after.frame_id
+        assert before.image.shape == after.image.shape == latest.image.shape == (540, 960, 3)
+        assert after.timestamp_seconds > before.timestamp_seconds
+        assert all(frame.frame_id.startswith(f"{session.source_id}:") for frame in (before, after, latest))
+        assert set(vars_for_frame(after)) == {"frame_id", "image", "timestamp_seconds"}
+        assert not session.closed
+    finally:
+        session.close()
+
+    assert session.closed
+    assert session.error_code is None
+    assert reader.read() is None
+
+
+def test_on_frame_receives_each_generated_frame_once():
+    SimulationSession, _SimulationStore = _load_simulation_types()
+    delivered: list[Frame] = []
+    enough_frames = threading.Event()
+
+    def record(frame: Frame) -> None:
+        delivered.append(frame)
+        if len(delivered) >= 6:
+            enough_frames.set()
+
+    session = SimulationSession(owner_id="alice", seed=11, on_frame=record)
+    try:
+        session.start()
+        assert enough_frames.wait(4), "producer did not deliver six frames"
+    finally:
+        session.close()
+
+    frame_numbers = [int(frame.frame_id.rsplit(":", 1)[1]) for frame in delivered]
+    assert frame_numbers == list(range(len(delivered)))
+    assert len(set(frame.frame_id for frame in delivered)) == len(delivered)
+    assert all(frame.frame_id.startswith(f"{session.source_id}:") for frame in delivered)
+
+
+def test_raw_frame_backlog_drops_old_frames_at_ten_frame_limit():
+    SimulationSession, _SimulationStore = _load_simulation_types()
+    delivered_ids: list[str] = []
+    enough_frames = threading.Event()
+
+    def observe(frame: Frame) -> None:
+        delivered_ids.append(frame.frame_id)
+        if len(delivered_ids) >= 15:
+            enough_frames.set()
+
+    session = SimulationSession(owner_id="alice", seed=13, on_frame=observe)
+    reader = session.open_reader()
+    try:
+        session.start()
+        assert enough_frames.wait(4), "producer did not deliver fifteen frames"
+        first = reader.read()
+        assert first is not None
+        oldest_kept = len(delivered_ids) - 10
+        assert int(first.frame_id.rsplit(":", 1)[1]) >= oldest_kept
+    finally:
+        session.close()
+
+
+def test_closing_one_reader_does_not_stop_the_shared_session():
+    SimulationSession, _SimulationStore = _load_simulation_types()
+    session = SimulationSession(owner_id="alice", seed=19)
+    first_reader = session.open_reader()
+    second_reader = session.open_reader()
+    try:
+        session.start()
+        first = first_reader.read()
+        assert first is not None
+        first_reader.close()
+
+        second = second_reader.read()
+        latest = session.latest_frame()
+
+        assert second is not None
+        assert latest.frame_id.startswith(f"{session.source_id}:")
+        assert second.frame_id == first.frame_id
+    finally:
+        session.close()
+
+
+def test_session_close_unblocks_a_reader_waiting_for_its_first_frame():
+    SimulationSession, _SimulationStore = _load_simulation_types()
+    session = SimulationSession(owner_id="alice", seed=29)
+    reader = session.open_reader()
+    started_reading = threading.Event()
+    returned: list[Frame | None] = []
+
+    def wait_for_frame() -> None:
+        started_reading.set()
+        returned.append(reader.read())
+
+    thread = threading.Thread(target=wait_for_frame)
+    thread.start()
+    try:
+        assert started_reading.wait(1)
+        time.sleep(0.05)
+        assert thread.is_alive()
+
+        session.close()
+        thread.join(1)
+        assert not thread.is_alive()
+        assert returned == [None]
+    finally:
+        session.close()
+        reader.close()
+
+
+def test_store_enforces_owner_scope_and_reset_replaces_source_identity():
+    SimulationSession, SimulationStore = _load_simulation_types()
+    store = SimulationStore()
+    original = store.create(owner_id="alice", seed=31)
+    waiting_reader = original.open_reader()
+
+    try:
+        assert store.get("alice", original.source_id) is original
+        with pytest.raises(KeyError):
+            store.get("bob", original.source_id)
+
+        replacement = store.reset("alice", original.source_id)
+
+        assert replacement.source_id != original.source_id
+        assert replacement.owner_id == "alice"
+        assert waiting_reader.read() is None
+        with pytest.raises(KeyError):
+            store.get("alice", original.source_id)
+        with pytest.raises(KeyError):
+            store.get("bob", replacement.source_id)
+    finally:
+        store.close()
+        waiting_reader.close()
+
+
+def test_store_close_stops_all_session_readers():
+    SimulationSession, SimulationStore = _load_simulation_types()
+    store = SimulationStore()
+    session = store.create(owner_id="alice", seed=37)
+    reader = session.open_reader()
+
+    session.start()
+    assert session.latest_frame() is not None
+    store.close()
+
+    assert reader.read() is None
+
+
+def test_store_create_and_reset_deliver_to_their_own_callbacks():
+    SimulationSession, SimulationStore = _load_simulation_types()
+    store = SimulationStore()
+    created_frames: list[Frame] = []
+    replacement_frames: list[Frame] = []
+    created_ready = threading.Event()
+    replacement_ready = threading.Event()
+
+    def record_created(frame: Frame) -> None:
+        created_frames.append(frame)
+        created_ready.set()
+
+    def record_replacement(frame: Frame) -> None:
+        replacement_frames.append(frame)
+        replacement_ready.set()
+
+    try:
+        original = store.create(
+            owner_id="alice", seed=41, on_frame=record_created
+        )
+        original.start()
+        assert created_ready.wait(3), "create callback received no generated frame"
+
+        replacement = store.reset(
+            "alice", original.source_id, on_frame=record_replacement
+        )
+        replacement.start()
+        assert replacement_ready.wait(3), "reset callback received no generated frame"
+
+        assert created_frames[0].frame_id.startswith(f"{original.source_id}:")
+        assert replacement_frames[0].frame_id.startswith(f"{replacement.source_id}:")
+    finally:
+        store.close()
+
+
+def test_reader_close_wakeups_preserve_frame_rate_and_render_timestamps(monkeypatch):
+    RoadWorld = _load_road_world()
+    original_render = RoadWorld.render
+    render_times: list[float] = []
+
+    def record_render_time(world, source_time: float):
+        render_times.append(source_time)
+        return original_render(world, source_time)
+
+    monkeypatch.setattr(RoadWorld, "render", record_render_time)
+    delivered: list[Frame] = []
+    enough_frames = threading.Event()
+
+    def record(frame: Frame) -> None:
+        delivered.append(frame)
+        if len(delivered) >= 5:
+            enough_frames.set()
+
+    SimulationSession, _SimulationStore = _load_simulation_types()
+    session = SimulationSession(owner_id="alice", seed=43, on_frame=record)
+    reader = session.open_reader()
+    try:
+        session.start()
+        first = reader.read()
+        assert first is not None
+        reader.close()
+
+        # Repeated cursor closes wake the producer during its scheduled wait.
+        for _ in range(5):
+            time.sleep(0.008)
+            session.open_reader().close()
+
+        assert enough_frames.wait(3), "producer did not deliver five frames"
+    finally:
+        session.close()
+        reader.close()
+
+    frame_times = [frame.timestamp_seconds for frame in delivered[:5]]
+    assert len(render_times) >= len(frame_times)
+    assert all(
+        later - earlier >= 0.05 - 1e-6
+        for earlier, later in zip(frame_times, frame_times[1:])
+    )
+    assert frame_times == pytest.approx(render_times[: len(frame_times)])
