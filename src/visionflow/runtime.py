@@ -9,6 +9,8 @@ from typing import Any
 
 from visionflow.contracts import ConfigError, Frame, InputConfig, ModelDecision, WorkflowConfig
 from visionflow.registry import ToolDescriptor, ToolRegistry
+from visionflow.tools.direction import direction_handler
+
 from visionflow.tools.motion import MotionAnalyzer
 from visionflow.tools.quality import analyze_quality
 
@@ -31,6 +33,14 @@ def create_registry() -> ToolRegistry:
             input_kinds=("video", "camera"),
         ),
         _motion_handler,
+    )
+    registry.register(
+        ToolDescriptor(
+            "direction",
+            description="Prüft sichtbare Bewegung gegen konfigurierte Spurvektoren.",
+            input_kinds=("video", "camera"),
+        ),
+        direction_handler,
     )
     return registry
 

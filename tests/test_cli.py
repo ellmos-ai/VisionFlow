@@ -131,7 +131,7 @@ def test_tools_cli_is_local_by_default_and_reports_real_tools(monkeypatch, tmp_p
 
     output = json.loads(capsys.readouterr().out)
     assert code == 0
-    assert {tool["name"] for tool in output["tools"]} == {"quality", "motion"}
+    assert {tool["name"] for tool in output["tools"]} == {"quality", "motion", "direction"}
     descriptions = {tool["name"]: tool["description"] for tool in output["tools"]}
     assert "Schärfe" in descriptions["quality"]
     assert "Bewegung" in descriptions["motion"]

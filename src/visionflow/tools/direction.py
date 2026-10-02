@@ -1,0 +1,534 @@
+"""Pixel-only traffic direction analysis using bounded OpenCV feature tracking."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Mapping
+from typing import Any
+
+import cv2
+import numpy as np
+
+from visionflow.contracts import Frame, MediaError
+from visionflow.media import _validate_image_array
+
+
+_DEFAULT_MIN_FRAMES = 3
+_DEFAULT_MIN_DISPLACEMENT = 4.0
+_DEFAULT_OPPOSITION_COSINE = -0.75
+_MAX_CORNERS = 240
+_MAX_TRACK_HISTORY = 12
+
+
+class DirectionAnalyzer:
+    """Measure coherent feature flow against caller-configured lane vectors."""
+
+    def __init__(self) -> None:
+        self._previous_gray: np.ndarray | None = None
+        self._previous_frame_id: str | None = None
+        self._previous_timestamp: float | None = None
+        self._active: list[dict[str, Any]] = []
+        self._next_track_number = 1
+
+    def reset(self) -> None:
+        """Forget temporal pixels and tracks before a new source or crop."""
+        self._previous_gray = None
+        self._previous_frame_id = None
+        self._previous_timestamp = None
+        self._active = []
+
+    def update(
+        self,
+        frame: Frame,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return current pixel-flow candidates and confirmed opposing tracks."""
+        if not isinstance(frame, Frame):
+            raise TypeError("direction analysis requires a Frame")
+        if not isinstance(params, dict):
+            raise ValueError("direction parameters must be a dictionary")
+        if not isinstance(frame.frame_id, str) or not frame.frame_id:
+            raise ValueError("frame_id must be a non-empty string")
+        if (
+            isinstance(frame.timestamp_seconds, bool)
+            or not isinstance(frame.timestamp_seconds, (int, float))
+            or not math.isfinite(frame.timestamp_seconds)
+            or frame.timestamp_seconds < 0
+        ):
+            raise ValueError("frame timestamp must be a finite non-negative number")
+
+        try:
+            width, height = _validate_image_array(frame.image, label="direction frame")
+        except MediaError as exc:
+            raise ValueError(str(exc)) from exc
+        try:
+            if frame.image.ndim == 2:
+                gray = frame.image.copy()
+            elif frame.image.shape[2] == 4:
+                gray = cv2.cvtColor(frame.image, cv2.COLOR_BGRA2GRAY)
+            else:
+                gray = cv2.cvtColor(frame.image, cv2.COLOR_BGR2GRAY)
+        except cv2.error as exc:
+            raise ValueError("cannot convert direction frame to grayscale") from exc
+
+        lanes, min_frames, min_displacement, opposition_cosine = _validate_params(
+            params, width=width, height=height
+        )
+        self._validate_timeline(frame)
+        if self._previous_gray is not None and self._previous_gray.shape != gray.shape:
+            raise ValueError("frame shape changed during direction analysis")
+
+        warmup = self._previous_gray is None
+        candidates: list[dict[str, Any]] = []
+        if not warmup:
+            assert self._previous_gray is not None
+            for lane in lanes:
+                candidates.extend(
+                    self._lane_candidates(
+                        self._previous_gray,
+                        gray,
+                        lane,
+                        min_displacement=min_displacement,
+                        opposition_cosine=opposition_cosine,
+                    )
+                )
+
+        self._active = self._advance_tracks(
+            candidates,
+            frame.frame_id,
+            min_frames=min_frames,
+        )
+        self._previous_gray = gray
+        self._previous_frame_id = frame.frame_id
+        self._previous_timestamp = float(frame.timestamp_seconds)
+
+        tracks = [
+            {
+                "track_id": track["track_id"],
+                "lane_id": track["lane_id"],
+                "region": list(track["region"]),
+                "dx_px": float(track["dx_px"]),
+                "dy_px": float(track["dy_px"]),
+                "opposition": bool(track["opposition"]),
+                "frame_ids": list(track["frame_ids"]),
+            }
+            for track in self._active
+        ]
+        opposition_count = sum(
+            track["opposition"] and len(track["frame_ids"]) >= min_frames
+            for track in self._active
+        )
+        return {
+            "opposition_count": int(opposition_count),
+            "warmup": bool(warmup),
+            "tracks": tracks,
+            "coordinate_system": "crop_pixels",
+        }
+
+    def _validate_timeline(self, frame: Frame) -> None:
+        if self._previous_frame_id is None:
+            return
+        if frame.timestamp_seconds <= self._previous_timestamp:
+            raise ValueError("frame timestamps must advance monotonically")
+        previous_index = _numeric_frame_suffix(self._previous_frame_id)
+        current_index = _numeric_frame_suffix(frame.frame_id)
+        if previous_index is not None and current_index is not None:
+            if current_index <= previous_index:
+                raise ValueError("frame IDs must advance monotonically")
+        elif frame.frame_id == self._previous_frame_id:
+            raise ValueError("frame IDs must advance monotonically")
+
+    def _lane_candidates(
+        self,
+        previous_gray: np.ndarray,
+        current_gray: np.ndarray,
+        lane: dict[str, Any],
+        *,
+        min_displacement: float,
+        opposition_cosine: float,
+    ) -> list[dict[str, Any]]:
+        x, y, width, height = lane["region"]
+        previous = np.ascontiguousarray(previous_gray[y : y + height, x : x + width])
+        current = np.ascontiguousarray(current_gray[y : y + height, x : x + width])
+        try:
+            corners = cv2.goodFeaturesToTrack(
+                previous,
+                maxCorners=_MAX_CORNERS,
+                qualityLevel=0.01,
+                minDistance=4,
+                blockSize=5,
+                useHarrisDetector=False,
+            )
+            if corners is None or len(corners) < 2:
+                return []
+            next_points, forward_status, _ = cv2.calcOpticalFlowPyrLK(
+                previous,
+                current,
+                corners,
+                None,
+                winSize=(21, 21),
+                maxLevel=3,
+                criteria=(
+                    cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
+                    30,
+                    0.01,
+                ),
+            )
+            if next_points is None or forward_status is None:
+                return []
+            back_points, backward_status, _ = cv2.calcOpticalFlowPyrLK(
+                current,
+                previous,
+                next_points,
+                None,
+                winSize=(21, 21),
+                maxLevel=3,
+                criteria=(
+                    cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
+                    30,
+                    0.01,
+                ),
+            )
+            if back_points is None or backward_status is None:
+                return []
+        except cv2.error as exc:
+            raise ValueError("OpenCV could not track direction features") from exc
+
+        start = corners.reshape(-1, 2)
+        finish = next_points.reshape(-1, 2)
+        returned = back_points.reshape(-1, 2)
+        forward_ok = forward_status.reshape(-1).astype(bool)
+        backward_ok = backward_status.reshape(-1).astype(bool)
+        forward_backward_error = np.linalg.norm(start - returned, axis=1)
+        displacement = finish - start
+        magnitude = np.linalg.norm(displacement, axis=1)
+        valid = (
+            forward_ok
+            & backward_ok
+            & (forward_backward_error <= 1.5)
+            & (magnitude >= 1.25)
+            & np.isfinite(displacement).all(axis=1)
+        )
+        if not bool(valid.any()):
+            return []
+
+        starts = start[valid]
+        finishes = finish[valid]
+        vectors = displacement[valid]
+        clusters = _cluster_features(finishes, vectors)
+        expected = np.asarray(lane["expected"], dtype=np.float64)
+        expected /= np.linalg.norm(expected)
+        output: list[dict[str, Any]] = []
+        for members in clusters:
+            if len(members) < 2:
+                continue
+            points = finishes[members]
+            flow = np.median(vectors[members], axis=0)
+            distance = float(np.linalg.norm(flow))
+            if not math.isfinite(distance) or distance < min_displacement:
+                continue
+            cosine = float(np.dot(flow / distance, expected))
+            opposition = cosine <= opposition_cosine
+            left = max(0, int(math.floor(float(points[:, 0].min()))) + x)
+            top = max(0, int(math.floor(float(points[:, 1].min()))) + y)
+            right = min(x + width, int(math.ceil(float(points[:, 0].max()))) + x + 1)
+            bottom = min(y + height, int(math.ceil(float(points[:, 1].max()))) + y + 1)
+            if right <= left:
+                right = min(x + width, left + 1)
+            if bottom <= top:
+                bottom = min(y + height, top + 1)
+            output.append(
+                {
+                    "lane_id": lane["id"],
+                    "center": (
+                        float(np.median(points[:, 0])) + x,
+                        float(np.median(points[:, 1])) + y,
+                    ),
+                    "region": (left, top, right - left, bottom - top),
+                    "dx_px": float(flow[0]),
+                    "dy_px": float(flow[1]),
+                    "opposition": opposition,
+                    "motion_norm": distance,
+                }
+            )
+        return output
+
+    def _advance_tracks(
+        self,
+        candidates: list[dict[str, Any]],
+        frame_id: str,
+        *,
+        min_frames: int,
+    ) -> list[dict[str, Any]]:
+        unmatched = set(range(len(self._active)))
+        next_active: list[dict[str, Any]] = []
+        for candidate in candidates:
+            cx, cy = candidate["center"]
+            possible: list[tuple[float, int]] = []
+            for index in unmatched:
+                old = self._active[index]
+                if (
+                    old["lane_id"] != candidate["lane_id"]
+                    or old["opposition"] != candidate["opposition"]
+                ):
+                    continue
+                ox, oy = old["center"]
+                distance = math.hypot(cx - ox, cy - oy)
+                threshold = max(38.0, candidate["motion_norm"] * 2.8)
+                if distance <= threshold:
+                    possible.append((distance, index))
+            if possible:
+                _, matched_index = min(possible)
+                unmatched.remove(matched_index)
+                previous = self._active[matched_index]
+                frame_ids = list(previous["frame_ids"])
+                if not frame_ids or frame_ids[-1] != frame_id:
+                    frame_ids.append(frame_id)
+                if len(frame_ids) > max(min_frames, _MAX_TRACK_HISTORY):
+                    frame_ids = frame_ids[-max(min_frames, _MAX_TRACK_HISTORY) :]
+                next_active.append(
+                    {
+                        **candidate,
+                        "track_id": previous["track_id"],
+                        "frame_ids": frame_ids,
+                    }
+                )
+            else:
+                track_id = f"direction-track-{self._next_track_number}"
+                self._next_track_number += 1
+                previous_frame_id = self._previous_frame_id
+                frame_ids = (
+                    [previous_frame_id, frame_id]
+                    if previous_frame_id is not None
+                    else [frame_id]
+                )
+                next_active.append(
+                    {
+                        **candidate,
+                        "track_id": track_id,
+                        "frame_ids": frame_ids,
+                    }
+                )
+        return next_active
+
+
+def direction_handler(
+    frame: Frame,
+    params: dict[str, Any],
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Analyze one frame using state isolated to the owning workflow run."""
+    if not isinstance(frame, Frame):
+        raise TypeError("direction handler requires a Frame")
+    if not isinstance(params, dict):
+        raise ValueError("direction parameters must be a dictionary")
+    if not isinstance(context, dict):
+        raise TypeError("tool context must be a dictionary")
+    source_id = context.get("source_id")
+    state = context.get("state")
+    if not isinstance(source_id, str) or not source_id:
+        raise ValueError("direction analysis requires context['source_id']")
+    if not isinstance(state, dict):
+        raise ValueError("direction analysis requires per-run context['state']")
+    if "initial_frames" in params:
+        initial_frames = params["initial_frames"]
+        if (
+            isinstance(initial_frames, bool)
+            or not isinstance(initial_frames, int)
+            or initial_frames <= 0
+        ):
+            raise ValueError("initial_frames must be a positive integer")
+
+    roi = context.get("region")
+    if roi is not None:
+        roi = _validate_roi(roi, frame.image)
+    roi_key = tuple(roi) if roi is not None else None
+    analysis_params = {key: value for key, value in params.items() if key != "initial_frames"}
+    if roi is not None:
+        analysis_params = _map_lanes_to_roi(analysis_params, roi)
+
+    analyzer = state.get("direction_analyzer")
+    if (
+        not isinstance(analyzer, DirectionAnalyzer)
+        or state.get("direction_source_id") != source_id
+        or state.get("direction_roi") != roi_key
+    ):
+        analyzer = DirectionAnalyzer()
+        state["direction_analyzer"] = analyzer
+        state["direction_source_id"] = source_id
+        state["direction_roi"] = roi_key
+
+    if roi is not None and not analysis_params.get("lanes"):
+        analyzer.reset()
+        return {
+            "opposition_count": 0,
+            "warmup": True,
+            "tracks": [],
+            "coordinate_system": "crop_pixels",
+        }
+    return analyzer.update(frame, analysis_params)
+
+
+def _validate_params(
+    params: dict[str, Any],
+    *,
+    width: int,
+    height: int,
+) -> tuple[list[dict[str, Any]], int, float, float]:
+    allowed = {
+        "lanes",
+        "min_frames",
+        "min_displacement_px",
+        "opposition_cosine",
+    }
+    unknown = set(params) - allowed
+    if unknown:
+        raise ValueError(f"unknown direction parameters: {', '.join(sorted(unknown))}")
+    raw_lanes = params.get("lanes")
+    if not isinstance(raw_lanes, list) or not raw_lanes:
+        raise ValueError("lanes must be a non-empty list")
+    min_frames = params.get("min_frames", _DEFAULT_MIN_FRAMES)
+    if isinstance(min_frames, bool) or not isinstance(min_frames, int) or min_frames < 2:
+        raise ValueError("min_frames must be an integer of at least 2")
+    min_displacement = _finite_number(
+        params.get("min_displacement_px", _DEFAULT_MIN_DISPLACEMENT),
+        "min_displacement_px",
+    )
+    if min_displacement <= 0:
+        raise ValueError("min_displacement_px must be positive")
+    opposition_cosine = _finite_number(
+        params.get("opposition_cosine", _DEFAULT_OPPOSITION_COSINE),
+        "opposition_cosine",
+    )
+    if not -1.0 <= opposition_cosine <= 1.0:
+        raise ValueError("opposition_cosine must be between -1 and 1")
+
+    lanes: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for raw_lane in raw_lanes:
+        if not isinstance(raw_lane, Mapping):
+            raise ValueError("each lane must be a mapping")
+        lane_id = raw_lane.get("id")
+        if not isinstance(lane_id, str) or not lane_id or lane_id in seen_ids:
+            raise ValueError("lane IDs must be unique non-empty strings")
+        region = _integer_vector(raw_lane.get("region"), 4, "lane region")
+        x, y, lane_width, lane_height = region
+        if (
+            x < 0
+            or y < 0
+            or lane_width <= 0
+            or lane_height <= 0
+            or x + lane_width > width
+            or y + lane_height > height
+        ):
+            raise ValueError("lane region must be a positive box inside the frame")
+        expected = _numeric_vector(raw_lane.get("expected"), 2, "lane expected vector")
+        if math.hypot(*expected) <= 0:
+            raise ValueError("lane expected vector must not be zero")
+        seen_ids.add(lane_id)
+        lanes.append(
+            {
+                "id": lane_id,
+                "region": region,
+                "expected": expected,
+            }
+        )
+    return lanes, min_frames, min_displacement, opposition_cosine
+
+
+def _finite_number(value: Any, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite number")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{name} must be a finite number")
+    return number
+
+
+def _numeric_vector(value: Any, length: int, name: str) -> tuple[float, ...]:
+    if not isinstance(value, (list, tuple)) or len(value) != length:
+        raise ValueError(f"{name} must contain {length} numbers")
+    return tuple(_finite_number(item, name) for item in value)
+
+
+def _integer_vector(value: Any, length: int, name: str) -> tuple[int, ...]:
+    if not isinstance(value, (list, tuple)) or len(value) != length:
+        raise ValueError(f"{name} must contain {length} integers")
+    values: list[int] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int):
+            raise ValueError(f"{name} must contain {length} integers")
+        values.append(item)
+    return tuple(values)
+
+
+def _numeric_frame_suffix(frame_id: str) -> int | None:
+    suffix = frame_id.rsplit(":", 1)[-1]
+    return int(suffix) if suffix.isdecimal() else None
+
+
+def _cluster_features(
+    points: np.ndarray,
+    vectors: np.ndarray,
+) -> list[list[int]]:
+    """Group nearby LK features whose local flows move together."""
+    remaining = set(range(len(points)))
+    clusters: list[list[int]] = []
+    while remaining:
+        seed = remaining.pop()
+        cluster = [seed]
+        frontier = [seed]
+        while frontier:
+            current = frontier.pop()
+            neighbors = [
+                index
+                for index in remaining
+                if float(np.linalg.norm(points[index] - points[current])) <= 27.0
+                and float(np.linalg.norm(vectors[index] - vectors[current])) <= 8.0
+            ]
+            for index in neighbors:
+                remaining.remove(index)
+                cluster.append(index)
+                frontier.append(index)
+        clusters.append(cluster)
+    return clusters
+
+
+def _validate_roi(roi: Any, image: np.ndarray) -> tuple[int, int, int, int]:
+    values = _integer_vector(roi, 4, "context region")
+    x, y, width, height = values
+    if x < 0 or y < 0 or width <= 0 or height <= 0:
+        raise ValueError("context region must be a positive source-pixel box")
+    if image.shape[1] != width or image.shape[0] != height:
+        raise ValueError("cropped frame dimensions must match context region")
+    return values
+
+
+def _map_lanes_to_roi(
+    params: dict[str, Any],
+    roi: tuple[int, int, int, int],
+) -> dict[str, Any]:
+    if "lanes" not in params or not isinstance(params["lanes"], list):
+        return params
+    roi_x, roi_y, roi_width, roi_height = roi
+    roi_right = roi_x + roi_width
+    roi_bottom = roi_y + roi_height
+    mapped_lanes = []
+    for lane in params["lanes"]:
+        if not isinstance(lane, Mapping) or "region" not in lane:
+            mapped_lanes.append(lane)
+            continue
+        x, y, width, height = _integer_vector(lane["region"], 4, "lane region")
+        left = max(x, roi_x)
+        top = max(y, roi_y)
+        right = min(x + width, roi_right)
+        bottom = min(y + height, roi_bottom)
+        if right <= left or bottom <= top:
+            continue
+        mapped = dict(lane)
+        mapped["region"] = [left - roi_x, top - roi_y, right - left, bottom - top]
+        mapped_lanes.append(mapped)
+    return {**params, "lanes": mapped_lanes}
+
+
+__all__ = ["DirectionAnalyzer", "direction_handler"]

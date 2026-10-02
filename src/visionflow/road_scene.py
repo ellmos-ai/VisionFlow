@@ -21,8 +21,6 @@ _CAR_COLORS = (
     (148, 92, 61),
     (116, 110, 177),
 )
-_BIRD_COLORS = ((32, 35, 38), (48, 47, 43), (58, 59, 61))
-_LEAF_COLORS = ((49, 113, 65), (42, 91, 48), (54, 112, 116))
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,12 +63,7 @@ class RoadWorld:
         if event not in _EVENT_NAMES:
             raise ValueError(f"unknown road event: {event!r}")
 
-        if event == "wrong_way":
-            color = self._rng.choice(_CAR_COLORS)
-        elif event == "bird":
-            color = self._rng.choice(_BIRD_COLORS)
-        else:
-            color = self._rng.choice(_LEAF_COLORS)
+        color = self._rng.choice(_CAR_COLORS)
         lane = (2 if self._seed % 2 else 0) if event == "wrong_way" else None
         self._events.append(
             _SceneEvent(
@@ -252,26 +245,26 @@ class RoadWorld:
                 lane = 2 if event.lane is None else event.lane
                 if lane < 2:
                     direction = 1
-                    y = self.height * 0.24 + elapsed * 82.0
+                    y = self.height * 0.43 + elapsed * 82.0
                 else:
                     direction = -1
-                    y = self.height * 0.88 - elapsed * 82.0
+                    y = self.height * 0.73 - elapsed * 82.0
                 if -self.height * 0.15 <= y <= self.height * 1.1:
                     depth = self._depth(y)
                     x = self._lane_center(lane, y)
                     self._draw_car(image, x, y, depth, event.color, direction)
             elif event.kind == "bird":
-                y = self.height * 0.79 - elapsed * 105.0
+                y = self.height * 0.65 - elapsed * 105.0
                 if -self.height * 0.1 <= y <= self.height * 1.1:
                     depth = self._depth(y)
                     x = self._lane_center(3, y)
                     self._draw_bird(image, x, y, depth, elapsed, event.color)
             else:
-                y = self._horizon + self.height * 0.065 + elapsed * 90.0
+                y = self._horizon + self.height * 0.025 + elapsed * 90.0
                 if -self.height * 0.1 <= y <= self.height * 1.1:
                     depth = self._depth(y)
-                    wind = math.sin(elapsed * 2.7) * self.width * 0.025
-                    x = self._lane_center(0, y) + wind
+                    wind = math.sin(elapsed * 2.7) * self.width * 0.01
+                    x = self._lane_center(1, y) + wind
                     self._draw_leaf(image, x, y, depth, elapsed, event.color)
 
     def _draw_car(
@@ -399,13 +392,13 @@ class RoadWorld:
         color: tuple[int, int, int],
     ) -> None:
         scale = min(self.width / 960.0, self.height / 540.0)
-        factor = 0.45 + 0.75 * depth
+        factor = 0.7 + 0.9 * depth
         cx = round(center_x)
         cy = round(center_y)
-        body_x = max(3, round(6 * scale * factor))
-        body_y = max(4, round(10 * scale * factor))
-        wing_span = max(body_x + 3, round(15 * scale * factor))
-        wing_lift = round(math.sin(elapsed * 11.0) * body_y * 0.8)
+        body_x = max(4, round(8 * scale * factor))
+        body_y = max(5, round(12 * scale * factor))
+        wing_span = max(body_x + 4, round(19 * scale * factor))
+        wing_lift = round(math.sin(elapsed * 11.0) * body_y * 0.35)
 
         cv2.ellipse(
             image,
@@ -467,12 +460,12 @@ class RoadWorld:
         color: tuple[int, int, int],
     ) -> None:
         scale = min(self.width / 960.0, self.height / 540.0)
-        factor = 0.5 + 0.65 * depth
+        factor = 0.8 + 0.8 * depth
         cx = round(center_x)
         cy = round(center_y)
-        axis_x = max(4, round(10 * scale * factor))
-        axis_y = max(3, round(7 * scale * factor))
-        angle = math.sin(elapsed * 2.7) * 42.0
+        axis_x = max(6, round(12 * scale * factor))
+        axis_y = max(5, round(9 * scale * factor))
+        angle = math.sin(elapsed * 2.7) * 18.0
 
         cv2.ellipse(
             image,

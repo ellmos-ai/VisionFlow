@@ -40,3 +40,13 @@ def test_unknown_tool_name_is_rejected_by_resolve():
 def test_non_callable_handler_is_rejected():
     with pytest.raises(TypeError, match="callable"):
         ToolRegistry().register(ToolDescriptor("broken"), object())
+
+
+def test_default_runtime_registry_exposes_direction_for_video_and_camera():
+    from visionflow.runtime import create_registry
+
+    registry = create_registry()
+    descriptor = registry.descriptor("direction")
+
+    assert descriptor.input_kinds == ("video", "camera")
+    assert callable(registry.resolve("direction"))

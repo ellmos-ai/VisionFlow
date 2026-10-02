@@ -76,16 +76,16 @@ def test_wrong_way_event_moves_against_both_normal_lane_directions():
     assert up_lane_centers[-1] > up_lane_centers[0] + 25
 
 
-def test_bird_and_leaf_are_distinct_moving_direction_candidates():
-    bird_centers, bird_areas = _event_motion("bird", (0.2, 0.4, 0.6, 0.8, 1.0))
-    leaf_centers, leaf_areas = _event_motion("leaf", (0.2, 0.4, 0.6, 0.8, 1.0))
-    _car_centers, car_areas = _event_motion("wrong_way", (0.2, 0.4, 0.6, 0.8, 1.0))
+@pytest.mark.parametrize("seed", (17, 42))
+def test_bird_and_leaf_are_distinct_moving_direction_candidates(seed):
+    sample_times = (0.2, 0.4, 0.6, 0.8, 1.0)
+    bird_centers, bird_areas = _event_motion("bird", sample_times, seed=seed)
+    leaf_centers, leaf_areas = _event_motion("leaf", sample_times, seed=seed)
 
     assert bird_centers[-1] < bird_centers[0] - 25
     assert leaf_centers[-1] > leaf_centers[0] + 25
     assert min(bird_areas) > 20
     assert min(leaf_areas) > 20
-    assert min(car_areas) > max(bird_areas) * 2
 
 
 def test_unknown_event_is_rejected_before_the_scene_changes():

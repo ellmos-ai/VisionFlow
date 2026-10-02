@@ -14,7 +14,7 @@ def test_runtime_registry_exposes_real_quality_and_motion_tools():
     registry = create_registry()
     descriptors = {descriptor.name: descriptor for descriptor in registry.descriptors}
 
-    assert set(descriptors) == {"quality", "motion"}
+    assert set(descriptors) == {"quality", "motion", "direction"}
     image = np.zeros((12, 12), dtype=np.uint8)
     quality = registry.resolve("quality")(
         Frame("image-1", image), {}, {"run_id": "quality-run", "tool": "quality", "state": {}}
