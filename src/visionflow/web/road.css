@@ -1,0 +1,290 @@
+.workspace-shell {
+  width: min(1500px, 100%);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 1rem clamp(.75rem, 3vw, 2rem) 1.5rem;
+  flex: 1;
+}
+
+.workspace-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  margin: 0 0 1rem;
+}
+
+.workspace-tabs .button {
+  min-width: 8rem;
+  min-height: 44px;
+}
+
+.workspace-tabs .button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: #bae6fd;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.workspace-analysis.layout {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.road-workspace,
+.road-camera-root,
+.road-camera {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.road-camera {
+  display: grid;
+  gap: 1rem;
+}
+
+.road-camera__heading {
+  min-width: 0;
+}
+
+.road-camera__heading h2,
+.road-camera__heading p {
+  margin: 0;
+}
+
+.road-camera__heading h2 {
+  font-size: 1.25rem;
+}
+
+.road-camera__intro {
+  margin-top: .3rem !important;
+  color: var(--muted);
+  font-size: .88rem;
+}
+
+.road-camera__toolbar,
+.road-camera__run-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .6rem;
+  min-width: 0;
+}
+
+.road-camera__toolbar .button,
+.road-camera__run-toolbar .button,
+.road-camera__events .button,
+.road-camera__clip-button {
+  min-height: 44px;
+}
+
+.road-camera__status,
+.road-camera__source,
+.road-camera__run-summary,
+.road-camera__recording-summary,
+.road-camera__frame-meta,
+.road-camera__player-caption {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.road-camera__status,
+.road-camera__source,
+.road-camera__run-summary,
+.road-camera__recording-summary {
+  color: var(--muted);
+}
+
+.road-camera__status {
+  min-height: 1.5rem;
+  color: var(--green);
+}
+
+.road-camera__status--error {
+  color: var(--red);
+}
+
+.road-camera__run,
+.road-camera__live,
+.road-camera__events,
+.road-camera__recording,
+.road-camera__player-panel {
+  min-width: 0;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 22px #02061733;
+}
+
+.road-camera__run h3,
+.road-camera__live h3,
+.road-camera__events h3,
+.road-camera__recording h3,
+.road-camera__player-panel h3 {
+  margin: 0 0 .7rem;
+  font-size: .98rem;
+}
+
+.road-camera__run-toolbar {
+  justify-content: space-between;
+  margin-bottom: .6rem;
+}
+
+.road-camera__findings {
+  display: grid;
+  gap: .55rem;
+  margin-top: .75rem;
+}
+
+.road-camera__finding {
+  min-width: 0;
+  margin: 0;
+  padding: .7rem;
+  overflow-wrap: anywhere;
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: .8rem;
+}
+
+.road-camera__trace {
+  max-height: 18rem;
+  overflow: auto;
+  margin: .6rem 0 0;
+  padding: .75rem;
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: #dbeafe;
+  font: .75rem/1.5 ui-monospace, "Cascadia Code", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.road-camera__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.road-camera__live {
+  grid-row: span 2;
+}
+
+.road-camera__frame {
+  display: block;
+  width: 100%;
+  max-height: min(60vh, 620px);
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #050a13;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.road-camera__frame-meta {
+  margin-top: .55rem;
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+.road-camera__secondary {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.road-camera__events {
+  display: grid;
+  gap: .6rem;
+  align-content: start;
+}
+
+.road-camera__events label {
+  display: block;
+  margin: 0;
+}
+
+.road-camera__event-select {
+  min-height: 44px;
+}
+
+.road-camera__hint,
+.road-camera__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: .8rem;
+  overflow-wrap: anywhere;
+}
+
+.road-camera__clip-list {
+  display: grid;
+  gap: .5rem;
+  margin-top: .6rem;
+}
+
+.road-camera__clip-button {
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.road-camera__clip-button[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+
+.road-camera__player {
+  display: block;
+  width: 100%;
+  max-height: min(60vh, 620px);
+  aspect-ratio: 16 / 9;
+  background: #050a13;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.road-camera__player-caption {
+  margin-top: .55rem;
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+@media (max-width: 780px) {
+  .road-camera__content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .road-camera__live {
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .workspace-shell {
+    padding-inline: .65rem;
+  }
+
+  .workspace-tabs .button {
+    flex: 1 1 8rem;
+  }
+
+  .road-camera__toolbar .button,
+  .road-camera__run-toolbar .button,
+  .road-camera__events .button {
+    flex: 1 1 100%;
+  }
+
+  .road-camera__live,
+  .road-camera__events,
+  .road-camera__recording,
+  .road-camera__player-panel,
+  .road-camera__run {
+    padding: .75rem;
+  }
+}
+
+.road-camera__run-summary--error {
+  color: var(--red);
+}

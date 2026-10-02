@@ -52,6 +52,9 @@ class _ApiState:
         evidence_root: Path | str | None,
         registry: Any,
         approval_store: Any,
+        road_sessions: Any = None,
+        road_cases: Any = None,
+        road_unavailable_reason: str | None = None,
     ) -> None:
         self.controller = controller
         self.root = Path(data_dir).expanduser().resolve()
@@ -65,6 +68,12 @@ class _ApiState:
 
             self.registry = create_registry()
         self.approval_store = approval_store or getattr(controller, "approval_store", None)
+        self.road_sessions = road_sessions
+        self.road_cases = road_cases
+        allowed_reasons = {None, "ffmpeg_required", "h264_encoder_required"}
+        if road_unavailable_reason not in allowed_reasons:
+            raise ValueError("unsupported road capability reason")
+        self.road_unavailable_reason = road_unavailable_reason or "ffmpeg_required"
         self.sessions: dict[str, tuple[str, float]] = {}
         self.run_sessions: dict[str, str] = {}
         self.lock = threading.RLock()
@@ -76,6 +85,14 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    def server_close(self) -> None:
+        try:
+            super().server_close()
+        finally:
+            for service in (self.state.road_cases, self.state.road_sessions):
+                if service is not None:
+                    service.close()
+
     def __init__(
         self,
         server_address: tuple[str, int],
@@ -85,6 +102,9 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
         evidence_root: Path | str | None = None,
         registry: Any = None,
         approval_store: Any = None,
+        road_sessions: Any = None,
+        road_cases: Any = None,
+        road_unavailable_reason: str | None = None,
     ) -> None:
         host = server_address[0]
         if host not in _LOOPBACK_HOSTS:
@@ -95,6 +115,9 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
             evidence_root=evidence_root,
             registry=registry,
             approval_store=approval_store,
+            road_sessions=road_sessions,
+            road_cases=road_cases,
+            road_unavailable_reason=road_unavailable_reason,
         )
         super().__init__(server_address, _VisionFlowHandler)
 
@@ -108,6 +131,9 @@ def create_server(
     evidence_root: Path | str | None = None,
     registry: Any = None,
     approval_store: Any = None,
+    road_sessions: Any = None,
+    road_cases: Any = None,
+    road_unavailable_reason: str | None = None,
 ) -> VisionFlowHTTPServer:
     """Create a local server. It is loopback-only and does not start automatically."""
     return VisionFlowHTTPServer(
@@ -117,6 +143,9 @@ def create_server(
         evidence_root=evidence_root,
         registry=registry,
         approval_store=approval_store,
+        road_sessions=road_sessions,
+        road_cases=road_cases,
+        road_unavailable_reason=road_unavailable_reason,
     )
 
 
@@ -343,6 +372,164 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             return "", []
         return (parts[0] if parts else ""), parts
 
+    def _road_service(self):
+        service = self.server.state.road_sessions
+        if service is None:
+            raise _ApiFault(404, "road_unavailable", "Die lokale Kamerademo ist nicht verfügbar.")
+        return service
+
+    def _authorize_road_source(self, session_id: str, source_id: str) -> Any:
+        service = self._road_service()
+        owner = service.source_owner(source_id)
+        if owner is None:
+            raise _ApiFault(404, "road_source_not_found", "Die Kameraquelle wurde nicht gefunden.")
+        if not hmac.compare_digest(owner, session_id):
+            raise _ApiFault(403, "session_mismatch", "Diese Kameraquelle gehört zu einer anderen lokalen Sitzung.")
+        try:
+            return service.get(session_id, source_id)
+        except KeyError as exc:
+            raise _ApiFault(404, "road_source_not_found", "Die Kameraquelle wurde nicht gefunden.") from exc
+
+    def _authorize_workflow_source(self, session_id: str, workflow: Any) -> str | None:
+        from visionflow.road_api import ROAD_SOURCE_PREFIX
+
+        source_id = getattr(getattr(workflow, "input", None), "source", None)
+        kind = getattr(getattr(workflow, "input", None), "kind", None)
+        if kind != "camera" or not isinstance(source_id, str) or not source_id.startswith(ROAD_SOURCE_PREFIX):
+            return None
+        self._authorize_road_source(session_id, source_id)
+        return source_id
+
+    def _resume_source(self, body: Any) -> str | None:
+        if not isinstance(body, dict):
+            return None
+        source_id = body.get("source")
+        nested = body.get("input")
+        if not isinstance(source_id, str) and isinstance(nested, dict):
+            source_id = nested.get("source")
+        if not isinstance(source_id, str):
+            return None
+        from visionflow.road_api import ROAD_SOURCE_PREFIX
+        return source_id if source_id.startswith(ROAD_SOURCE_PREFIX) else None
+
+    def _cancel_run(self, session_id: str, run_id: str) -> Any:
+        service = self.server.state.road_sessions
+        if service is not None and service.owner_source_for_run(run_id) is not None:
+            owner_source = service.owner_source_for_run(run_id)
+            if owner_source is not None and hmac.compare_digest(owner_source[0], session_id):
+                service.cancel_run(session_id, run_id)
+                return self.server.state.controller.status(run_id)
+        return self.server.state.controller.cancel(run_id)
+
+    def _handle_road_get(self, path: str) -> bool:
+        if not path.startswith("/road/"):
+            return False
+        try:
+            from visionflow.road_api import dispatch_road_get
+
+            session_id = self._require_session(require_csrf=False)
+            service = self.server.state.road_sessions
+            if path.split("?", 1)[0] == "/road/capabilities" and service is None:
+                reason = self.server.state.road_unavailable_reason
+                messages = {
+                    "ffmpeg_required": "Für die Straßenkamera-Aufzeichnung muss FFmpeg mit libx264 verfügbar sein.",
+                    "h264_encoder_required": "Die Straßenkamera-Aufzeichnung benötigt den FFmpeg-Encoder libx264.",
+                }
+                self._send_json(200, {
+                    "available": False,
+                    "encoder_available": False,
+                    "reason_code": reason,
+                    "message": messages.get(reason, messages["ffmpeg_required"]),
+                    "native_enabled": False,
+                    "modes": [],
+                    "fixture_profiles": [],
+                })
+                return True
+            response = dispatch_road_get(
+                self._road_service(),
+                session_id,
+                path,
+                cases=self.server.state.road_cases,
+            )
+            if response is None:
+                raise _ApiFault(404, "not_found", "Die angeforderte lokale Ressource wurde nicht gefunden.")
+            if isinstance(response.payload, bytes):
+                self._send_bytes(
+                    response.status,
+                    response.payload,
+                    response.content_type,
+                    extra_headers=response.headers,
+                )
+            else:
+                self._send_json(response.status, response.payload, extra_headers=response.headers)
+        except _ApiFault as fault:
+            self._send_fault(fault)
+        except Exception as exc:
+            self._send_road_error(exc)
+        return True
+    def _handle_road_post(self, path: str, body: Any, session_id: str) -> bool:
+        if not path.startswith("/road/"):
+            return False
+        try:
+            from visionflow.road_api import dispatch_road_post
+
+            response = dispatch_road_post(
+                self._road_service(),
+                session_id,
+                path,
+                body,
+                cases=self.server.state.road_cases,
+            )
+            if response is None:
+                raise _ApiFault(404, "not_found", "Die angeforderte lokale Ressource wurde nicht gefunden.")
+            if path.split("?", 1)[0] == "/road/cases":
+                case = response.payload.get("case") if isinstance(response.payload, dict) else None
+                run_id = case.get("run_id") if isinstance(case, dict) else None
+                if type(run_id) is not str or not run_id:
+                    raise _ApiFault(500, "run_start_failed", "Der Fall konnte keinem Lauf zugeordnet werden.")
+                with self.server.state.lock:
+                    existing_owner = self.server.state.run_sessions.get(run_id)
+                    if existing_owner is None:
+                        self.server.state.run_sessions[run_id] = session_id
+                if existing_owner is not None:
+                    try:
+                        case_service = self.server.state.road_cases
+                        if case_service is not None and isinstance(case, dict):
+                            case_service.cancel(session_id, case["case_id"])
+                    except Exception:
+                        pass
+                    raise _ApiFault(409, "run_id_conflict", "Der Lauf ist bereits einer Sitzung zugeordnet.")
+            self._send_json(response.status, response.payload, extra_headers=response.headers)
+        except _ApiFault as fault:
+            self._send_fault(fault)
+        except Exception as exc:
+            self._send_road_error(exc)
+        return True
+
+    def _send_road_error(self, exc: Exception) -> None:
+        from visionflow.decision_policy import DecisionError
+        from visionflow.recording import RecordingError
+        from visionflow.road_api import RoadSessionError
+        from visionflow.road_cases import RoadCaseError
+
+        if isinstance(exc, (RoadSessionError, RoadCaseError)):
+            self._send_error(exc.status, exc.code, str(exc))
+        elif isinstance(exc, DecisionError):
+            status = 404 if exc.code == "case_not_found" else 409
+            message = (
+                "Der Fall wurde nicht gefunden."
+                if status == 404
+                else "Die Fallentscheidung ist nicht mehr aktuell oder kann nicht übernommen werden."
+            )
+            self._send_error(status, exc.code, message)
+        elif isinstance(exc, RecordingError):
+            status = 403 if exc.code == "owner_mismatch" else 404 if exc.code in {"source_not_found", "clip_not_found"} else 409
+            self._send_error(status, exc.code, str(exc))
+        elif isinstance(exc, KeyError):
+            self._send_error(404, "road_source_not_found", "Die Kameraquelle wurde nicht gefunden.")
+        else:
+            self._send_error(500, "road_request_failed", "Die Kamerademo konnte die Anfrage nicht ausführen.")
+
     def do_GET(self) -> None:
         try:
             self._check_request()
@@ -369,12 +556,18 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                     },
                 )
                 return
+            if self._handle_road_get(path):
+                return
+
 
             if path == "/tools":
                 self._send_json(200, {"tools": self.server.state.registry.descriptors})
                 return
 
-            if path in {"/", "/index.html", "/app.js", "/style.css"}:
+            if path in {
+                "/", "/index.html", "/app.js", "/style.css", "/road-camera.js",
+                "/road-model.js", "/road-workplace.js", "/road.css",
+            }:
                 self._serve_web(path)
                 return
 
@@ -414,6 +607,10 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             "/index.html": "index.html",
             "/app.js": "app.js",
             "/style.css": "style.css",
+            "/road-camera.js": "road-camera.js",
+            "/road-model.js": "road-model.js",
+            "/road-workplace.js": "road-workplace.js",
+            "/road.css": "road.css",
         }[path]
         target = Path(__file__).resolve().parent / "web" / filename
         try:
@@ -427,7 +624,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         if filename == "index.html":
             headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
-                "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+                "media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
             )
         self._send_bytes(200, payload, content_type, extra_headers=headers)
 
@@ -477,12 +674,15 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                 self._upload_media()
                 return
             body = self._read_json(optional=path.endswith("/cancel"))
+            if self._handle_road_post(path, body, session_id):
+                return
             if path == "/validate":
                 workflow = self._validate_workflow(body)
                 self._send_json(200, {"valid": True, "name": workflow.name})
                 return
             if path == "/runs":
                 workflow = self._validate_workflow(body)
+                road_source_id = self._authorize_workflow_source(session_id, workflow)
                 result = self.server.state.controller.start(workflow)
                 run_id = getattr(result, "run_id", None)
                 if not isinstance(run_id, str) or not run_id:
@@ -491,6 +691,20 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                     if run_id in self.server.state.run_sessions:
                         raise _ApiFault(409, "run_id_conflict", "The controller returned a duplicate run ID.")
                     self.server.state.run_sessions[run_id] = session_id
+                if road_source_id is not None:
+                    try:
+                        self._road_service().bind_run(session_id, road_source_id, run_id)
+                    except Exception as exc:
+                        try:
+                            self.server.state.controller.cancel(run_id)
+                        except Exception:
+                            pass
+                        with self.server.state.lock:
+                            self.server.state.run_sessions.pop(run_id, None)
+                        from visionflow.road_api import RoadSessionError
+                        if isinstance(exc, RoadSessionError):
+                            raise _ApiFault(exc.status, exc.code, str(exc)) from exc
+                        raise
                 self._send_json(202, result)
                 return
 
@@ -499,12 +713,32 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                 run_id, action = parts[1], parts[2]
                 if action == "cancel":
                     self._require_run_owner(run_id, session_id)
-                    result = self.server.state.controller.cancel(run_id)
+                    result = self._cancel_run(session_id, run_id)
                     self._send_json(200, result)
                     return
                 if action == "input":
                     self._require_run_owner(run_id, session_id)
+                    road_source_id = self._resume_source(body)
+                    if road_source_id is not None:
+                        self._authorize_road_source(session_id, road_source_id)
                     result = self.server.state.controller.resume(run_id, body)
+                    if road_source_id is not None:
+                        service = self._road_service()
+                        existing = service.owner_source_for_run(run_id)
+                        try:
+                            if existing is None:
+                                service.bind_run(session_id, road_source_id, run_id)
+                            elif existing != (session_id, road_source_id):
+                                service.rebind_run(session_id, road_source_id, run_id)
+                        except Exception as exc:
+                            try:
+                                self.server.state.controller.cancel(run_id)
+                            except Exception:
+                                pass
+                            from visionflow.road_api import RoadSessionError
+                            if isinstance(exc, RoadSessionError):
+                                raise _ApiFault(exc.status, exc.code, str(exc)) from exc
+                            raise
                     self._send_json(200, result)
                     return
                 if action in {"confirm", "reject"}:

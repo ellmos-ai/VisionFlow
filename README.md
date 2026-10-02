@@ -78,6 +78,33 @@ Die lokale HTTP-API stellt dieselben Funktionen bereit: `GET /tools`, `POST /val
 
 Kameraeingaben benötigen eine ausdrücklich freigegebene Zuordnung wie `--camera schreibtisch=0`. VisionFlow sucht nicht nach Kameras. Kamera-Hardware wurde in dieser lokalen Abnahme nicht geprüft.
 
+## Straßenverkehrs-Demonstrator (Road Demo)
+
+Der Straßenverkehrs-Demonstrator erweitert VisionFlow um eine interaktive Kameraquelle mit synthetischem 960×540-Verkehr, pixelbasierter Richtungserkennung (`direction`-Werkzeug), automatischer H.264-Kameraaufzeichnung und einem Arbeitsplatz mit menschlicher Überprüfung und simulierter Behörden-Inbox:
+
+- **Ereignis-Injektion:** Normalverkehr, Falschfahrer (`wrong_way`), Vogel (`bird`) und Blatt (`leaf`).
+- **OpenCV Direction-Analyse:** Verfolgt Merkmale über mehrere Frames und erkennt Gegenverkehr anhand des konfigurierten Spurvektors rein aus Pixelbewegungen.
+- **Unveränderliche Clips:** Vorlauf (5 s) und Nachlauf (10 s) werden als deterministischer MP4-Clip exportiert (gleicher SHA-256-Hash für Modell und Mensch).
+- **Arbeitsplatz:** Countdown-Timer (20 s), Gefahr bestätigen, verneinen oder automatische Eskalation bei hoher Modellsicherheit (>0,90). Späte Ablehnungen erzeugen eine verknüpfte Entwarnung im simulierten Postfach.
+
+### CLI-Befehle für die Straßendemo
+
+```powershell
+# Sitzung erstellen und steuern
+.\.venv\Scripts\python.exe -m visionflow.cli road create --seed 42 --server http://127.0.0.1:8765
+.\.venv\Scripts\python.exe -m visionflow.cli road inject SOURCE_ID wrong_way --server http://127.0.0.1:8765
+.\.venv\Scripts\python.exe -m visionflow.cli road recording SOURCE_ID --server http://127.0.0.1:8765
+.\.venv\Scripts\python.exe -m visionflow.cli road clip CLIP_ID --output .\clip.mp4 --server http://127.0.0.1:8765
+
+# Fallprüfung und Arbeitsplatz
+.\.venv\Scripts\python.exe -m visionflow.cli road case start SOURCE_ID --mode fixture --server http://127.0.0.1:8765
+.\.venv\Scripts\python.exe -m visionflow.cli road case status CASE_ID --server http://127.0.0.1:8765
+.\.venv\Scripts\python.exe -m visionflow.cli road case decide CASE_ID confirm --version 1 --content-hash HASH --idempotency-key click-1 --server http://127.0.0.1:8765
+.\.venv\Scripts\python.exe -m visionflow.cli road inbox --server http://127.0.0.1:8765
+```
+
+Für den Video-Export wird FFmpeg mit `libx264` vorausgesetzt. Fehlt FFmpeg, bleibt der Core-Workflow uneingeschränkt nutzbar; die Clip-Erzeugung wird mit dem Grund `ffmpeg_required` deaktiviert.
+
 ## Grenzen
 
 Der MVP enthält keine echte Modell- oder Provideranbindung, keine AWS-Ausführung und keine Wettbewerbsbewertung. Der Fixture-Modus nutzt festgelegte lokale Entscheidungen und macht keine Netzaufrufe. Die künstlichen Beispiele ersetzen weder einen realen Kamera-/Browser-Hardwaretest noch Datensatz-, Baseline- oder Wettbewerbs-Evaluationen. Die lokale Browser-Abnahme am 2026-10-02 bestand acht Fälle in Headless Edge: separate CLI-Prozesse, Unicode-Uploads und Neuaufnahme, Video-Folgebeobachtung mit Entwurfsfreigabe, Abbruch, defekte Medien, Mehrtabbetrieb und eine 390-Pixel-Ansicht ohne horizontalen Überlauf. Browserkonsole und externe Seitenanfragen blieben leer. Echte Kamera-Hardware und ein Mobilgerät wurden nicht geprüft.

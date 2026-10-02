@@ -264,6 +264,7 @@ def test_demo_cli_reports_a_structured_failure(monkeypatch, tmp_path, capsys):
 def test_cli_camera_flag_requires_an_explicit_source_mapping(monkeypatch, tmp_path, capsys):
     # The serve command accepts only explicit name=device mappings and defaults to none.
     from visionflow import cli
+    from visionflow import road_runtime
 
     captured: dict[str, Any] = {}
 
@@ -276,14 +277,72 @@ def test_cli_camera_flag_requires_an_explicit_source_mapping(monkeypatch, tmp_pa
         def server_close(self):
             return None
 
-    def fake_create_controller(data_dir, *, allowed_camera_sources=None, fixture_decisions=None):
-        captured["allowed_camera_sources"] = allowed_camera_sources
-        return object()
+    class FakeRuntime:
+        controller = object()
+        road_sessions = None
+        road_cases = None
+        road_unavailable_reason = "ffmpeg_required"
 
-    monkeypatch.setattr(cli, "create_controller", fake_create_controller, raising=False)
+        def close(self):
+            return None
+
+    def fake_build_runtime(data_dir, *, allowed_camera_sources=None, allow_native_costs=False):
+        captured["allowed_camera_sources"] = allowed_camera_sources
+        captured["allow_native_costs"] = allow_native_costs
+        return FakeRuntime()
+    monkeypatch.setattr(road_runtime, "build_road_runtime", fake_build_runtime)
     monkeypatch.setattr(cli, "create_server", lambda *args, **kwargs: FakeServer(), raising=False)
 
     code = main(["serve", "--data-dir", str(tmp_path / "data"), "--camera", "front=0"])
 
     assert code == 0
     assert captured["allowed_camera_sources"] == {"front": 0}
+    assert captured["allow_native_costs"] is False
+
+
+def test_serve_keeps_core_api_available_when_ffmpeg_is_missing(monkeypatch, tmp_path, capsys):
+    from visionflow import cli
+    from visionflow import road_runtime
+
+    captured: dict[str, Any] = {}
+
+    class FakeServer:
+        server_address = ("127.0.0.1", 8765)
+
+        def serve_forever(self):
+            return None
+
+        def server_close(self):
+            return None
+
+    class FakeRuntime:
+        controller = object()
+        road_sessions = None
+        road_cases = None
+        road_unavailable_reason = "ffmpeg_required"
+
+        def close(self):
+            return None
+
+    def fake_build_runtime(data_dir, *, allowed_camera_sources=None, allow_native_costs=False):
+        captured["allowed_camera_sources"] = allowed_camera_sources
+        captured["allow_native_costs"] = allow_native_costs
+        return FakeRuntime()
+
+    def fake_create_server(controller, **kwargs):
+        captured["server_called"] = True
+        captured["road_sessions"] = kwargs.get("road_sessions")
+        return FakeServer()
+
+    monkeypatch.setattr(road_runtime, "build_road_runtime", fake_build_runtime)
+    monkeypatch.setattr(cli, "create_server", fake_create_server, raising=False)
+
+    code = main(["serve", "--data-dir", str(tmp_path / "data")])
+
+    output = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert output["status"] == "serving"
+    assert captured["server_called"] is True
+    assert captured["road_sessions"] is None
+    assert captured["allowed_camera_sources"] == {}
+    assert captured["allow_native_costs"] is False

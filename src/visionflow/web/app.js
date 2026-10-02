@@ -32,6 +32,17 @@
   let pollTimer = null;
   let evidenceObjectUrl = null;
   let reportText = "";
+  let roadModulePromise = null;
+  let roadMount = null;
+  let roadModelMount = null;
+  let roadWorkplaceMount = null;
+  let roadWorkspaceReady = false;
+  let roadRefreshTimer = null;
+  let roadRefreshInFlight = false;
+  let roadActiveCaseId = null;
+  let roadViewedCaseId = null;
+  let roadRefreshGeneration = 0;
+  let sessionReady = false;
 
   function setMessage(element, message, isError = false) {
     element.textContent = message;
@@ -597,6 +608,292 @@
     }
   }
 
+  function showWorkspace(name) {
+    const analysis = name === "analysis";
+    $("workspace-analysis").hidden = !analysis;
+    $("workspace-road").hidden = analysis;
+    $("analysis-tab").setAttribute("aria-pressed", String(analysis));
+    $("road-tab").setAttribute("aria-pressed", String(!analysis));
+  }
+
+  async function getClip(path) {
+    const response = await fetch(path, {
+      method: "GET",
+      headers: {
+        Accept: "video/mp4",
+        ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+      },
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      let payload = null;
+      try { payload = await response.json(); } catch (_error) { payload = null; }
+      throw apiError(payload, response.status);
+    }
+    const blob = await response.blob();
+    if (!blob.type.startsWith("video/mp4") || blob.size <= 0 || blob.size > 128 * 1024 * 1024) {
+      throw new Error("Der lokale Server lieferte keinen gültigen, begrenzten MP4-Clip.");
+    }
+    return { blob, sha256: response.headers.get("X-Clip-SHA256") };
+  }
+
+  async function getRoadBytes(path) {
+    const response = await fetch(path, {
+      method: "GET",
+      headers: {
+        Accept: "image/png, image/jpeg, video/mp4",
+        ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+      },
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      let payload = null;
+      try { payload = await response.json(); } catch (_error) { payload = null; }
+      throw apiError(payload, response.status);
+    }
+    const blob = await response.blob();
+    const mediaType = blob.type.toLowerCase();
+    const isImage = mediaType.startsWith("image/png") || mediaType.startsWith("image/jpeg");
+    const isVideo = mediaType.startsWith("video/mp4");
+    const maximum = isVideo ? 128 * 1024 * 1024 : 16 * 1024 * 1024;
+    if ((!isImage && !isVideo) || blob.size <= 0 || blob.size > maximum) {
+      throw new Error("Der lokale Server lieferte keinen gültigen, begrenzten Bild- oder Clipbeleg.");
+    }
+    return blob;
+  }
+
+  function roadApiClient() {
+    return {
+      get: (path) => jsonRequest(path),
+      post: (path, payload) => postJson(path, payload),
+      getClip,
+      getBytes: getRoadBytes,
+      request: (method, path, payload) => {
+        if (method === "GET") return jsonRequest(path);
+        if (method === "POST") return postJson(path, payload || {});
+        return Promise.reject(new Error("Diese lokale Ansicht unterstützt nur GET und POST."));
+      },
+    };
+  }
+
+  function roadCaseEvent(event) {
+    const detail = event && event.detail ? event.detail : {};
+    const id = typeof detail.caseId === "string" ? detail.caseId : null;
+    if (!id) return;
+    roadActiveCaseId = id;
+    roadViewedCaseId = id;
+    if (roadMount) roadMount.setCase(detail.case || { case_id: id });
+    roadRefreshGeneration += 1;
+    void refreshRoadViews();
+  }
+
+  function roadOpenCase(event) {
+    const detail = event && event.detail ? event.detail : {};
+    const id = typeof detail.caseId === "string" ? detail.caseId : null;
+    if (!id) return;
+    roadViewedCaseId = id;
+    roadRefreshGeneration += 1;
+    void refreshRoadViews();
+  }
+
+  function phaseLocksCamera(snapshot) {
+    return Boolean(snapshot && [
+      "model_review",
+      "human_review",
+      "no_response",
+    ].includes(snapshot.phase));
+  }
+
+  function renderRoadTimeline(snapshot) {
+    const target = $("road-timeline-content");
+    if (!target) return;
+    target.replaceChildren();
+    if (!snapshot || typeof snapshot !== "object") {
+      const empty = document.createElement("p");
+      empty.className = "road-empty-state";
+      empty.textContent = "Starte eine Kameraquelle, um den echten Trace und das Entscheidungsjournal zu sehen.";
+      target.append(empty);
+      return;
+    }
+    const heading = document.createElement("p");
+    heading.className = "road-timeline-case";
+    heading.textContent = "Fall " + String(snapshot.case_id || "–") +
+      " · " + String(snapshot.phase || "Status nicht angegeben");
+    target.append(heading);
+    const events = [];
+    const trace = Array.isArray(snapshot.perception_trace) ? snapshot.perception_trace : [];
+    for (const entry of trace) {
+      if (!entry || typeof entry !== "object") continue;
+      const label = {
+        state_change: "Laufstatus geändert",
+        frame_analyzed: "Frame ausgewertet",
+        monitor_stopped: "Beobachtung beendet",
+        node_completed: "Ablaufschritt abgeschlossen",
+        run_started: "Lauf gestartet",
+      }[entry.type] || "Laufereignis";
+      const parts = [label];
+      if (typeof entry.node_id === "string") parts.push(entry.node_id);
+      if (typeof entry.frame_id === "string") parts.push("Frame " + entry.frame_id);
+      if (typeof entry.timestamp_seconds === "number") {
+        parts.push("Quellenzeit " + entry.timestamp_seconds.toFixed(2) + " Sek.");
+      }
+      if (typeof entry.reason === "string") parts.push(entry.reason);
+      events.push({
+        order: events.length,
+        time: entry.created_at || entry.timestamp || entry.timestamp_seconds || null,
+        text: parts.join(" · "),
+      });
+    }
+    const journal = Array.isArray(snapshot.journal) ? snapshot.journal : [];
+    for (const entry of journal) {
+      if (!entry || typeof entry !== "object") continue;
+      const text = typeof entry.message === "string"
+        ? entry.message
+        : typeof entry.event === "string"
+          ? entry.event
+          : JSON.stringify(entry);
+      events.push({
+        order: events.length,
+        time: entry.created_at || entry.timestamp || entry.at || null,
+        text: "Entscheidung · " + text,
+      });
+    }
+    const ordered = events.slice();
+    const hasComparableTimes = ordered.length > 1 && ordered.every((item) =>
+      typeof item.time === "number" || (typeof item.time === "string" && !Number.isNaN(Date.parse(item.time))),
+    );
+    if (hasComparableTimes) {
+      ordered.sort((left, right) => {
+        const leftTime = typeof left.time === "number" ? left.time : Date.parse(left.time);
+        const rightTime = typeof right.time === "number" ? right.time : Date.parse(right.time);
+        return leftTime - rightTime || left.order - right.order;
+      });
+    }
+    if (ordered.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "road-empty-state";
+      empty.textContent = "Für diesen Fall sind noch keine Trace- oder Journalereignisse vorhanden.";
+      target.append(empty);
+      return;
+    }
+    const list = document.createElement("ol");
+    list.className = "road-timeline-list";
+    for (const entry of ordered) {
+      const item = document.createElement("li");
+      item.textContent = entry.text;
+      list.append(item);
+    }
+    target.append(list);
+  }
+
+  async function refreshRoadViews() {
+    if (!roadWorkspaceReady || roadRefreshInFlight) return;
+    roadRefreshInFlight = true;
+    const generation = ++roadRefreshGeneration;
+    try {
+      const inboxResult = await jsonRequest("/road/inbox");
+      const inbox = Array.isArray(inboxResult)
+        ? inboxResult
+        : Array.isArray(inboxResult?.records)
+          ? inboxResult.records
+          : Array.isArray(inboxResult?.cases)
+            ? inboxResult.cases
+            : [];
+      const ids = [...new Set([roadActiveCaseId, roadViewedCaseId].filter(Boolean))];
+      const loaded = new Map();
+      await Promise.all(ids.map(async (caseId) => {
+        try {
+          const encoded = encodeURIComponent(caseId);
+          const [snapshot, model] = await Promise.all([
+            jsonRequest("/road/cases/" + encoded),
+            jsonRequest("/road/cases/" + encoded + "/model"),
+          ]);
+          loaded.set(caseId, {
+            snapshot: snapshot && snapshot.case ? snapshot.case : snapshot,
+            exchanges: Array.isArray(model?.exchanges) ? model.exchanges : [],
+          });
+        } catch (error) {
+          loaded.set(caseId, { error });
+        }
+      }));
+      if (generation !== roadRefreshGeneration) return;
+      const active = roadActiveCaseId ? loaded.get(roadActiveCaseId) : null;
+      const viewed = roadViewedCaseId ? loaded.get(roadViewedCaseId) : null;
+      if (roadMount) roadMount.setLocked(phaseLocksCamera(active?.snapshot));
+      if (roadWorkplaceMount) {
+        roadWorkplaceMount.update(viewed?.snapshot || null, inbox);
+      }
+      if (roadModelMount) roadModelMount.update(viewed?.exchanges || []);
+      renderRoadTimeline(viewed?.snapshot || null);
+      const failure = (viewed && viewed.error) || (active && active.error);
+      const status = $("road-workspace-status");
+      if (status) {
+        status.textContent = failure
+          ? "Die lokale Fallansicht konnte nicht aktualisiert werden. Bitte erneut öffnen."
+          : "";
+      }
+    } catch (_error) {
+      if (generation === roadRefreshGeneration) {
+        const status = $("road-workspace-status");
+        if (status) status.textContent = "Fallinformationen oder Postfach konnten nicht geladen werden.";
+      }
+    } finally {
+      roadRefreshInFlight = false;
+    }
+  }
+
+  function scheduleRoadRefresh() {
+    if (roadRefreshTimer) window.clearTimeout(roadRefreshTimer);
+    roadRefreshTimer = window.setTimeout(async () => {
+      await refreshRoadViews();
+      if (roadWorkspaceReady) scheduleRoadRefresh();
+    }, 750);
+  }
+
+  async function activateRoadWorkspace() {
+    showWorkspace("road");
+    try {
+      if (!sessionReady) throw new Error("Die lokale Sitzung ist noch nicht bereit.");
+      if (!roadWorkspaceReady) {
+        roadModulePromise ||= Promise.all([
+          import("/road-camera.js"),
+          import("/road-model.js"),
+          import("/road-workplace.js"),
+        ]);
+        const [cameraModule, modelModule, workplaceModule] = await roadModulePromise;
+        if (!roadWorkspaceReady) {
+          const client = roadApiClient();
+          const cameraRoot = $("road-camera-root");
+          const workplaceRoot = $("road-workplace-root");
+          cameraRoot.addEventListener("road-case-started", roadCaseEvent);
+          cameraRoot.addEventListener("road-case-changed", roadCaseEvent);
+          workplaceRoot.addEventListener("road-open-case", roadOpenCase);
+          workplaceRoot.addEventListener("roaddecision", (event) => {
+            const caseId = event?.detail?.caseId;
+            if (typeof caseId === "string") {
+              roadViewedCaseId = caseId;
+              roadRefreshGeneration += 1;
+              void refreshRoadViews();
+            }
+          });
+          roadModelMount = modelModule.mountRoadModel($("road-model-root"), client);
+          roadWorkplaceMount = workplaceModule.mountRoadWorkplace(workplaceRoot, client);
+          roadMount = cameraModule.mountRoadCamera(cameraRoot, {
+            ...client,
+            timelineContainer: $("road-controller-trace"),
+          });
+          roadWorkspaceReady = true;
+          await refreshRoadViews();
+          scheduleRoadRefresh();
+        }
+      }
+    } catch (error) {
+      $("road-camera-root").textContent = error.message || "Die Straßenkamera-Oberfläche konnte nicht geladen werden.";
+    }
+  }
+
   async function bootstrap() {
     try {
       const sessionResponse = await fetch("/session", {
@@ -609,16 +906,32 @@
         throw new Error("Der lokale Server lieferte kein gültiges Sitzungstoken.");
       }
       csrfToken = session.csrf_token;
+      sessionReady = true;
       descriptors = (await jsonRequest("/tools")).tools || [];
       renderToolChoices();
       $("connection-status").textContent = "Lokaler Server verbunden · Sitzung aktiv";
+      $("road-tab").disabled = false;
       $("start-button").disabled = false;
     } catch (error) {
+      sessionReady = false;
+      $("road-tab").disabled = true;
       $("connection-status").textContent = "Lokaler Server nicht erreichbar";
       setMessage($("setup-message"), error.message, true);
       $("start-button").disabled = true;
     }
   }
+
+  $("analysis-tab").addEventListener("click", () => showWorkspace("analysis"));
+  $("road-tab").addEventListener("click", activateRoadWorkspace);
+  window.addEventListener("pagehide", () => {
+    if (roadMount) roadMount.destroy();
+    if (roadModelMount) roadModelMount.destroy();
+    if (roadWorkplaceMount) roadWorkplaceMount.destroy();
+    if (pollTimer) window.clearTimeout(pollTimer);
+    if (roadRefreshTimer) window.clearTimeout(roadRefreshTimer);
+    clearEvidence();
+  }, { once: true });
+  $("road-tab").disabled = true;
 
   $("workflow-preset").addEventListener("change", applyPreset);
   $("input-kind").addEventListener("change", sourceKindChanged);

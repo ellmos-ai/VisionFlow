@@ -62,6 +62,30 @@ Der CLI- und API-Vertrag ist zusätzlich über `tests/test_cli.py` und `tests/te
 
 Das Vorhandensein dieser Tests ersetzt keinen separat dokumentierten Browser- oder Hardwarelauf.
 
+## Straßendemo-Tests und Browserabnahme
+
+Die Tests für die Straßendemo umfassen Richtungsanalyse, Aufnahme-Journal, MP4-Clip-Export, Modellprüfung, Fristen und Arbeitsplatz:
+
+```powershell
+# Gezielte Road-Suite (API, CLI, Review)
+.\.venv\Scripts\python.exe -m pytest tests/test_road_api.py tests/test_road_cli.py tests/test_road_review_api.py tests/test_road_review_cli.py -q
+
+# Gesamtsuite inklusive aller 502 Tests
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Die automatisierte Browser-Abnahme prüft die Weboberfläche in nativem Microsoft Edge Headless (mit Playwright):
+
+```powershell
+# Kamera-Phase (Simulation, Event-Injektion, Controls)
+python tests/road_browser_acceptance.py --phase camera --output .local/acceptance/run-camera-01
+
+# Review-Phase (Arbeitsplatz, Countdown, Inbox, Entwarnung)
+python tests/road_browser_acceptance.py --phase review --output .local/acceptance/run-review-01
+```
+
+Der Prüfharness erzeugt JSON-Ergebnisberichte (`acceptance.json`), Konsolenlogs sowie Screenshots (`landing.png`, `road-camera-before-start.png`, `road-camera-ready.png`) im angegebenen Ausgabeordner unter `.local/`.
+
 ## Medienzeit und Browserbelege
 
 Dateivideo-Folgebeobachtung sampelt die Medienzeit, nicht die nächste Serie nativer Frames. Die lokale Implementierung benötigt eine positive, verlässliche FPS-Angabe und ein Backend, das die angeforderte Frameposition tatsächlich bestätigt. Unbekannte FPS oder unzuverlässiges Seek-Verhalten liefern einen strukturierten Medienfehler. Die synthetische AVI-Demo verwendet konstante Framerate; Videos mit variabler Framerate und reale Kameras sind nicht abgenommen.

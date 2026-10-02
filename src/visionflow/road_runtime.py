@@ -1,0 +1,209 @@
+"""Public composition root for the optional local road-review runtime."""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+from .decision_policy import DecisionPolicy, DecisionStore
+from .model_exchange import ModelExchangeStore
+from .road_api import RoadSessionService, make_source_override
+from .road_cases import RoadCaseService, RoadModelRouter
+from .runtime import create_controller
+from .simulated_authority import SimulatedAuthorityInbox
+from .simulation import SimulationStore
+
+
+@dataclass(slots=True)
+class RoadRuntime:
+    """Owned runtime components used by both ``serve`` and integration tests."""
+
+    controller: Any
+    road_sessions: RoadSessionService | None
+    road_cases: RoadCaseService | None
+    road_unavailable_reason: str | None
+
+    def close(self) -> None:
+        if self.road_cases is not None:
+            self.road_cases.close()
+        if self.road_sessions is not None:
+            self.road_sessions.close()
+
+
+class SystemClock:
+    """Wall-clock display and monotonic deadlines for local review decisions."""
+
+    @staticmethod
+    def monotonic() -> float:
+        return time.monotonic()
+
+    @staticmethod
+    def utcnow() -> datetime:
+        return datetime.now(timezone.utc)
+
+
+def build_road_runtime(
+    data_dir: Path | str,
+    *,
+    ffmpeg_path: Path | str | None = None,
+    allowed_camera_sources: dict[str, int] | None = None,
+    gemini_api_key: str | None = None,
+    allow_native_costs: bool = False,
+) -> RoadRuntime:
+    """Build a controller with explicit road routing and optional recording.
+
+    The ordinary image and motion workflows keep the existing fixture adapter
+    through ``RoadModelRouter``'s default fallback. Native video is available
+    only when the caller separately enables provider costs and supplies a key.
+    """
+    if type(allow_native_costs) is not bool:
+        raise ValueError("allow_native_costs must be a boolean")
+    cameras = {} if allowed_camera_sources is None else dict(allowed_camera_sources)
+    ffmpeg = str(ffmpeg_path) if ffmpeg_path is not None else shutil.which("ffmpeg")
+    unavailable_reason: str | None
+    if ffmpeg is None:
+        unavailable_reason = "ffmpeg_required"
+    elif not _has_h264_encoder(ffmpeg):
+        unavailable_reason = "h264_encoder_required"
+    else:
+        unavailable_reason = None
+
+    service_holder: dict[str, RoadSessionService] = {}
+    controller_ref: dict[str, Any] = {}
+    native_transport = None
+    if unavailable_reason is None and allow_native_costs:
+        try:
+            from .gemini_video import GeminiVideoTransport
+
+            evidence_reader = _case_evidence_reader(
+                lambda: service_holder.get("service"),
+                lambda: controller_ref.get("controller"),
+                lambda: controller_ref.get("evidence_root"),
+            )
+            native_transport = GeminiVideoTransport(
+                api_key=gemini_api_key,
+                cost_approved=True,
+                evidence_reader=evidence_reader,
+            )
+        except ValueError:
+            # No credential or unusable native configuration leaves the offline
+            # model path available. Never print the configuration or exception.
+            native_transport = None
+
+    router = RoadModelRouter(native_transport=native_transport)
+    source_override = None
+    if unavailable_reason is None:
+        source_override = make_source_override(lambda: service_holder.get("service"))
+
+    controller = create_controller(
+        data_dir,
+        allowed_camera_sources=cameras,
+        source_override=source_override,
+        model_factory=router,
+    )
+    controller_ref["controller"] = controller
+    controller_ref["evidence_root"] = Path(
+        getattr(controller, "evidence_root", Path(data_dir) / "evidence")
+    ).expanduser().resolve()
+
+    if unavailable_reason is not None:
+        return RoadRuntime(controller, None, None, unavailable_reason)
+
+    from .recording import RecordingStore
+
+    recordings = RecordingStore(Path(data_dir) / "road-recordings", Path(ffmpeg))
+    sessions = SimulationStore()
+    road_sessions: RoadSessionService | None = None
+    road_cases: RoadCaseService | None = None
+    try:
+        road_sessions = RoadSessionService(sessions, recordings, controller)
+        service_holder["service"] = road_sessions
+        decisions = DecisionStore(
+            DecisionPolicy(confidence_threshold=0.90, countdown_seconds=20.0),
+            SimulatedAuthorityInbox(),
+            SystemClock(),
+        )
+        road_cases = RoadCaseService(
+            road_sessions,
+            controller,
+            recordings,
+            ModelExchangeStore(),
+            decisions,
+        )
+    except Exception:
+        if road_cases is not None:
+            road_cases.close()
+        if road_sessions is not None:
+            road_sessions.close()
+        else:
+            sessions.close()
+        raise
+
+    return RoadRuntime(controller, road_sessions, road_cases, None)
+
+
+def _has_h264_encoder(executable: str) -> bool:
+    try:
+        result = subprocess.run(
+            [executable, "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and "libx264" in (result.stdout + result.stderr)
+
+
+def _case_evidence_reader(session_lookup, controller_lookup, root_lookup):
+    def read(reference: str) -> bytes:
+        if type(reference) is not str or "\\" in reference or ":" in reference or "\x00" in reference:
+            raise ValueError("invalid evidence reference")
+        relative = PurePosixPath(reference)
+        if (
+            relative.is_absolute()
+            or len(relative.parts) < 2
+            or any(part in {"", ".", ".."} for part in relative.parts)
+        ):
+            raise ValueError("invalid evidence reference")
+
+        sessions = session_lookup()
+        controller = controller_lookup()
+        root = root_lookup()
+        if sessions is None or controller is None or root is None:
+            raise FileNotFoundError("evidence runtime is unavailable")
+        run_id = relative.parts[0]
+        binding = sessions.owner_source_for_run(run_id)
+        if (
+            not isinstance(binding, tuple)
+            or len(binding) != 2
+            or not all(type(item) is str and item for item in binding)
+        ):
+            raise FileNotFoundError("evidence run is unavailable")
+        owner_id, source_id = binding
+        sessions.get(owner_id, source_id)
+        result = controller.status(run_id)
+        allowed = {
+            finding.evidence_ref
+            for finding in getattr(result, "findings", [])
+            if isinstance(getattr(finding, "evidence_ref", None), str)
+        }
+        if reference not in allowed:
+            raise FileNotFoundError("evidence reference is unavailable")
+
+        root_path = Path(root).resolve()
+        target = root_path.joinpath(*relative.parts).resolve(strict=True)
+        if not target.is_relative_to(root_path) or not target.is_file():
+            raise FileNotFoundError("evidence reference is unavailable")
+        return target.read_bytes()
+
+    return read
+
+
+__all__ = ["RoadRuntime", "SystemClock", "build_road_runtime"]

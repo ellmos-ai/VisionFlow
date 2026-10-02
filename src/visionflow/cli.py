@@ -15,7 +15,7 @@ from typing import Any, Sequence, TextIO
 
 from visionflow.config import load_workflow
 from visionflow.contracts import ConfigError
-from visionflow.runtime import create_controller, create_registry
+from visionflow.runtime import create_registry
 from visionflow.api import create_server
 
 
@@ -162,6 +162,47 @@ class _ApiClient:
             status, value, _headers = self._request_once(method, path, payload)
         return status, value
 
+    def request_bytes(self, path: str) -> tuple[int, bytes | Any, dict[str, str]]:
+        if self.cookie is None or self.csrf_token is None:
+            self._bootstrap()
+        status, raw, headers = self._request_bytes_once(path)
+        value: bytes | Any = raw
+        if headers.get("content-type", "").startswith("application/json"):
+            try:
+                value = json.loads(raw.decode("utf-8"))
+            except (UnicodeError, json.JSONDecodeError) as exc:
+                raise _ServerUnavailable from exc
+        if (
+            status == 403
+            and isinstance(value, dict)
+            and isinstance(value.get("error"), dict)
+            and value["error"].get("code") == "session_required"
+        ):
+            self.cookie = None
+            self.csrf_token = None
+            self._bootstrap()
+            status, raw, headers = self._request_bytes_once(path)
+            value = raw
+            if headers.get("content-type", "").startswith("application/json"):
+                try:
+                    value = json.loads(raw.decode("utf-8"))
+                except (UnicodeError, json.JSONDecodeError) as exc:
+                    raise _ServerUnavailable from exc
+        return status, value, headers
+
+    def _request_bytes_once(self, path: str) -> tuple[int, bytes, dict[str, str]]:
+        headers = {"Accept": "video/mp4, application/json", "Origin": self.origin}
+        if self.cookie:
+            headers["Cookie"] = self.cookie
+        request = urllib.request.Request(self.server_url + path, headers=headers, method="GET")
+        try:
+            response = urllib.request.urlopen(request, timeout=10)
+        except urllib.error.HTTPError as exc:
+            response = exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise _ServerUnavailable from exc
+        return response.status, response.read(), {key.lower(): val for key, val in response.headers.items()}
+
 
 def _normalize_server_url(value: str) -> tuple[str, str]:
     try:
@@ -252,6 +293,15 @@ def _parser() -> argparse.ArgumentParser:
         metavar="NAME=INDEX",
         help="Eine einzelne ausdrücklich freigegebene Kameraquelle; wiederholbar",
     )
+    serve.add_argument(
+        "--allow-gemini-costs",
+        action="store_true",
+        help=(
+            "Native Gemini-Videoanfragen ausdrücklich erlauben (höchstens zwei Anfragen, "
+            "jeweils bis 30 Sekunden und 20 MiB; Providerkosten können entstehen; "
+            "erfordert GEMINI_API_KEY)"
+        ),
+    )
 
     run = commands.add_parser("run", help="Workflow an einen laufenden lokalen Server senden")
     run.add_argument("workflow", type=Path)
@@ -290,6 +340,51 @@ def _parser() -> argparse.ArgumentParser:
     demo_run = demo_commands.add_parser("run", help="Die zwei echten Fixture-Szenarien ausführen")
     demo_run.add_argument("--output-dir", type=Path, required=True)
 
+    road = commands.add_parser("road", help="Lokale Straßenkamera und Aufzeichnungen verwalten")
+    road_commands = road.add_subparsers(dest="road_command", required=True)
+    road_create = road_commands.add_parser("create", help="Eine private Simulationsquelle starten")
+    road_create.add_argument("--seed", type=int, default=42)
+    _client_options(road_create)
+    road_inject = road_commands.add_parser("inject", help="Ein sichtbares Szenarioereignis auslösen")
+    road_inject.add_argument("source_id")
+    road_inject.add_argument("event", choices=("wrong_way", "bird", "leaf"))
+    _client_options(road_inject)
+    for name, help_text in (
+        ("reset", "Eine neue Quelle starten und die alte Aufnahme beenden"),
+        ("stop", "Quelle beenden und den vollständigen Clip sichern"),
+        ("recording", "Aufnahmestatus einer Quelle anzeigen"),
+    ):
+        command = road_commands.add_parser(name, help=help_text)
+        command.add_argument("source_id")
+        _client_options(command)
+    road_clip = road_commands.add_parser("clip", help="Einen gespeicherten Clip herunterladen")
+    road_clip.add_argument("clip_id")
+    road_clip.add_argument("--output", type=Path, required=True)
+    _client_options(road_clip)
+
+    road_case = road_commands.add_parser("case", help="Einen Straßenfall prüfen und entscheiden")
+    case_commands = road_case.add_subparsers(dest="case_command", required=True)
+    case_start = case_commands.add_parser("start", help="Eine Analyse für eine Quelle starten")
+    case_start.add_argument("source_id")
+    case_start.add_argument("--mode", choices=("fixture", "gemini_video"), default="fixture")
+    case_start.add_argument("--fixture-profile")
+    _client_options(case_start)
+    case_status = case_commands.add_parser("status", help="Fallstatus und Modellbewertung abrufen")
+    case_status.add_argument("case_id")
+    _client_options(case_status)
+    case_decide = case_commands.add_parser("decide", help="Eine Fallentscheidung bestätigen oder ablehnen")
+    case_decide.add_argument("case_id")
+    case_decide.add_argument("--version", type=int, required=True)
+    case_decide.add_argument("--content-hash", required=True)
+    case_decide.add_argument("--decision", choices=("confirm", "reject"), required=True)
+    case_decide.add_argument("--idempotency-key", required=True)
+    _client_options(case_decide)
+    case_cancel = case_commands.add_parser("cancel", help="Eine laufende Fallprüfung abbrechen")
+    case_cancel.add_argument("case_id")
+    _client_options(case_cancel)
+    road_inbox = road_commands.add_parser("inbox", help="Owner-eigenen Demo-Posteingang anzeigen")
+    _client_options(road_inbox)
+
     return parser
 
 
@@ -310,20 +405,31 @@ def _camera_mapping(values: Sequence[str]) -> dict[str, int]:
 
 
 def _serve(args: argparse.Namespace) -> int:
+    runtime = None
     try:
+        from visionflow.road_runtime import build_road_runtime
         cameras = _camera_mapping(args.camera)
-        controller = create_controller(args.data_dir, allowed_camera_sources=cameras)
+        runtime = build_road_runtime(
+            args.data_dir,
+            allowed_camera_sources=cameras,
+            allow_native_costs=args.allow_gemini_costs,
+        )
         server = create_server(
-            controller,
+            runtime.controller,
             host=args.host,
             port=args.port,
             data_dir=args.data_dir,
-            evidence_root=getattr(controller, "evidence_root", args.data_dir / "evidence"),
-            registry=getattr(controller, "registry", None),
-            approval_store=getattr(controller, "approval_store", None),
+            evidence_root=getattr(runtime.controller, "evidence_root", args.data_dir / "evidence"),
+            registry=getattr(runtime.controller, "registry", None),
+            approval_store=getattr(runtime.controller, "approval_store", None),
+            road_sessions=runtime.road_sessions,
+            road_cases=runtime.road_cases,
+            road_unavailable_reason=runtime.road_unavailable_reason,
         )
     except (ConfigError, OSError, ValueError) as exc:
-        return _write_error("server_start_failed", str(exc))
+        if runtime is not None:
+            runtime.close()
+        return _write_error("server_start_failed", "Der lokale VisionFlow-Server konnte nicht starten.")
 
     host, port = server.server_address[:2]
     display_host = f"[{host}]" if ":" in host else host
@@ -335,7 +441,6 @@ def _serve(args: argparse.Namespace) -> int:
     finally:
         server.server_close()
     return 0
-
 
 def _load_json_object(path: Path) -> dict[str, Any]:
     try:
@@ -401,6 +506,101 @@ def _demo_run(output_dir: Path) -> int:
     return 0
 
 
+
+def _road_command(args: argparse.Namespace) -> int:
+    source_id = getattr(args, "source_id", None)
+    if args.road_command == "inbox":
+        return _call_api(args, "GET", "/road/inbox")
+    if args.road_command == "case":
+        case_id = getattr(args, "case_id", None)
+        if args.case_command == "start":
+            if args.mode == "gemini_video" and args.fixture_profile is not None:
+                return _write_error(
+                    "fixture_profile_not_allowed",
+                    "Native Fälle verwenden kein Fixture-Profil.",
+                )
+            payload = {"source_id": args.source_id, "mode": args.mode}
+            if args.fixture_profile is not None:
+                payload["fixture_profile"] = args.fixture_profile
+            return _call_api(args, "POST", "/road/cases", payload)
+        encoded_case = urllib.parse.quote(case_id, safe="")
+        if args.case_command == "status":
+            return _call_api(args, "GET", f"/road/cases/{encoded_case}")
+        if args.case_command == "cancel":
+            return _call_api(args, "POST", f"/road/cases/{encoded_case}/cancel", {})
+        if args.case_command == "decide":
+            return _call_api(
+                args,
+                "POST",
+                f"/road/cases/{encoded_case}/decision",
+                {
+                    "version": args.version,
+                    "content_hash": args.content_hash,
+                    "decision": args.decision,
+                    "idempotency_key": args.idempotency_key,
+                },
+            )
+        return _write_error("invalid_arguments", "Der Fallbefehl ist nicht verfügbar.")
+    if args.road_command == "create":
+        return _call_api(args, "POST", "/road/sessions", {"seed": args.seed})
+    if args.road_command == "inject":
+        path = f"/road/sessions/{urllib.parse.quote(source_id, safe='')}/events"
+        return _call_api(args, "POST", path, {"event": args.event})
+    if args.road_command in {"reset", "stop"}:
+        action = args.road_command
+        path = f"/road/sessions/{urllib.parse.quote(source_id, safe='')}/{action}"
+        return _call_api(args, "POST", path, {})
+    if args.road_command == "recording":
+        path = f"/road/sessions/{urllib.parse.quote(source_id, safe='')}/recording"
+        return _call_api(args, "GET", path)
+    if args.road_command == "clip":
+        path = f"/road/clips/{urllib.parse.quote(args.clip_id, safe='')}"
+        try:
+            status, payload, headers = _client(args).request_bytes(path)
+        except _ServerUnavailable:
+            return _write_error("server_unavailable", "Am lokalen VisionFlow-Server kam keine Antwort an.")
+        except (OSError, ValueError, TypeError) as exc:
+            return _write_error("client_error", str(exc))
+        if status >= 400:
+            if isinstance(payload, dict):
+                _write_json(payload, sys.stderr)
+            else:
+                return _write_error("clip_download_failed", "Der Clip konnte nicht heruntergeladen werden.")
+            return 2
+        if not isinstance(payload, bytes) or not payload:
+            return _write_error("clip_download_failed", "Der Server lieferte keine Clipdaten.")
+        expected_hash = headers.get("x-clip-sha256")
+        actual_hash = hashlib.sha256(payload).hexdigest()
+        if expected_hash and expected_hash != actual_hash:
+            return _write_error("clip_integrity", "Die heruntergeladene Clip-Prüfsumme stimmt nicht.")
+        output = args.output.expanduser()
+        created = False
+        try:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            stream = output.open("xb")
+            created = True
+            with stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+        except FileExistsError:
+            return _write_error("output_exists", "Die Zieldatei ist bereits vorhanden und wurde nicht überschrieben.")
+        except OSError as exc:
+            if created:
+                try:
+                    output.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            return _write_error("output_write_failed", str(exc))
+        _write_json({
+            "clip_id": args.clip_id,
+            "path": str(output),
+            "bytes": len(payload),
+            "sha256": actual_hash,
+        })
+        return 0
+    return _write_error("invalid_arguments", "Der Straßenkamera-Befehl ist nicht verfügbar.")
+
 def main(argv: Sequence[str] | None = None) -> int:
     _configure_console_encoding()
     args = _parser().parse_args(argv)
@@ -408,6 +608,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _validate(args.workflow)
     if args.command == "serve":
         return _serve(args)
+    if args.command == "road":
+        return _road_command(args)
+
     if args.command == "demo":
         return _demo_run(args.output_dir)
     if args.command == "run":

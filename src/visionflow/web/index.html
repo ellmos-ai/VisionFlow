@@ -6,6 +6,7 @@
     <meta name="color-scheme" content="dark">
     <title>VisionFlow – lokaler Analyse-Arbeitsplatz</title>
     <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/road.css">
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -19,7 +20,12 @@
       </p>
     </header>
 
-    <main class="layout">
+    <main class="workspace-shell">
+      <nav class="workspace-tabs" aria-label="Arbeitsbereiche">
+        <button id="analysis-tab" class="button secondary" type="button" aria-pressed="true">Analyse</button>
+        <button id="road-tab" class="button secondary" type="button" aria-pressed="false" disabled>Straßenkamera</button>
+      </nav>
+      <div id="workspace-analysis" class="layout workspace-analysis">
       <section class="panel setup-panel" aria-labelledby="setup-title">
         <div class="section-heading">
           <div>
@@ -174,6 +180,24 @@
             <pre id="trace-content" class="content-box">Noch kein Trace vorhanden.</pre>
           </details>
         </section>
+      </section>
+      </div>
+      <section id="workspace-road" class="road-workspace" aria-label="Straßenkamera-Demonstration" hidden>
+        <p id="road-workspace-status" class="road-workspace-status" role="status" aria-live="polite"></p>
+        <div id="road-camera-root" class="road-camera-root"></div>
+        <div class="road-workspace-grid">
+          <section id="road-model-root" class="road-workspace-panel" aria-label="Modellprüfung"></section>
+          <section id="road-workplace-root" class="road-workspace-panel" aria-label="Menschliche Prüfung und Demo-Postfach"></section>
+          <section id="road-timeline-root" class="road-workspace-panel road-timeline" aria-labelledby="road-timeline-title">
+            <header class="road-panel-header">
+              <h2 id="road-timeline-title" class="road-panel-title">Fallchronik</h2>
+            </header>
+            <div id="road-controller-trace"></div>
+            <div id="road-timeline-content">
+              <p class="road-empty-state">Starte eine Kameraquelle, um den echten Trace und das Entscheidungsjournal zu sehen.</p>
+            </div>
+          </section>
+        </div>
       </section>
     </main>
     <footer class="app-footer">
