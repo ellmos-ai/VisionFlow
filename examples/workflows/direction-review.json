@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "name": "direction-review",
+  "input": {
+    "kind": "video",
+    "source": "USER_PROVIDED"
+  },
+  "limits": {
+    "max_observation_seconds": 300,
+    "max_frames": 300,
+    "max_llm_calls": 4
+  },
+  "nodes": [
+    {
+      "id": "analyze",
+      "type": "analyze",
+      "params": {
+        "tool": "direction"
+      },
+      "next": [
+        "report"
+      ]
+    },
+    {
+      "id": "report",
+      "type": "report",
+      "params": {
+        "format": "markdown"
+      },
+      "next": []
+    }
+  ],
+  "outputs": [
+    {
+      "type": "display",
+      "requires_approval": false
+    },
+    {
+      "type": "notification_draft",
+      "requires_approval": true
+    }
+  ]
+}
