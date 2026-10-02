@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>VisionFlow – lokaler Analyse-Arbeitsplatz</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Lokale Computer-Vision</p>
+        <h1>VisionFlow</h1>
+      </div>
+      <p id="connection-status" class="connection-status" role="status" aria-live="polite">
+        Lokale Sitzung wird geprüft …
+      </p>
+    </header>
+
+    <main class="layout">
+      <section class="panel setup-panel" aria-labelledby="setup-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Quelle → Ablauf</p>
+            <h2 id="setup-title">Analyse einrichten</h2>
+          </div>
+          <span class="schema-chip">Schema 1</span>
+        </div>
+
+        <form id="workflow-form" novalidate>
+          <label for="workflow-name">Name des Laufs</label>
+          <input id="workflow-name" name="name" type="text" maxlength="120" value="VisionFlow-Prüfung">
+
+          <label for="workflow-preset">Ablaufvorlage</label>
+          <select id="workflow-preset" name="workflow-preset">
+            <option value="document-quality">Dokumentqualität · gezielte Neuaufnahme</option>
+            <option value="motion-observation">Bewegungsbeobachtung · Video</option>
+          </select>
+          <p id="preset-description" class="hint">Diese Vorlage fordert bewusst eine Neuaufnahme an; sie entscheidet nicht automatisch anhand eines Messwert-Grenzwerts.</p>
+
+          <label for="input-kind">Eingabequelle</label>
+          <select id="input-kind" name="input-kind">
+            <option value="image">Einzelbild</option>
+            <option value="video">Videodatei</option>
+            <option value="camera">Freigegebene Kamera</option>
+          </select>
+
+          <div id="file-source" class="source-group">
+            <label for="source-file">Bild oder Video auswählen</label>
+            <input id="source-file" name="source-file" type="file" accept="image/*,.avi,.mp4,.mov,.mkv,.webm">
+            <p id="file-description" class="hint">Die Datei bleibt lokal. Der Server speichert sie unter einer erzeugten Referenz.</p>
+            <p id="file-name" class="file-name" aria-live="polite">Keine Datei ausgewählt.</p>
+          </div>
+
+          <div id="camera-source" class="source-group" hidden>
+            <label for="camera-name">Freigegebener Kameraname</label>
+            <input id="camera-name" name="camera-name" type="text" inputmode="text" autocomplete="off" placeholder="z. B. front">
+            <p class="hint">Der Server muss diesen Namen ausdrücklich mit <code>serve --camera NAME=INDEX</code> freigeben. Es findet keine Kamerasuche statt.</p>
+          </div>
+
+          <label for="tool-select">Analysewerkzeug</label>
+          <select id="tool-select" name="tool" disabled>
+            <option value="">Werkzeuge werden geladen …</option>
+          </select>
+          <p id="tool-description" class="hint" aria-live="polite"></p>
+
+          <div id="model-question-group" class="source-group" hidden>
+            <label for="model-question">Frage für den Modellentscheidungsschritt</label>
+            <textarea id="model-question" name="question" rows="2">Welche Auffälligkeit zeigen die Messwerte?</textarea>
+            <p class="hint">Falls der Ablauf eine Modellentscheidung erreicht, wird die konfigurierte lokale Fixture-Entscheidung verwendet. Externe Modellanbieter werden hier nicht angeboten.</p>
+          </div>
+
+          <div class="limits-grid">
+            <div>
+              <label for="observation-limit">Beobachtungsgrenze (Sek.)</label>
+              <input id="observation-limit" type="number" min="1" max="300" step="1" value="10">
+            </div>
+            <div>
+              <label for="sample-fps">Abtastrate (Bilder/Sek.)</label>
+              <input id="sample-fps" type="number" min="0.1" max="30" step="0.1" value="1">
+            </div>
+            <div>
+              <label for="max-frames">Frame-Limit</label>
+              <input id="max-frames" type="number" min="1" max="300" step="1" value="60">
+            </div>
+            <div>
+              <label for="max-model-calls">Modellaufruf-Limit</label>
+              <input id="max-model-calls" type="number" min="1" max="20" step="1" value="4">
+            </div>
+          </div>
+
+          <label class="checkbox-row" for="approval-draft">
+            <input id="approval-draft" type="checkbox">
+            <span>Benachrichtigungsentwurf zur Freigabe vorlegen</span>
+          </label>
+          <p class="hint">Eine Bestätigung speichert nur die Freigabe. Es wird nichts versendet.</p>
+
+          <div class="button-row">
+            <button id="validate-button" class="button secondary" type="button">Konfiguration prüfen</button>
+            <button id="start-button" class="button primary" type="button" disabled>Lauf starten</button>
+          </div>
+        </form>
+        <p id="setup-message" class="message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel run-panel" aria-labelledby="run-title">
+        <div class="section-heading run-heading">
+          <div>
+            <p class="eyebrow">Laufstatus</p>
+            <h2 id="run-title">Ergebnisse und Belege</h2>
+          </div>
+          <span id="status-badge" class="status-badge" data-state="idle">Noch kein Lauf</span>
+        </div>
+
+        <div class="run-controls">
+          <p class="run-id">Lauf-ID: <code id="run-id">–</code></p>
+          <button id="cancel-button" class="button danger" type="button" disabled>Lauf abbrechen</button>
+        </div>
+        <p id="run-message" class="message" role="status" aria-live="polite">Ein geprüfter Lauf erscheint hier.</p>
+
+        <section class="budget-panel" aria-labelledby="budget-title">
+          <h3 id="budget-title">Budget laut Controller-Trace</h3>
+          <p id="budget-summary" class="hint">Noch kein Budget-Snapshot im Trace verfügbar.</p>
+        </section>
+
+        <section id="input-panel" class="followup-panel" aria-labelledby="input-title" hidden>
+          <h3 id="input-title">Eingabe erforderlich</h3>
+          <p id="input-reason" class="followup-reason"></p>
+          <label for="replacement-file">Optionale Ersatzdatei derselben Quellenart</label>
+          <input id="replacement-file" type="file" accept="image/*,.avi,.mp4,.mov,.mkv,.webm">
+          <label for="resume-json">Zusätzliche Eingabe als JSON-Objekt</label>
+          <textarea id="resume-json" rows="3">{}</textarea>
+          <button id="resume-button" class="button primary" type="button">Eingabe übermitteln</button>
+        </section>
+
+        <section id="approval-panel" class="followup-panel approval-panel" aria-labelledby="approval-title" hidden>
+          <h3 id="approval-title">Entwurf prüfen</h3>
+          <p id="approval-reason" class="followup-reason"></p>
+          <p class="hint">Die Freigabe versendet keine Nachricht und löst keine externe Aktion aus.</p>
+          <p id="approval-expiry" class="hint"></p>
+          <pre id="approval-content" class="content-box"></pre>
+          <div class="button-row">
+            <button id="reject-button" class="button secondary" type="button">Ablehnen</button>
+            <button id="confirm-button" class="button primary" type="button">Entwurf bestätigen</button>
+          </div>
+        </section>
+
+        <div class="results-grid">
+          <section class="result-section" aria-labelledby="findings-title">
+            <h3 id="findings-title">Tatsächliche Befunde</h3>
+            <div id="findings-list" class="findings-list">
+              <p class="empty-state">Noch keine Befunde gespeichert.</p>
+            </div>
+          </section>
+          <section class="result-section evidence-section" aria-labelledby="evidence-title">
+            <h3 id="evidence-title">Evidenzvorschau</h3>
+            <figure class="evidence-frame">
+              <img id="evidence-image" alt="Gespeicherter Bildbeleg" hidden>
+              <figcaption id="evidence-caption">Ein Befund mit Belegreferenz zeigt hier sein gespeichertes Bild.</figcaption>
+            </figure>
+          </section>
+        </div>
+
+        <section class="result-section report-section" aria-labelledby="report-title">
+          <div class="section-heading compact-heading">
+            <h3 id="report-title">Bericht und Trace</h3>
+            <button id="load-report-button" class="button secondary" type="button" disabled>Bericht laden</button>
+          </div>
+          <pre id="report-content" class="content-box">Der Bericht wird aus dem gespeicherten Lauf geladen.</pre>
+          <details>
+            <summary>Gespeicherte Trace-Ereignisse</summary>
+            <pre id="trace-content" class="content-box">Noch kein Trace vorhanden.</pre>
+          </details>
+        </section>
+      </section>
+    </main>
+    <footer class="app-footer">
+      <span>Verarbeitung und Speicherung erfolgen lokal.</span>
+      <span>Diese Oberfläche öffnet keine externen Dienste.</span>
+    </footer>
+  </body>
+</html>

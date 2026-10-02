@@ -36,3 +36,11 @@ _reports/
 docs/audits/
 docs/superpowers/
 .worktrees/
+
+# Local server uploads, evidence and run artifacts
+.visionflow-data/
+
+# Generated package metadata and distributions
+*.egg-info/
+build/
+dist/

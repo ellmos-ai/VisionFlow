@@ -9,11 +9,17 @@ description = "Reusable, configurable vision workflows for image, video, and cam
 requires-python = ">=3.12"
 dependencies = ["numpy==2.5.3", "opencv-python==5.0.0.93"]
 
+[project.scripts]
+visionflow = "visionflow.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest==9.1.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+visionflow = ["web/*.html", "web/*.js", "web/*.css"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
