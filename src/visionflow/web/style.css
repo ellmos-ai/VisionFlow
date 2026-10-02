@@ -156,6 +156,19 @@ summary { color: var(--muted); cursor: pointer; }
 .empty-state { margin: .2rem 0; color: var(--muted); font-size: .82rem; }
 .evidence-button { margin-top: .15rem; }
 
+.sample-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.35rem 0;
+  flex-wrap: wrap;
+}
+
+.sample-btn {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.75rem;
+  min-height: 34px;
+}
+
 .app-footer { margin-top: auto; border-top: 1px solid var(--line); border-bottom: 0; color: var(--muted); font-size: .75rem; }
 
 @media (max-width: 920px) {

@@ -27,9 +27,7 @@ function hasValue(value) {
 }
 
 function setHidden(node, hidden) {
-  node.hidden = hidden;
-  if (hidden) node.style.display = "none";
-  else node.style.removeProperty("display");
+  node.hidden = Boolean(hidden);
 }
 
 function displayValue(value, fallback = "Nicht angegeben") {

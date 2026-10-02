@@ -1,3 +1,40 @@
+/* VisionFlow – Leitwarten- & Straßenkamera-Design
+   Farben: Dark Navy / Slate / Cyan / Signalrot / Smaragdgrün
+   Keine externen Webfonts, responsive ab 390px
+*/
+
+:root {
+  --road-bg-canvas: #090d16;
+  --road-bg-surface: #131b2e;
+  --road-bg-elevated: #1e293b;
+  --road-bg-sunken: #0b1220;
+  --road-border-subtle: #243049;
+  --road-border-strong: #384869;
+
+  --road-text-primary: #f8fafc;
+  --road-text-secondary: #94a3b8;
+  --road-text-muted: #64748b;
+
+  --road-accent: #38bdf8;
+  --road-accent-glow: rgba(56, 189, 248, 0.25);
+  --road-status-normal: #10b981;
+  --road-status-warning: #f59e0b;
+  --road-status-danger: #ef4444;
+  --road-status-police: #6366f1;
+
+  --road-desk-wood: #231c16;
+  --road-laptop-body: #334155;
+  --road-laptop-base: #475569;
+  --road-laptop-screen: #0a0f1d;
+
+  --road-radius-sm: 6px;
+  --road-radius-md: 10px;
+  --road-radius-lg: 14px;
+}
+
+/* ========================================================
+   WORKSPACE SHELL & TABS
+   ======================================================== */
 .workspace-shell {
   width: min(1500px, 100%);
   min-width: 0;
@@ -9,19 +46,23 @@
 .workspace-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: .55rem;
-  margin: 0 0 1rem;
+  gap: .65rem;
+  margin: 0 0 1.25rem;
 }
 
 .workspace-tabs .button {
-  min-width: 8rem;
+  min-width: 9rem;
   min-height: 44px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: all 0.2s ease;
 }
 
 .workspace-tabs .button[aria-pressed="true"] {
   border-color: var(--accent);
-  color: #bae6fd;
-  box-shadow: inset 0 -2px 0 var(--accent);
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.2), inset 0 -2px 0 var(--accent);
 }
 
 .workspace-analysis.layout {
@@ -30,6 +71,9 @@
   padding: 0;
 }
 
+/* ========================================================
+   STRASSENKAMERA ROOT & HEADING
+   ======================================================== */
 .road-workspace,
 .road-camera-root,
 .road-camera {
@@ -40,251 +84,840 @@
 
 .road-camera {
   display: grid;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .road-camera__heading {
-  min-width: 0;
-}
-
-.road-camera__heading h2,
-.road-camera__heading p {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--road-border-subtle);
 }
 
 .road-camera__heading h2 {
-  font-size: 1.25rem;
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--road-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.road-camera__heading h2::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--road-accent);
+  box-shadow: 0 0 10px var(--road-accent);
 }
 
 .road-camera__intro {
-  margin-top: .3rem !important;
-  color: var(--muted);
-  font-size: .88rem;
+  margin: 0;
+  color: var(--road-text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.4;
 }
 
-.road-camera__toolbar,
-.road-camera__run-toolbar {
+/* ========================================================
+   CASE OPTIONS & TOOLBAR
+   ======================================================== */
+.road-camera__case-options {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 260px) auto minmax(240px, 1fr);
+  align-items: center;
+  gap: 0.75rem 1rem;
+  background: var(--road-bg-surface);
+  border: 1px solid var(--road-border-subtle);
+  border-radius: var(--road-radius-md);
+  padding: 0.85rem 1.15rem;
+}
+
+.road-camera__case-options label {
+  color: var(--road-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.road-camera__mode-select,
+.road-camera__profile-select {
+  background: var(--road-bg-sunken);
+  color: var(--road-text-primary);
+  border: 1px solid var(--road-border-strong);
+  border-radius: var(--road-radius-sm);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.88rem;
+  min-height: 40px;
+}
+
+.road-camera__toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: .6rem;
-  min-width: 0;
+  gap: 0.75rem;
 }
 
-.road-camera__toolbar .button,
-.road-camera__run-toolbar .button,
-.road-camera__events .button,
-.road-camera__clip-button {
+.road-camera__toolbar .button {
   min-height: 44px;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  border-radius: var(--road-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.road-camera__status,
-.road-camera__source,
-.road-camera__run-summary,
-.road-camera__recording-summary,
-.road-camera__frame-meta,
-.road-camera__player-caption {
-  margin: 0;
-  overflow-wrap: anywhere;
+.road-quick-demo-btn {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+  color: #ffffff !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.35) !important;
+  font-weight: 700 !important;
 }
 
-.road-camera__status,
-.road-camera__source,
-.road-camera__run-summary,
-.road-camera__recording-summary {
-  color: var(--muted);
+.road-quick-demo-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0369a1 0%, #075985 100%) !important;
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.5) !important;
+  transform: translateY(-1px);
 }
 
 .road-camera__status {
-  min-height: 1.5rem;
-  color: var(--green);
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--road-status-normal);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .road-camera__status--error {
-  color: var(--red);
+  color: var(--road-status-danger);
 }
 
-.road-camera__run,
-.road-camera__live,
-.road-camera__events,
-.road-camera__recording,
-.road-camera__player-panel {
-  min-width: 0;
-  padding: 1rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 22px #02061733;
+.road-camera__source {
+  margin: -0.5rem 0 0;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.78rem;
+  color: var(--road-text-muted);
 }
 
-.road-camera__run h3,
-.road-camera__live h3,
-.road-camera__events h3,
-.road-camera__recording h3,
-.road-camera__player-panel h3 {
-  margin: 0 0 .7rem;
-  font-size: .98rem;
+/* ========================================================
+   RUN / TRACE PANEL
+   ======================================================== */
+.road-camera__run {
+  background: var(--road-bg-surface);
+  border: 1px solid var(--road-border-subtle);
+  border-radius: var(--road-radius-md);
+  padding: 1rem 1.25rem;
+}
+
+.road-camera__run h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: var(--road-text-primary);
 }
 
 .road-camera__run-toolbar {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  margin-bottom: .6rem;
+  gap: 1rem;
+}
+
+.road-camera__run-summary {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--road-text-secondary);
 }
 
 .road-camera__findings {
   display: grid;
-  gap: .55rem;
-  margin-top: .75rem;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .road-camera__finding {
-  min-width: 0;
-  margin: 0;
-  padding: .7rem;
-  overflow-wrap: anywhere;
-  background: var(--input);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  font-size: .8rem;
+  background: var(--road-bg-sunken);
+  border: 1px solid var(--road-border-strong);
+  border-left: 3px solid var(--road-accent);
+  border-radius: var(--road-radius-sm);
+  padding: 0.65rem 0.85rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+  color: #e2e8f0;
 }
 
 .road-camera__trace {
-  max-height: 18rem;
+  max-height: 16rem;
   overflow: auto;
-  margin: .6rem 0 0;
-  padding: .75rem;
-  background: var(--input);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: #dbeafe;
-  font: .75rem/1.5 ui-monospace, "Cascadia Code", monospace;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  margin: 0.6rem 0 0;
+  padding: 0.75rem;
+  background: var(--road-bg-sunken);
+  border: 1px solid var(--road-border-subtle);
+  border-radius: var(--road-radius-sm);
+  color: #bae6fd;
+  font: 0.76rem/1.5 ui-monospace, "Cascadia Code", monospace;
 }
 
+/* ========================================================
+   LIVE STREAM & CAMERA VIEWPORT
+   ======================================================== */
 .road-camera__content {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 1.25rem;
   align-items: start;
 }
 
 .road-camera__live {
-  grid-row: span 2;
+  background: var(--road-bg-surface);
+  border: 1px solid var(--road-border-subtle);
+  border-radius: var(--road-radius-lg);
+  padding: 1.15rem;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.4);
+}
+
+.road-camera__live h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.road-camera__viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-color: #0b1220;
+  border-radius: var(--road-radius-md);
+  overflow: hidden;
+  border: 1px solid var(--road-border-strong);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6);
 }
 
 .road-camera__frame {
   display: block;
   width: 100%;
-  max-height: min(60vh, 620px);
-  aspect-ratio: 16 / 9;
+  height: 100%;
   object-fit: contain;
-  background: #050a13;
-  border: 1px solid var(--line);
-  border-radius: 7px;
+  background: #0b1220;
+}
+
+.road-camera__hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, rgba(9, 13, 22, 0.85) 0%, rgba(9, 13, 22, 0) 100%);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.75rem;
+  color: var(--road-text-secondary);
+  pointer-events: none;
+}
+
+.road-camera__rec-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: #f87171;
+}
+
+.road-camera__rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+  animation: road-pulse 1.5s infinite;
+}
+
+.road-camera__rec-dot--standby {
+  background: #64748b;
+  box-shadow: none;
+  animation: none;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@keyframes road-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.85); }
 }
 
 .road-camera__frame-meta {
-  margin-top: .55rem;
-  color: var(--muted);
-  font-size: .78rem;
+  margin-top: 0.6rem;
+  color: var(--road-text-muted);
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
 }
 
+/* ========================================================
+   EVENTS & CONTROLS (SECONDARY COLUMN)
+   ======================================================== */
 .road-camera__secondary {
   display: grid;
-  gap: 1rem;
-  min-width: 0;
+  gap: 1.25rem;
 }
 
-.road-camera__events {
-  display: grid;
-  gap: .6rem;
-  align-content: start;
+.road-camera__events,
+.road-camera__recording,
+.road-camera__player-panel {
+  background: var(--road-bg-surface);
+  border: 1px solid var(--road-border-subtle);
+  border-radius: var(--road-radius-md);
+  padding: 1.15rem;
+  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.3);
 }
 
-.road-camera__events label {
-  display: block;
-  margin: 0;
+.road-camera__events h3,
+.road-camera__recording h3,
+.road-camera__player-panel h3 {
+  margin: 0 0 0.65rem;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: var(--road-text-primary);
 }
 
 .road-camera__event-select {
+  width: 100%;
   min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  background: var(--road-bg-sunken);
+  color: var(--road-text-primary);
+  border: 1px solid var(--road-border-strong);
+  border-radius: var(--road-radius-sm);
+  font-size: 0.92rem;
+  margin-bottom: 0.65rem;
 }
 
-.road-camera__hint,
-.road-camera__empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: .8rem;
-  overflow-wrap: anywhere;
+.road-camera__hint {
+  margin: 0.65rem 0 0;
+  color: var(--road-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .road-camera__clip-list {
-  display: grid;
-  gap: .5rem;
-  margin-top: .6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
 }
 
 .road-camera__clip-button {
   width: 100%;
   text-align: left;
-  overflow-wrap: anywhere;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.85rem;
+  background: var(--road-bg-sunken);
+  border: 1px solid var(--road-border-subtle);
+  border-radius: var(--road-radius-sm);
+  color: var(--road-text-secondary);
+  transition: all 0.15s ease;
+}
+
+.road-camera__clip-button:hover {
+  background: var(--road-bg-elevated);
+  border-color: var(--road-accent);
+  color: var(--road-text-primary);
 }
 
 .road-camera__clip-button[aria-pressed="true"] {
-  border-color: var(--accent);
+  border-color: var(--road-accent);
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.road-camera__player-empty {
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  background: var(--road-bg-sunken);
+  border: 1px dashed var(--road-border-subtle);
+  border-radius: var(--road-radius-md);
+  color: var(--road-text-muted);
+  font-size: 0.85rem;
 }
 
 .road-camera__player {
   display: block;
   width: 100%;
-  max-height: min(60vh, 620px);
   aspect-ratio: 16 / 9;
-  background: #050a13;
-  border: 1px solid var(--line);
-  border-radius: 7px;
+  background: #000000;
+  border-radius: var(--road-radius-sm);
+  border: 1px solid var(--road-border-subtle);
 }
 
-.road-camera__player-caption {
-  margin-top: .55rem;
-  color: var(--muted);
-  font-size: .8rem;
+/* ========================================================
+   WORKSPACE GRID: MODEL & WORKPLACE
+   ======================================================== */
+.road-workspace-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  margin-top: 1.75rem;
 }
 
-@media (max-width: 780px) {
-  .road-camera__content {
+.road-workspace-panel {
+  background: var(--road-bg-surface);
+  border: 1px solid var(--road-border-subtle);
+  border-radius: var(--road-radius-lg);
+  padding: 1.5rem;
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.45);
+}
+
+/* Panel Header */
+.road-panel-header,
+.road-workplace-header,
+.road-model-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--road-border-subtle);
+}
+
+.road-panel-title,
+.road-workplace-title,
+.road-model-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--road-text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Badges */
+.road-badge,
+.road-case-badge,
+.road-model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--road-bg-sunken);
+  border: 1px solid var(--road-border-subtle);
+  color: var(--road-text-secondary);
+}
+
+.road-badge-normal { color: #34d399; border-color: rgba(52, 211, 153, 0.4); background: rgba(52, 211, 153, 0.1); }
+.road-badge-warning { color: #fbbf24; border-color: rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.1); }
+.road-badge-danger { color: #f87171; border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.1); }
+.road-badge-police { color: #818cf8; border-color: rgba(129, 140, 248, 0.4); background: rgba(129, 140, 248, 0.1); }
+
+/* Buttons */
+.road-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 18px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--road-text-primary);
+  background-color: var(--road-bg-elevated);
+  border: 1px solid var(--road-border-strong);
+  border-radius: var(--road-radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.road-btn:hover:not(:disabled) {
+  background-color: #2e3c54;
+  border-color: var(--road-accent);
+}
+
+.road-btn-primary {
+  background-color: #0284c7;
+  border-color: #0369a1;
+  color: #ffffff;
+}
+
+.road-btn-danger {
+  background-color: #dc2626;
+  border-color: #b91c1c;
+  color: #ffffff;
+}
+
+.road-btn-danger:hover:not(:disabled) {
+  background-color: #b91c1c;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.4);
+}
+
+.road-btn-group,
+.road-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  width: 100%;
+}
+
+.road-decision-actions > .road-btn {
+  flex: 1 1 200px;
+  font-size: 0.95rem;
+}
+
+/* ========================================================
+   BEREICH 3: MENSCHLICHER ARBEITSPLATZ (BÜRO & LAPTOP)
+   ======================================================== */
+.road-office-scene {
+  position: relative;
+  width: 100%;
+  background: radial-gradient(circle at 50% 30%, #1e293b 0%, #0f172a 70%, var(--road-desk-wood) 70%, #140e0a 100%);
+  border-radius: var(--road-radius-lg);
+  padding: 2.5rem 1.5rem 2rem;
+  border: 1px solid var(--road-border-strong);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: inset 0 2px 10px rgba(255, 255, 255, 0.05);
+}
+
+.road-desk-caption {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #cbd5e1;
+  margin: 0 0 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.road-desk-caption::before,
+.road-desk-caption::after {
+  content: "";
+  display: inline-block;
+  width: 24px;
+  height: 2px;
+  background: var(--road-border-strong);
+}
+
+.road-laptop-wrapper {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.road-laptop-screen-frame {
+  width: 100%;
+  background-color: #0b1220;
+  border: 10px solid var(--road-laptop-body);
+  border-bottom-width: 16px;
+  border-radius: 14px 14px 2px 2px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+  padding: 1rem;
+}
+
+.road-laptop-screen {
+  background-color: var(--road-laptop-screen);
+  border-radius: var(--road-radius-sm);
+  padding: 1rem;
+  border: 1px solid var(--road-border-subtle);
+  min-height: 380px;
+}
+
+.road-laptop-base {
+  width: 106%;
+  max-width: 920px;
+  height: 22px;
+  background: linear-gradient(180deg, var(--road-laptop-base) 0%, #334155 100%);
+  border-radius: 2px 2px 10px 10px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  margin-top: -2px;
+  position: relative;
+}
+
+.road-laptop-notch {
+  width: 120px;
+  height: 5px;
+  background-color: #1e293b;
+  margin: 0 auto;
+  border-radius: 0 0 6px 6px;
+}
+
+/* COUNTDOWN BANNER */
+.road-countdown-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: var(--road-radius-md);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(185, 28, 28, 0.25) 100%);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+  margin-bottom: 16px;
+}
+
+.road-countdown-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fecaca;
+  letter-spacing: -0.01em;
+}
+
+.road-countdown-clock {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #ef4444;
+  text-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+  min-width: 4rem;
+  text-align: right;
+}
+
+.road-case-deadline {
+  font-size: 0.8rem;
+  color: #fca5a5;
+  width: 100%;
+}
+
+.road-case-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.road-case-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--road-border-subtle);
+}
+
+.road-case-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--road-text-primary);
+  margin: 0;
+}
+
+/* ========================================================
+   SIMULIERTE BEHÖRDEN-INBOX
+   ======================================================== */
+.road-inbox-container {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--road-border-subtle);
+}
+
+.road-simulation-disclaimer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background-color: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: var(--road-radius-md);
+  font-size: 0.85rem;
+  color: #c7d2fe;
+  margin-bottom: 14px;
+}
+
+.road-inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.road-inbox-card {
+  background-color: var(--road-bg-sunken);
+  border: 1px solid var(--road-border-subtle);
+  border-left: 5px solid var(--road-status-police);
+  border-radius: var(--road-radius-sm);
+  padding: 14px;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.road-inbox-card.correction {
+  border-left-color: var(--road-status-normal);
+  background-color: rgba(16, 185, 129, 0.08);
+  margin-left: 18px;
+}
+
+/* ========================================================
+   MODELLPRÜFUNG CARDS & JSON VIEWER
+   ======================================================== */
+.road-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.road-model-card {
+  background: var(--road-bg-sunken);
+  border: 1px solid var(--road-border-subtle);
+  border-radius: var(--road-radius-md);
+  padding: 16px;
+}
+
+.road-model-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.road-model-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.88rem;
+}
+
+.road-model-field-label {
+  color: var(--road-text-secondary);
+  font-weight: 600;
+}
+
+.road-model-field-value {
+  color: var(--road-text-primary);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.84rem;
+}
+
+.road-inspector-box {
+  background-color: #060a12;
+  border: 1px solid var(--road-border-subtle);
+  border-radius: var(--road-radius-md);
+  padding: 12px 14px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.82rem;
+  color: #bae6fd;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Evidence Gallery */
+.road-model-evidence-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.road-model-evidence-image {
+  background: #000000;
+  border: 1px solid var(--road-border-strong);
+  border-radius: var(--road-radius-sm);
+  overflow: hidden;
+  max-width: 180px;
+  margin: 0;
+}
+
+.road-model-evidence-image img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.road-model-evidence-image-caption {
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  color: var(--road-text-muted);
+  font-family: ui-monospace, monospace;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ========================================================
+   EMPTY STATES
+   ======================================================== */
+.road-empty-state {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--road-text-muted);
+  font-size: 0.92rem;
+  border: 1px dashed var(--road-border-subtle);
+  border-radius: var(--road-radius-md);
+  background-color: rgba(11, 18, 32, 0.4);
+}
+
+/* ========================================================
+   RESPONSIVITÄT
+   ======================================================== */
+@media (max-width: 960px) {
+  .road-camera__content,
+  .road-model-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .road-camera__live {
-    grid-row: auto;
+  .road-camera__case-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .road-laptop-base {
+    display: none;
+  }
+
+  .road-laptop-screen-frame {
+    border-width: 4px;
+    border-radius: var(--road-radius-md);
+    box-shadow: none;
+    padding: 6px;
+  }
+
+  .road-office-scene {
+    padding: 1rem 0.5rem;
   }
 }
 
 @media (max-width: 480px) {
   .workspace-shell {
-    padding-inline: .65rem;
+    padding-inline: 0.5rem;
   }
 
-  .workspace-tabs .button {
-    flex: 1 1 8rem;
-  }
-
-  .road-camera__toolbar .button,
-  .road-camera__run-toolbar .button,
-  .road-camera__events .button {
+  .road-camera__toolbar .button {
     flex: 1 1 100%;
   }
 
-  .road-camera__live,
-  .road-camera__events,
-  .road-camera__recording,
-  .road-camera__player-panel,
-  .road-camera__run {
-    padding: .75rem;
+  .road-decision-actions > .road-btn {
+    flex: 1 1 100%;
   }
-}
-
-.road-camera__run-summary--error {
-  color: var(--red);
 }

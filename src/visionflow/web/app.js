@@ -944,6 +944,93 @@
     lastUploadedSource = null;
     $("start-button").disabled = false;
   });
+
+  function generateSampleDocument(blurred = false) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, 640, 480);
+
+    if (blurred) {
+      ctx.filter = "blur(6px)";
+    }
+
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(40, 40, 560, 45);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText("VisionFlow Prüfbericht · Musterbeleg", 60, 70);
+
+    ctx.fillStyle = "#1e293b";
+    ctx.font = "14px monospace";
+    ctx.fillText("Vorgang: VF-2026-QA-DOC-001", 60, 120);
+    ctx.fillText("Prüfstelle: Leitwarte Nord · Automatisierte Dokumentenprüfung", 60, 145);
+    ctx.fillText("Status: Eingangsqualitätskontrolle", 60, 170);
+
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(60, 200, 520, 160);
+    ctx.beginPath();
+    ctx.moveTo(60, 240);
+    ctx.lineTo(580, 240);
+    ctx.stroke();
+
+    ctx.fillStyle = "#334155";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText("Position", 75, 225);
+    ctx.fillText("Beschreibung", 180, 225);
+    ctx.fillText("Messwert", 440, 225);
+
+    ctx.font = "12px sans-serif";
+    ctx.fillText("01", 75, 270);
+    ctx.fillText("Schärfemessung Laplace-Varianz", 180, 270);
+    ctx.fillText(blurred ? "24.1 (UNSCHARF)" : "420.8 (SCHARF)", 440, 270);
+
+    ctx.fillText("02", 75, 305);
+    ctx.fillText("Kontrast- und Helligkeitsprüfung", 180, 305);
+    ctx.fillText("0.88 OK", 440, 305);
+
+    ctx.fillText("03", 75, 340);
+    ctx.fillText("Perspektivenentzerrung", 180, 340);
+    ctx.fillText("0.02 Radian", 440, 340);
+
+    ctx.save();
+    ctx.translate(320, 420);
+    ctx.fillStyle = blurred ? "rgba(239, 68, 68, 0.85)" : "rgba(16, 185, 129, 0.85)";
+    ctx.font = "bold 15px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(blurred ? "QUALITÄTSPRÜFUNG: UNSCHARF · NEUAUFNAHME ERFORDERLICH" : "QUALITÄTSPRÜFUNG: BESTANDEN · HOHE SCHÄRFE", 0, 0);
+    ctx.restore();
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const fileName = blurred ? "beispieldokument-unscharf.png" : "beispieldokument-scharf.png";
+      const file = new File([blob], fileName, { type: "image/png" });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      $("source-file").files = dt.files;
+      $("input-kind").value = "image";
+      sourceKindChanged();
+      $("file-name").textContent = `${file.name} · ${file.size.toLocaleString("de-DE")} Byte (vom System erzeugt)`;
+      lastUploadedFile = null;
+      lastUploadedKind = null;
+      lastUploadedSource = null;
+      $("start-button").disabled = false;
+      setMessage($("setup-message"), `Beispieldokument (${blurred ? "unscharf" : "scharf"}) geladen. Klicke auf 'Lauf starten' oder 'Konfiguration prüfen'.`);
+    }, "image/png");
+  }
+
+  if ($("sample-sharp-btn")) {
+    $("sample-sharp-btn").addEventListener("click", () => generateSampleDocument(false));
+  }
+  if ($("sample-blurred-btn")) {
+    $("sample-blurred-btn").addEventListener("click", () => generateSampleDocument(true));
+  }
+
   $("validate-button").addEventListener("click", validateWorkflow);
   $("start-button").addEventListener("click", startRun);
   $("cancel-button").addEventListener("click", cancelRun);

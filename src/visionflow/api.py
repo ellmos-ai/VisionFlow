@@ -566,7 +566,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
 
             if path in {
                 "/", "/index.html", "/app.js", "/style.css", "/road-camera.js",
-                "/road-model.js", "/road-workplace.js", "/road.css",
+                "/road-model.js", "/road-workplace.js", "/road.css", "/favicon.ico",
             }:
                 self._serve_web(path)
                 return
@@ -602,7 +602,10 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             self._handle_exception(exc)
 
     def _serve_web(self, path: str) -> None:
-        filename = {
+        if path == "/favicon.ico":
+            self._send_bytes(204, b"", "image/x-icon")
+            return
+        mapping = {
             "/": "index.html",
             "/index.html": "index.html",
             "/app.js": "app.js",
@@ -611,7 +614,10 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             "/road-model.js": "road-model.js",
             "/road-workplace.js": "road-workplace.js",
             "/road.css": "road.css",
-        }[path]
+        }
+        if path not in mapping:
+            raise _ApiFault(404, "not_found", "The requested local resource does not exist.")
+        filename = mapping[path]
         target = Path(__file__).resolve().parent / "web" / filename
         try:
             payload = target.read_bytes()
@@ -624,7 +630,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         if filename == "index.html":
             headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
-                "media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+                "media-src 'self' blob:; connect-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
             )
         self._send_bytes(200, payload, content_type, extra_headers=headers)
 
