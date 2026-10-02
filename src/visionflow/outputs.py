@@ -5,7 +5,7 @@ import json
 import math
 import re
 import secrets
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, is_dataclass, replace
 from datetime import datetime, timedelta, timezone
 from numbers import Integral, Real
 from typing import Any
@@ -84,9 +84,20 @@ def _model_mode(trace: list[dict[str, Any]]) -> str:
     return "Im Trace protokolliert: " + ", ".join(recorded)
 
 
-def render_report(result: RunResult) -> str:
+def report_snapshot(result: RunResult) -> RunResult:
+    """Reference earlier rendered outputs by metadata instead of nesting their bodies."""
     if not isinstance(result, RunResult):
         raise TypeError("result must be a RunResult")
+    outputs = [
+        {key: value for key, value in output.items()
+         if key != "content" or output.get("type") not in {"report", "notification_draft"}}
+        for output in result.outputs
+    ]
+    return replace(result, outputs=outputs)
+
+
+def render_report(result: RunResult) -> str:
+    result = report_snapshot(result)
 
     trace = _validated_trace(result)
     findings = [_report_value(finding) for finding in result.findings]

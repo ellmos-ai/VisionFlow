@@ -349,10 +349,15 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             parsed = urlsplit(self.path)
             path = parsed.path
             if path == "/session":
-                session_id = secrets.token_urlsafe(32)
-                csrf = secrets.token_urlsafe(32)
+                session_id = self._session_id()
                 now = time.monotonic()
                 with self.server.state.lock:
+                    existing = self.server.state.sessions.get(session_id or "")
+                    if existing is not None and now - existing[1] <= SESSION_TTL_SECONDS:
+                        csrf = existing[0]
+                    else:
+                        session_id = secrets.token_urlsafe(32)
+                        csrf = secrets.token_urlsafe(32)
                     self.server.state.sessions[session_id] = (csrf, now)
                 self._send_json(
                     200,
@@ -375,11 +380,15 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
 
             parts = path.strip("/").split("/") if path != "/" else []
             if len(parts) == 2 and parts[0] == "runs":
-                result = self.server.state.controller.status(parts[1])
+                self.server.state.controller.status(parts[1])
+                session_id = self._require_session(require_csrf=False)
+                result = self._require_run_owner(parts[1], session_id)
                 self._send_json(200, result)
                 return
             if len(parts) == 3 and parts[0] == "runs" and parts[2] == "report":
-                result = self.server.state.controller.status(parts[1])
+                self.server.state.controller.status(parts[1])
+                session_id = self._require_session(require_csrf=False)
+                result = self._require_run_owner(parts[1], session_id)
                 from visionflow.outputs import render_report
 
                 report = render_report(result).encode("utf-8")

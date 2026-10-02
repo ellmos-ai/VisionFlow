@@ -207,6 +207,10 @@ class _SourceIdView:
         return self._wrap_frame(reader(timestamp_seconds))
 
     @property
+    def native_fps(self) -> float | None:
+        return getattr(self._source, "native_fps", None)
+
+    @property
     def timeline_position_seconds(self) -> float | None:
         return getattr(self._source, "timeline_position_seconds", None)
 

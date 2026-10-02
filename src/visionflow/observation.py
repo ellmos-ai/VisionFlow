@@ -303,6 +303,14 @@ def observe(
         media_window_end = media_position + normalized.duration_seconds
         if not math.isfinite(media_window_end):
             raise ObservationRejected("observation timeline end is not finite")
+        native_fps = getattr(source, "native_fps", None)
+        if native_fps is not None:
+            if (isinstance(native_fps, bool) or not isinstance(native_fps, (int, float))
+                    or not math.isfinite(float(native_fps)) or native_fps <= 0):
+                raise ObservationRejected("source native frame rate must be positive and finite")
+            sample_fps = min(normalized.sample_fps, float(native_fps))
+            interval = 1.0 / sample_fps
+            requested_frames = math.ceil(normalized.duration_seconds * sample_fps)
 
     for index in range(requested_frames):
         if uses_media_timeline:

@@ -280,7 +280,7 @@ def test_resume_does_not_reset_frame_budget(tmp_path):
     run_id = controller.start(workflow).run_id
 
     assert controller.wait(run_id, timeout=2).status == "waiting_for_input"
-    assert source.close_calls == 1
+    assert source.close_calls == 0
     controller.resume(run_id, {"input": "continue"})
 
     result = controller.wait(run_id, timeout=2)
@@ -775,6 +775,10 @@ def test_observer_tool_state_is_separate_for_full_frame_and_roi(tmp_path):
     assert result.status == "completed"
     assert len(result.findings) == 2
     assert result.findings[0].metrics == {"calls": 1, "shape": [4, 4]}
-    assert result.findings[1].metrics == {"calls": 1, "shape": [2, 2]}
+    assert result.findings[1].metrics == {
+        "calls": 1, "shape": [2, 2],
+        "coordinate_system": {"region": "source_pixels", "evidence": "crop_pixels", "regions": "crop_pixels"},
+    }
+    assert result.findings[1].region == (0.0, 0.0, 2.0, 2.0)
     assert result.findings[0].frame_ids == result.findings[1].frame_ids == ["same-frame-id"]
     assert result.findings[0].evidence_ref != result.findings[1].evidence_ref

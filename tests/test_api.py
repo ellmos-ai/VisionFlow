@@ -179,6 +179,49 @@ def test_api_unknown_run_is_404(api):
     assert payload["error"]["code"] == "unknown_run"
 
 
+def _start_owned_run(client):
+    status, result, _ = client.request("POST", "/runs", body=json.dumps({
+        "schema_version": 1, "name": "session regression",
+        "input": {"kind": "image", "source": "fixture.png"},
+        "nodes": [{"id": "analyze", "type": "analyze", "params": {"tool": "quality"}}],
+        "outputs": [],
+    }).encode("utf-8"), origin=client.base_url)
+    assert status == 202
+    return result["run_id"]
+
+
+def test_session_bootstrap_preserves_shared_browser_cookie_and_existing_run(api):
+    first, _server, _controller, _root = api
+    first.bootstrap()
+    run_id = _start_owned_run(first)
+    second = ApiClient(first.base_url)
+    second.cookie = first.cookie
+    second.bootstrap()
+    assert second.cookie == first.cookie
+    assert second.csrf_token == first.csrf_token
+    for client in (first, second):
+        status, _payload, _headers = client.request("POST", f"/runs/{run_id}/cancel", body=b"{}",
+                                                   origin=client.base_url)
+        assert status == 200
+
+
+@pytest.mark.parametrize("suffix", ["", "/report"])
+def test_run_reads_require_the_owning_local_session(api, suffix):
+    owner, _server, controller, _root = api
+    owner.bootstrap()
+    run_id = _start_owned_run(owner)
+    controller.runs[run_id].trace = [{"type": "run_started", "at": datetime.now(timezone.utc).isoformat()}]
+    other = ApiClient(owner.base_url)
+    status, payload, _ = other.request("GET", f"/runs/{run_id}{suffix}")
+    assert status == 403
+    assert payload["error"]["code"] == "session_required"
+    other.bootstrap()
+    status, payload, _ = other.request("GET", f"/runs/{run_id}{suffix}")
+    assert status == 403
+    assert payload["error"]["code"] == "session_mismatch"
+    assert owner.request("GET", f"/runs/{run_id}{suffix}")[0] == 200
+
+
 def test_confirm_without_local_session_is_rejected(api):
     client, _server, _controller, _evidence_root = api
     status, payload, _headers = client.request(

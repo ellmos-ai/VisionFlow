@@ -27,7 +27,7 @@ Die gepinnte Lockdatei umfasst Laufzeitpakete und die Testwerkzeuge. Prüfe die 
 .\.venv\Scripts\python.exe -m visionflow.cli --help
 ```
 
-Die editierbare Installation registriert zusätzlich `.\\.venv\\Scripts\\visionflow.exe` und bleibt an diesen Quellcheckout gebunden. `PYTHONPATH` ist damit für die CLI nicht erforderlich; die gezeigte Einstellung erlaubt auch einen direkten Quellimport. Die CLI schreibt auch ohne `PYTHONIOENCODING` UTF-8.
+Die editierbare Installation registriert zusätzlich `.\.venv\Scripts\visionflow.exe` und bleibt an diesen Quellcheckout gebunden. `PYTHONPATH` ist damit für die CLI nicht erforderlich; die gezeigte Einstellung erlaubt auch einen direkten Quellimport. Die CLI schreibt auch ohne `PYTHONIOENCODING` UTF-8.
 
 ## Workflows und Offline-Demo
 
@@ -80,6 +80,12 @@ Kameraeingaben benötigen eine ausdrücklich freigegebene Zuordnung wie `--camer
 
 ## Grenzen
 
-Der MVP enthält keine echte Modell- oder Provideranbindung, keine AWS-Ausführung und keine Wettbewerbsbewertung. Der Fixture-Modus nutzt festgelegte lokale Entscheidungen und macht keine Netzaufrufe. Die künstlichen Beispiele ersetzen weder einen realen Kamera-/Browser-Hardwaretest noch Datensatz-, Baseline- oder Wettbewerbs-Evaluationen. Die lokale Browser-Abnahme am 2026-10-02 bestand sieben Fälle in Headless Edge: separate CLI-Prozesse, Unicode-Uploads und Neuaufnahme, Video-Folgebeobachtung mit Entwurfsfreigabe, Abbruch, defekte Medien und eine 390-Pixel-Ansicht ohne horizontalen Überlauf. Browserkonsole und externe Seitenanfragen blieben leer. Echte Kamera-Hardware und ein Mobilgerät wurden nicht geprüft.
+Der MVP enthält keine echte Modell- oder Provideranbindung, keine AWS-Ausführung und keine Wettbewerbsbewertung. Der Fixture-Modus nutzt festgelegte lokale Entscheidungen und macht keine Netzaufrufe. Die künstlichen Beispiele ersetzen weder einen realen Kamera-/Browser-Hardwaretest noch Datensatz-, Baseline- oder Wettbewerbs-Evaluationen. Die lokale Browser-Abnahme am 2026-10-02 bestand acht Fälle in Headless Edge: separate CLI-Prozesse, Unicode-Uploads und Neuaufnahme, Video-Folgebeobachtung mit Entwurfsfreigabe, Abbruch, defekte Medien, Mehrtabbetrieb und eine 390-Pixel-Ansicht ohne horizontalen Überlauf. Browserkonsole und externe Seitenanfragen blieben leer. Echte Kamera-Hardware und ein Mobilgerät wurden nicht geprüft.
 
 Weitere Test- und Prüfschritte stehen in [docs/TESTING.md](docs/TESTING.md).
+
+## Ausführungsregeln des Kerns
+
+Zusammenlaufende gewählte Workflowzweige werden in topologischer Reihenfolge zusammengeführt; jeder Knoten läuft genau einmal. Mehrere Bildwerkzeuge verwenden dasselbe geladene Bild, wobei jeder Analyse-Knoten weiterhin das Frame-Verarbeitungsbudget belastet. Eine reine Texteingabe bewahrt Mediencursor und Werkzeugzustand; eine ausdrücklich gewählte Ersatzquelle startet einen neuen Analysezustand. Quellen bleiben während einer Eingabepause offen und werden bei Abschluss oder Abbruch geschlossen.
+
+Bei Datei-Videos begrenzt die native Framerate die tatsächliche Abtastung; die konfigurierte `sample_fps` ist eine Obergrenze. Die Vorprüfung des Framebudgets bleibt konservativ anhand der angeforderten Rate. ROI-Findings bewahren die Region in Originalpixeln; `metrics.coordinate_system` kennzeichnet die Pixelkoordinaten des Bildausschnitts und der darin gemessenen Bewegungsregionen. Berichte und Nachrichtenentwürfe übernehmen nur die Metadaten früherer gerenderter Ausgaben, keine verschachtelten Berichtsinhalte.

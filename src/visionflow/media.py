@@ -313,6 +313,13 @@ class VideoSource(_CaptureSource):
         self._observation_timeline_position_seconds: float | None = None
 
     @property
+    def native_fps(self) -> float:
+        """Available native frame rate; observation requests are upper sampling bounds."""
+        if self._fps <= 0:
+            raise MediaError("video frame rate is unavailable for timestamp sampling")
+        return self._fps
+
+    @property
     def timeline_position_seconds(self) -> float:
         """Timestamp of the next native video frame at the current cursor."""
         if self._fps <= 0:

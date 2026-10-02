@@ -59,6 +59,7 @@ class _Run:
     visited: set[str] = field(default_factory=set)
     thread: threading.Thread | None = None
     source: Any = None
+    image_frame: Frame | None = None
     source_needs_reopen: bool = False
     frames_analyzed: int = 0
     evidence_sequence: int = 0
@@ -154,6 +155,7 @@ class Controller:
             run.result.pending_requests.clear()
             run.pending_proposal = None
             source, run.source = run.source, None
+            run.image_frame = None
             self._record_locked(run, {"type": "state_change", "state": "cancelled"})
             run.done_event.set()
             snapshot = copy.deepcopy(run.result)
@@ -205,6 +207,8 @@ class Controller:
                 raise InvalidTransition("resume source must be a non-empty string")
             run.config.input.source = source
             run.source_needs_reopen = True
+            run.image_frame = None
+            run.tool_states.clear()
         if "input" in payload:
             run.user_input = copy.deepcopy(payload["input"])
 
@@ -273,18 +277,19 @@ class Controller:
 
     def _execute(self, run: _Run) -> None:
         nodes = {node.id: node for node in run.config.nodes}
+        order = self._execution_order(nodes)
         while True:
             if run.cancel_event.is_set():
                 return
             with run.lock:
                 if run.result.status in _TERMINAL:
                     return
+                run.queue = list(dict.fromkeys(item for item in run.queue if item not in run.visited))
                 if not run.queue:
                     next_node_id = None
                 else:
-                    next_node_id = run.queue.pop(0)
-                    if next_node_id in run.visited:
-                        raise InvalidTransition(f"workflow revisited node {next_node_id!r}")
+                    next_node_id = min(run.queue, key=lambda item: order.get(item, len(order)))
+                    run.queue.remove(next_node_id)
                     run.visited.add(next_node_id)
             if next_node_id is None:
                 if self._process_outputs(run):
@@ -309,6 +314,34 @@ class Controller:
                     run,
                     {"type": "node_completed", "node_id": node.id, "state": run.result.status},
                 )
+
+    @staticmethod
+    def _execution_order(nodes: dict[str, Node]) -> dict[str, int]:
+        """Order active paths topologically so a shared successor runs only after its ancestors."""
+        edges = {}
+        predecessors = dict.fromkeys(nodes, 0)
+        for node_id, node in nodes.items():
+            targets = set(node.next or [])
+            if node.type == "branch":
+                targets.update((node.params["then_node"], node.params["else_node"]))
+            if targets - nodes.keys():
+                raise ConfigError(f"node {node_id!r} references an unknown successor")
+            edges[node_id] = targets
+            for target in targets:
+                predecessors[target] += 1
+        ready = [node_id for node_id in nodes if predecessors[node_id] == 0]
+        order = {}
+        while ready:
+            current = ready.pop(0)
+            order[current] = len(order)
+            for target in nodes:
+                if target in edges[current]:
+                    predecessors[target] -= 1
+                    if predecessors[target] == 0:
+                        ready.append(target)
+        if len(order) != len(nodes):
+            raise InvalidTransition("workflow contains a static cycle")
+        return order
 
     def _execute_node(self, run: _Run, node: Node) -> tuple[list[str], bool]:
         params = node.params
@@ -372,16 +405,21 @@ class Controller:
             if run.cancel_event.is_set():
                 return
             run.budget.consume(frames=1)
-            frame = source.read()
+            with run.lock:
+                cached = run.image_frame if run.config.input.kind == "image" else None
+            frame = copy.deepcopy(cached) if cached is not None else source.read()
             if frame is None:
                 run.budget._refund(frames=1)
-                if run.frames_analyzed == 0:
+                if processed == 0:
                     raise MediaError("source ended before a usable frame")
                 break
             if run.cancel_event.is_set():
                 return
             if not isinstance(frame, Frame):
                 raise MediaError("source read() must return a Frame or None")
+            if run.config.input.kind == "image" and cached is None:
+                with run.lock:
+                    run.image_frame = copy.deepcopy(frame)
             evidence_id, evidence_ref = self._save_evidence(run, frame)
             if run.cancel_event.is_set():
                 return
@@ -406,7 +444,7 @@ class Controller:
                     },
                 )
             processed += 1
-        if processed == 0 and run.frames_analyzed == 0:
+        if processed == 0:
             raise MediaError("source produced no analyzable frames")
 
     def _tool_context(self, run: _Run, node: Node, tool: str, source: Any) -> dict[str, Any]:
@@ -442,24 +480,26 @@ class Controller:
         tool: str,
         frame: Frame,
         evidence_ref: str,
+        region: tuple[float, float, float, float] | None = None,
     ) -> Finding:
         if isinstance(raw, Finding):
-            return Finding(
+            finding = Finding(
                 tool=raw.tool or tool,
                 frame_ids=copy.deepcopy(raw.frame_ids) or [frame.frame_id],
-                region=copy.deepcopy(raw.region),
+                region=copy.deepcopy(region if region is not None else raw.region),
                 metrics=copy.deepcopy(raw.metrics),
                 evidence_ref=evidence_ref,
             )
-        if not isinstance(raw, dict):
+        elif isinstance(raw, dict):
+            finding = Finding(tool=tool, frame_ids=[frame.frame_id], region=copy.deepcopy(region),
+                              metrics=copy.deepcopy(raw), evidence_ref=evidence_ref)
+        else:
             raise TypeError("tool handler must return a Finding or metrics dictionary")
-        return Finding(
-            tool=tool,
-            frame_ids=[frame.frame_id],
-            region=None,
-            metrics=copy.deepcopy(raw),
-            evidence_ref=evidence_ref,
-        )
+        if region is not None:
+            finding.metrics["coordinate_system"] = {
+                "region": "source_pixels", "evidence": "crop_pixels", "regions": "crop_pixels",
+            }
+        return finding
 
     def _save_evidence(self, run: _Run, frame: Frame) -> tuple[str, str]:
         with run.lock:
@@ -520,18 +560,19 @@ class Controller:
         question = node.params["question"]
         while not run.cancel_event.is_set():
             adapter = self._get_model_adapter(run)
-            run.budget.consume(llm_calls=1)
-            self._record(
-                run,
-                {
+            with run.lock:
+                if run.cancel_event.is_set() or run.result.status in _TERMINAL:
+                    return True
+                run.budget.consume(llm_calls=1)
+                self._record_locked(run, {
                     "type": "model_call",
                     "node_id": node.id,
                     "state": "running",
                     "budget": run.budget.snapshot(),
-                },
-            )
-            with run.lock:
+                })
                 findings = copy.deepcopy(run.result.findings)
+            if run.cancel_event.is_set():
+                return True
             raw_decision = adapter.ask(question, findings)
             if run.cancel_event.is_set():
                 return True
@@ -598,6 +639,8 @@ class Controller:
         if not callable(getattr(adapter, "ask", None)):
             raise TypeError("model adapter factory must return an object with ask()")
         with run.lock:
+            if run.cancel_event.is_set() or run.result.status in _TERMINAL:
+                return adapter
             run.adapter = adapter
             run.adapter_initialized = True
         mode = getattr(adapter, "mode", "unknown")
@@ -670,7 +713,7 @@ class Controller:
             raw = handler(frame, params, context)
             if run.cancel_event.is_set():
                 return []
-            finding = self._normalize_finding(raw, tool, frame, evidence_ref)
+            finding = self._normalize_finding(raw, tool, frame, evidence_ref, observation.region)
             self._record(
                 run,
                 {"type": "frame_observed", "node_id": node_id, "state": "observing", "evidence_id": evidence_id},
@@ -812,13 +855,10 @@ class Controller:
             run.queue.extend(successors)
             run.result.pending_requests = [{"type": "request_input", "node_id": node_id, "reason": reason}]
             run.result.status = "waiting_for_input"
-            run.source_needs_reopen = run.source is not None
-            source, run.source = run.source, None
             self._record_locked(
                 run,
                 {"type": "state_change", "node_id": node_id, "state": "waiting_for_input"},
             )
-        self._close_source(source)
         run.done_event.set()
 
     def _pause_for_approval(
@@ -925,7 +965,9 @@ class Controller:
         raise ConfigError(f"unsupported workflow output type: {output_type!r}")
 
     def _add_report(self, run: _Run, report_format: str) -> None:
-        snapshot = self._snapshot(run)
+        from .outputs import report_snapshot
+
+        snapshot = report_snapshot(self._snapshot(run))
         if report_format == "markdown":
             from .outputs import render_report
 
@@ -992,6 +1034,7 @@ class Controller:
             run.result.status = "completed"
             run.result.pending_requests.clear()
             source, run.source = run.source, None
+            run.image_frame = None
             self._record_locked(run, {"type": "state_change", "state": "completed"})
             run.done_event.set()
         self._close_source(source)
@@ -1005,6 +1048,7 @@ class Controller:
             run.result.pending_requests.clear()
             run.pending_proposal = None
             source, run.source = run.source, None
+            run.image_frame = None
             self._record_locked(
                 run,
                 {"type": "state_change", "state": "failed", "error_type": type(exc).__name__},
