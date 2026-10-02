@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import keyword
 import math
 from copy import deepcopy
 from pathlib import Path
@@ -32,7 +33,7 @@ _NODE_PARAMS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     "ask_model": (frozenset({"question"}), frozenset()),
     "observe": (
         frozenset({"duration_seconds", "sample_fps"}),
-        frozenset({"region"}),
+        frozenset({"region", "stop_when"}),
     ),
     "request_input": (frozenset({"reason"}), frozenset()),
     "report": (frozenset({"format"}), frozenset()),
@@ -258,6 +259,10 @@ def _parse_node_params(
         for field in ("duration_seconds", "sample_fps"):
             _positive_finite_number(parsed[field], f"{path}.{field}")
         parsed["region"] = _parse_region(parsed.get("region"), f"{path}.region")
+        if "stop_when" in parsed:
+            parsed["stop_when"] = _parse_stop_when(
+                parsed["stop_when"], input_kind, registry, f"{path}.stop_when"
+            )
     elif node_type == "request_input":
         _non_empty_string(parsed["reason"], f"{path}.reason")
     elif node_type == "report":
@@ -269,6 +274,42 @@ def _parse_node_params(
     elif node_type == "output":
         _non_empty_string(parsed["output_type"], f"{path}.output_type")
     return parsed
+
+def _parse_stop_when(
+    value: Any,
+    input_kind: str,
+    registry: ToolRegistry,
+    path: str,
+) -> dict[str, Any]:
+    rule = _check_keys(
+        value,
+        allowed={"tool", "metric", "operator", "value", "min_consecutive"},
+        required={"tool", "metric", "operator", "value", "min_consecutive"},
+        path=path,
+    )
+    tool = _non_empty_string(rule["tool"], f"{path}.tool")
+    _check_registered_tool(tool, input_kind, registry, f"{path}.tool")
+    metric = _non_empty_string(rule["metric"], f"{path}.metric")
+    if (
+        not metric.isidentifier()
+        or metric.startswith("_")
+        or keyword.iskeyword(metric)
+    ):
+        raise ConfigError(f"{path}.metric must be a public identifier")
+    operator = _non_empty_string(rule["operator"], f"{path}.operator")
+    if operator not in {"gt", "gte", "lt", "lte", "eq"}:
+        raise ConfigError(f"{path}.operator must be gt, gte, lt, lte, or eq")
+    threshold = _finite_number(rule["value"], f"{path}.value")
+    min_consecutive = rule["min_consecutive"]
+    if type(min_consecutive) is not int or min_consecutive <= 0:
+        raise ConfigError(f"{path}.min_consecutive must be a positive integer")
+    return {
+        "tool": tool,
+        "metric": metric,
+        "operator": operator,
+        "value": threshold,
+        "min_consecutive": min_consecutive,
+    }
 
 
 def _positive_finite_number(value: Any, path: str) -> float:

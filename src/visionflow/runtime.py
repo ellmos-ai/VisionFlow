@@ -84,6 +84,7 @@ def create_controller(
     | Callable[[WorkflowConfig], Sequence[ModelDecision | dict[str, Any]]]
     | None = None,
     clock: Any = None,
+    source_override: Callable[[InputConfig, int], Any | None] | None = None,
 ):
     """Build a controller whose media, model, evidence, and approval state is local.
 
@@ -114,9 +115,36 @@ def create_controller(
     ):
         raise ConfigError("allowed camera sources must map names to non-negative device IDs")
 
+    if source_override is not None and not callable(source_override):
+        raise ConfigError("source_override must be callable")
+
     def source_factory(input_config: InputConfig, max_frames: int):
         if not isinstance(input_config, InputConfig):
             raise ConfigError("input_config must be an InputConfig")
+        if source_override is not None:
+            overridden = source_override(input_config, max_frames)
+            if overridden is not None:
+                try:
+                    valid = (
+                        getattr(overridden, "source_id", None) == input_config.source
+                        and callable(getattr(overridden, "read", None))
+                        and callable(getattr(overridden, "close", None))
+                    )
+                except Exception:
+                    valid = False
+                if not valid:
+                    closer = getattr(overridden, "close", None)
+                    if callable(closer):
+                        try:
+                            closer()
+                        except Exception:
+                            pass
+                    raise ConfigError(
+                        "source_override must return a source for the configured source "
+                        "with read() and close()"
+                    )
+                return overridden
+
         source = input_config.source
         if source.startswith("uploads/"):
             relative = PurePosixPath(source)

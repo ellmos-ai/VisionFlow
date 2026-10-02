@@ -171,6 +171,12 @@ class SimulationSession:
 class _SimulationReader:
     """A reader cursor that never owns or stops the shared producer."""
 
+    @property
+    def max_observation_fps(self) -> float:
+        """Expose the bounded sampling rate for this synthetic camera source."""
+        return 5.0
+
+
     def __init__(self, session: SimulationSession, next_sequence: int) -> None:
         self.source_id = session.source_id
         self._session = session

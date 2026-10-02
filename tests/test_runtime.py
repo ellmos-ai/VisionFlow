@@ -5,6 +5,7 @@ from typing import Any
 
 import cv2
 import numpy as np
+import pytest
 
 from visionflow.contracts import Frame, InputConfig, Limits, ModelDecision, Node, WorkflowConfig
 from visionflow.runtime import create_controller, create_registry
@@ -263,3 +264,75 @@ def test_uploaded_source_view_delegates_native_media_timing_capabilities():
     assert wrapped.observation_timeline_position_seconds == 5.0
     wrapped.close()
     assert inner.closed
+
+
+def test_runtime_source_override_precedes_media_and_none_falls_back(monkeypatch, tmp_path):
+    import visionflow.media as media_module
+
+    class Source:
+        source_id = "simulation-1"
+
+        def read(self):
+            return None
+
+        def close(self):
+            pass
+
+    overridden = Source()
+    fallback = Source()
+    calls = []
+
+    def fake_open_source(input_config, max_frames, *, allowed_camera_sources=None):
+        calls.append(("media", input_config, max_frames))
+        return fallback
+
+    def source_override(input_config, max_frames):
+        calls.append(("override", input_config, max_frames))
+        return overridden
+
+    monkeypatch.setattr(media_module, "open_source", fake_open_source)
+    controller = create_controller(tmp_path / "override", source_override=source_override)
+    config = InputConfig("camera", "simulation-1")
+
+    assert controller.source_factory(config, 13) is overridden
+    assert calls == [("override", config, 13)]
+
+    calls.clear()
+    fallback_controller = create_controller(
+        tmp_path / "fallback",
+        source_override=lambda input_config, max_frames: (
+            calls.append(("override", input_config, max_frames)) or None
+        ),
+    )
+
+    assert fallback_controller.source_factory(config, 17) is fallback
+    assert calls == [
+        ("override", config, 17),
+        ("media", config, 17),
+    ]
+
+
+def test_runtime_rejects_foreign_source_override_and_closes_it(tmp_path):
+    from visionflow.contracts import ConfigError
+
+    class ForeignSource:
+        source_id = "another-session"
+
+        def __init__(self):
+            self.closed = False
+
+        def read(self):
+            return None
+
+        def close(self):
+            self.closed = True
+
+    foreign = ForeignSource()
+    controller = create_controller(
+        tmp_path,
+        source_override=lambda input_config, max_frames: foreign,
+    )
+
+    with pytest.raises(ConfigError, match="source"):
+        controller.source_factory(InputConfig("camera", "simulation-1"), 5)
+    assert foreign.closed

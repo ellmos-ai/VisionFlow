@@ -157,7 +157,6 @@ class Controller:
             source, run.source = run.source, None
             run.image_frame = None
             self._record_locked(run, {"type": "state_change", "state": "cancelled"})
-            run.done_event.set()
             snapshot = copy.deepcopy(run.result)
         self._close_source(source)
         return snapshot
@@ -362,7 +361,12 @@ class Controller:
                 sample_fps=params["sample_fps"],
                 question="Workflow-requested follow-up observation",
             )
-            self._run_observation(run, request, node_id=node.id)
+            self._run_observation(
+                run,
+                request,
+                node_id=node.id,
+                stop_when=params.get("stop_when"),
+            )
             return list(node.next or []), False
         if node.type == "request_input":
             self._pause_for_input(run, params["reason"], node.id, list(node.next or []))
@@ -461,6 +465,14 @@ class Controller:
         state_key = (tool, region)
         with run.lock:
             tool_state = run.tool_states.setdefault(state_key, {})
+        effective_region = None
+        if region is not None:
+            x, y, box_width, box_height = region
+            left = math.floor(x)
+            top = math.floor(y)
+            right = math.ceil(x + box_width)
+            bottom = math.ceil(y + box_height)
+            effective_region = (left, top, right - left, bottom - top)
         return {
             "run_id": run.result.run_id,
             "node_id": node.id,
@@ -472,6 +484,7 @@ class Controller:
             "budget": run.budget.snapshot(),
             "user_input": copy.deepcopy(run.user_input),
             "tool_state": tool_state,
+            "region": effective_region,
         }
 
     def _normalize_finding(
@@ -675,13 +688,18 @@ class Controller:
         request: ObservationRequest,
         *,
         node_id: str,
+        stop_when: dict[str, Any] | None = None,
     ) -> list[Finding]:
         source = self._ensure_source(run)
         if request.source_id != source.source_id:
             raise ObservationRejected("observation source must match the active source")
         from .observation import validate_observation
 
-        request = validate_observation(request, run.config, run.budget)
+        request = validate_observation(request, run.config, run.budget, source=source)
+        if self.observer is not None and stop_when is not None:
+            raise ObservationRejected(
+                "custom observer cannot enforce the configured stop_when condition"
+            )
         with run.lock:
             if run.result.status not in _TERMINAL:
                 run.result.status = "observing"
@@ -695,7 +713,60 @@ class Controller:
                     },
                 )
         if run.cancel_event.is_set():
+            with run.lock:
+                self._record_locked(
+                    run,
+                    {
+                        "type": "monitor_stopped",
+                        "node_id": node_id,
+                        "source_id": source.source_id,
+                        "reason": "cancelled",
+                        "frame_ids": [],
+                        "source_times": [],
+                        "duration_seconds": request.duration_seconds,
+                        "budget": run.budget.snapshot(),
+                    },
+                )
             return []
+
+        stop_predicate = None
+        if stop_when is not None:
+            rule = copy.deepcopy(stop_when)
+            consecutive_hits = 0
+
+            def stop_predicate(frame_findings: list[Finding]) -> bool:
+                nonlocal consecutive_hits
+                matched = False
+                for finding in frame_findings:
+                    if finding.tool != rule["tool"]:
+                        continue
+                    metric_value = finding.metrics.get(rule["metric"])
+                    if isinstance(metric_value, bool) or not isinstance(
+                        metric_value, (int, float)
+                    ):
+                        continue
+                    try:
+                        metric_value = float(metric_value)
+                    except OverflowError:
+                        continue
+                    if not math.isfinite(metric_value):
+                        continue
+                    expected = rule["value"]
+                    operator = rule["operator"]
+                    if operator == "gt":
+                        matched = metric_value > expected
+                    elif operator == "gte":
+                        matched = metric_value >= expected
+                    elif operator == "lt":
+                        matched = metric_value < expected
+                    elif operator == "lte":
+                        matched = metric_value <= expected
+                    elif operator == "eq":
+                        matched = metric_value == expected
+                    if matched:
+                        break
+                consecutive_hits = consecutive_hits + 1 if matched else 0
+                return consecutive_hits >= rule["min_consecutive"]
 
         def analyzer(frame: Frame, observation: ObservationRequest) -> Finding | list[Finding]:
             if run.cancel_event.is_set():
@@ -716,11 +787,16 @@ class Controller:
             finding = self._normalize_finding(raw, tool, frame, evidence_ref, observation.region)
             self._record(
                 run,
-                {"type": "frame_observed", "node_id": node_id, "state": "observing", "evidence_id": evidence_id},
+                {
+                    "type": "frame_observed",
+                    "node_id": node_id,
+                    "state": "observing",
+                    "evidence_id": evidence_id,
+                },
             )
             return finding
 
-        if self.observer is not None:
+        if self.observer is not None and stop_predicate is None:
             raw_findings = self.observer(
                 source,
                 copy.deepcopy(request),
@@ -734,9 +810,32 @@ class Controller:
                 request,
                 run,
                 analyzer,
+                stop_predicate=stop_predicate,
             )
+
+        stop_reason = getattr(raw_findings, "stop_reason", None)
+        frame_ids = getattr(raw_findings, "frame_ids", [])
+        source_times = getattr(raw_findings, "source_times", [])
+        if run.cancel_event.is_set():
+            stop_reason = "cancelled"
+        if stop_reason is not None:
+            with run.lock:
+                self._record_locked(
+                    run,
+                    {
+                        "type": "monitor_stopped",
+                        "node_id": node_id,
+                        "source_id": source.source_id,
+                        "reason": stop_reason,
+                        "frame_ids": list(frame_ids),
+                        "source_times": list(source_times),
+                        "duration_seconds": request.duration_seconds,
+                        "budget": run.budget.snapshot(),
+                    },
+                )
         if run.cancel_event.is_set():
             return []
+
         findings = self._normalize_observation_findings(raw_findings)
         if findings:
             with run.lock:
@@ -757,12 +856,14 @@ class Controller:
                 self._record_locked(run, {"type": "state_change", "node_id": node_id, "state": "running"})
         return findings
 
+
     def _default_observe(
         self,
         source: Any,
         request: ObservationRequest,
         run: _Run,
         analyzer: Callable[[Frame, ObservationRequest], Finding | list[Finding]],
+        stop_predicate: Callable[[list[Finding]], bool] | None = None,
     ) -> Any:
         try:
             from .observation import observe
@@ -775,6 +876,7 @@ class Controller:
             run.cancel_event.is_set,
             self.clock,
             analyzer=analyzer,
+            stop_predicate=stop_predicate,
         )
 
     @staticmethod

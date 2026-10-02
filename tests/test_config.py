@@ -349,3 +349,141 @@ def test_package_exports_registry_public_types():
 
     assert ToolDescriptor.__name__ == "ToolDescriptor"
     assert ToolRegistry.__name__ == "ToolRegistry"
+
+
+
+def _watch_data(stop_when):
+    data = valid_config()
+    data["input"] = {"kind": "video", "source": "camera.avi"}
+    data["nodes"] = [
+        {
+            "id": "direction",
+            "type": "analyze",
+            "params": {"tool": "direction", "tool_params": {}},
+            "next": ["watch"],
+        },
+        {
+            "id": "watch",
+            "type": "observe",
+            "params": {
+                "duration_seconds": 5,
+                "sample_fps": 2,
+                "region": None,
+                "stop_when": stop_when,
+            },
+            "next": ["report"],
+        },
+        {"id": "report", "type": "report", "params": {"format": "json"}, "next": []},
+    ]
+    return data
+
+
+def test_stop_when_is_optional_for_existing_workflows():
+    workflow = validate_workflow(valid_config(), example_registry())
+
+    assert workflow.nodes[0].type == "analyze"
+
+
+def test_stop_when_accepts_registered_tool_and_normalizes_threshold():
+    workflow = validate_workflow(
+        _watch_data(
+            {
+                "tool": "direction",
+                "metric": "opposition_count",
+                "operator": "gte",
+                "value": 1,
+                "min_consecutive": 2,
+            }
+        ),
+        example_registry(),
+    )
+
+    assert workflow.nodes[1].params["stop_when"] == {
+        "tool": "direction",
+        "metric": "opposition_count",
+        "operator": "gte",
+        "value": 1.0,
+        "min_consecutive": 2,
+    }
+
+
+def test_stop_when_rejects_unknown_or_input_incompatible_tool():
+    with pytest.raises(ConfigError, match="unknown tool"):
+        validate_workflow(
+            _watch_data(
+                {
+                    "tool": "missing",
+                    "metric": "opposition_count",
+                    "operator": "gte",
+                    "value": 1,
+                    "min_consecutive": 1,
+                }
+            ),
+            example_registry(),
+        )
+
+
+@pytest.mark.parametrize("value", [True, float("nan"), float("inf"), "1"])
+def test_stop_when_rejects_bool_nonfinite_and_nonnumeric_thresholds(value):
+    with pytest.raises(ConfigError):
+        validate_workflow(
+            _watch_data(
+                {
+                    "tool": "direction",
+                    "metric": "opposition_count",
+                    "operator": "gte",
+                    "value": value,
+                    "min_consecutive": 1,
+                }
+            ),
+            example_registry(),
+        )
+
+
+@pytest.mark.parametrize(
+    "bad_rule",
+    [
+        {"tool": "direction", "metric": "", "operator": "gte", "value": 1, "min_consecutive": 1},
+        {"tool": "direction", "metric": "opposition_count", "operator": "contains", "value": 1, "min_consecutive": 1},
+        {"tool": "direction", "metric": "opposition_count", "operator": "gte", "value": 1, "min_consecutive": True},
+        {"tool": "direction", "metric": "opposition_count", "operator": "gte", "value": 1, "min_consecutive": 0},
+        {"tool": "direction", "metric": "opposition_count", "operator": "gte", "value": 1},
+        {"tool": "direction", "metric": "opposition_count", "operator": "gte", "value": 1, "min_consecutive": 1, "extra": 0},
+    ],
+)
+def test_stop_when_requires_exact_known_fields_and_valid_consecutive_count(bad_rule):
+    with pytest.raises(ConfigError):
+        validate_workflow(_watch_data(bad_rule), example_registry())
+
+
+@pytest.mark.parametrize("metric", ["_private", "nested.metric", "has space", "class"])
+def test_stop_when_metric_must_be_a_public_structural_identifier(metric):
+    with pytest.raises(ConfigError):
+        validate_workflow(
+            _watch_data(
+                {
+                    "tool": "direction",
+                    "metric": metric,
+                    "operator": "gte",
+                    "value": 1,
+                    "min_consecutive": 1,
+                }
+            ),
+            example_registry(),
+        )
+
+
+def test_stop_when_rejects_registered_tool_that_does_not_support_video():
+    with pytest.raises(ConfigError, match="does not support"):
+        validate_workflow(
+            _watch_data(
+                {
+                    "tool": "quality",
+                    "metric": "sharpness_variance",
+                    "operator": "gte",
+                    "value": 1,
+                    "min_consecutive": 1,
+                }
+            ),
+            example_registry(),
+        )

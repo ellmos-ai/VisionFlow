@@ -35,6 +35,22 @@ class Clock(Protocol):
 
 
 Analyzer = Callable[[Frame, ObservationRequest], Finding | list[Finding]]
+class ObservationFindings(list[Finding]):
+    """List-compatible findings with the actual monitor stop and sampled timeline."""
+
+    def __init__(
+        self,
+        findings: list[Finding],
+        *,
+        stop_reason: str,
+        frame_ids: list[str],
+        source_times: list[float],
+    ) -> None:
+        super().__init__(findings)
+        self.stop_reason = stop_reason
+        self.frame_ids = list(frame_ids)
+        self.source_times = list(source_times)
+
 
 
 def _normalize_request(request: ObservationRequest) -> ObservationRequest:
@@ -107,6 +123,8 @@ def validate_observation(
     request: ObservationRequest,
     config: WorkflowConfig,
     budget: Budget,
+    *,
+    source: object | None = None,
 ) -> ObservationRequest:
     """Check source, configured observation bounds, rate, and remaining run budget."""
     normalized = _normalize_request(request)
@@ -118,8 +136,30 @@ def validate_observation(
         raise ObservationRejected("observation cannot switch the configured source")
     if config.input.kind not in {"image", "video", "camera"}:
         raise ObservationRejected("configured input kind is unsupported")
-    if config.input.kind == "camera" and normalized.sample_fps > 1:
-        raise ObservationRejected("camera observation is limited to one frame per second")
+
+    camera_sample_fps_limit = 1.0
+    if source is not None and config.input.kind == "camera":
+        try:
+            source_id = getattr(source, "source_id", None)
+            capability = getattr(source, "max_observation_fps", None)
+        except Exception:
+            source_id = None
+            capability = None
+        if (
+            source_id == normalized.source_id
+            and type(capability) is float
+            and math.isfinite(capability)
+            and capability == 5.0
+        ):
+            camera_sample_fps_limit = capability
+    if (
+        config.input.kind == "camera"
+        and normalized.sample_fps > camera_sample_fps_limit
+    ):
+        if camera_sample_fps_limit == 1.0:
+            raise ObservationRejected("camera observation is limited to one frame per second")
+        raise ObservationRejected("observation exceeds the source sampling capability")
+
 
     authorities: list[tuple[float, float, tuple[float, float, float, float] | None]] = []
     for node in config.nodes:
@@ -195,6 +235,17 @@ def _wait_for_slot(
 def _frame_dimensions(frame: Frame) -> tuple[int, int]:
     if type(frame) is not Frame or not isinstance(frame.image, np.ndarray):
         raise ObservationRejected("source returned an invalid frame")
+    if type(frame.frame_id) is not str or not frame.frame_id.strip():
+        raise ObservationRejected("source frame ID must be a non-empty string")
+    timestamp = frame.timestamp_seconds
+    if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
+        raise ObservationRejected("source frame time must be a finite non-negative number")
+    try:
+        timestamp = float(timestamp)
+    except OverflowError as exc:
+        raise ObservationRejected("source frame time must be a finite non-negative number") from exc
+    if not math.isfinite(timestamp) or timestamp < 0:
+        raise ObservationRejected("source frame time must be a finite non-negative number")
     image = frame.image
     if image.dtype != np.uint8:
         raise ObservationRejected("source frame must use uint8 pixels")
@@ -207,6 +258,7 @@ def _frame_dimensions(frame: Frame) -> tuple[int, int]:
     if width <= 0 or height <= 0:
         raise ObservationRejected("source frame must not be empty")
     return width, height
+
 
 
 def _check_frame_region(
@@ -242,8 +294,9 @@ def observe(
     clock: Clock,
     *,
     analyzer: Analyzer | None = None,
+    stop_predicate: Callable[[list[Finding]], bool] | None = None,
 ) -> list[Finding]:
-    """Read a bounded sample from a persistent source without closing its cursor."""
+    """Read a bounded sample without closing its cursor or resetting its budget."""
     normalized = _normalize_request(request)
     if not isinstance(budget, Budget):
         raise ObservationRejected("budget must be a Budget")
@@ -255,6 +308,8 @@ def observe(
         raise ObservationRejected("clock must provide monotonic() and sleep()")
     if analyzer is not None and not callable(analyzer):
         raise ObservationRejected("analyzer must be callable")
+    if stop_predicate is not None and not callable(stop_predicate):
+        raise ObservationRejected("stop_predicate must be callable")
     if not isinstance(getattr(source, "source_id", None), str):
         raise ObservationRejected("source must have a string source_id")
     if normalized.source_id != source.source_id:
@@ -279,6 +334,8 @@ def observe(
     budget.consume(observation_seconds=normalized.duration_seconds)
 
     findings: list[Finding] = []
+    observed_frame_ids: list[str] = []
+    observed_source_times: list[float] = []
     interval = 1.0 / normalized.sample_fps
     read_at = getattr(source, "read_at", None)
     media_position = getattr(source, "timeline_position_seconds", None)
@@ -305,22 +362,29 @@ def observe(
             raise ObservationRejected("observation timeline end is not finite")
         native_fps = getattr(source, "native_fps", None)
         if native_fps is not None:
-            if (isinstance(native_fps, bool) or not isinstance(native_fps, (int, float))
-                    or not math.isfinite(float(native_fps)) or native_fps <= 0):
+            if (
+                isinstance(native_fps, bool)
+                or not isinstance(native_fps, (int, float))
+                or not math.isfinite(float(native_fps))
+                or native_fps <= 0
+            ):
                 raise ObservationRejected("source native frame rate must be positive and finite")
             sample_fps = min(normalized.sample_fps, float(native_fps))
             interval = 1.0 / sample_fps
             requested_frames = math.ceil(normalized.duration_seconds * sample_fps)
 
+    stop_reason: str | None = None
     for index in range(requested_frames):
-        if uses_media_timeline:
-            if cancelled():
-                break
-        else:
+        if cancelled():
+            stop_reason = "cancelled"
+            break
+        if not uses_media_timeline:
             target = started_at + index * interval
             if not _wait_for_slot(clock, target, deadline, cancelled):
+                stop_reason = "cancelled" if cancelled() else "duration"
                 break
         if cancelled():
+            stop_reason = "cancelled"
             break
 
         budget.consume(frames=1)
@@ -331,22 +395,25 @@ def observe(
             frame = source.read()
         if frame is None:
             budget._refund(frames=1)
+            stop_reason = "cancelled" if cancelled() else "source_end"
             break
-        if cancelled():
-            break
-
         width, height = _frame_dimensions(frame)
+        observed_frame_ids.append(frame.frame_id)
+        observed_source_times.append(float(frame.timestamp_seconds))
+        if cancelled():
+            stop_reason = "cancelled"
+            break
         crop = _check_frame_region(normalized.region, width, height)
         if analyzer is None:
-            findings.append(
+            frame_findings = [
                 Finding(
                     tool="observation",
                     frame_ids=[frame.frame_id],
                     region=normalized.region,
-                    metrics={"timestamp_seconds": frame.timestamp_seconds},
+                    metrics={"timestamp_seconds": float(frame.timestamp_seconds)},
                     evidence_ref="",
                 )
-            )
+            ]
         else:
             if crop is None:
                 analysis_frame = frame
@@ -357,12 +424,48 @@ def observe(
                     image=frame.image[y_slice, x_slice],
                     timestamp_seconds=frame.timestamp_seconds,
                 )
-            findings.extend(_as_findings(analyzer(analysis_frame, normalized)))
+            frame_findings = _as_findings(analyzer(analysis_frame, normalized))
 
-    if uses_media_timeline and not cancelled():
-        source.observation_timeline_position_seconds = media_window_end
+        if cancelled():
+            stop_reason = "cancelled"
+            break
+        findings.extend(frame_findings)
+        if stop_predicate is not None:
+            should_stop = stop_predicate(frame_findings)
+            if type(should_stop) is not bool:
+                raise ObservationRejected("stop_predicate must return a boolean")
+            if cancelled():
+                stop_reason = "cancelled"
+                break
+            if should_stop:
+                stop_reason = "condition"
+                break
 
-    return findings
+    if stop_reason is None:
+        stop_reason = "duration"
+
+    if uses_media_timeline:
+        if stop_reason in {"duration", "source_end"}:
+            assert media_window_end is not None
+            next_position = media_window_end
+        else:
+            next_position = getattr(source, "timeline_position_seconds", None)
+            if (
+                isinstance(next_position, bool)
+                or not isinstance(next_position, (int, float))
+                or not math.isfinite(float(next_position))
+                or next_position < 0
+            ):
+                raise ObservationRejected("source timeline position must be non-negative and finite")
+        source.observation_timeline_position_seconds = float(next_position)
+
+    return ObservationFindings(
+        findings,
+        stop_reason=stop_reason,
+        frame_ids=observed_frame_ids,
+        source_times=observed_source_times,
+    )
+
 
 
 __all__ = ["Analyzer", "Clock", "observe", "validate_observation"]
