@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Any, Callable, Protocol
 
-from .contracts import Finding, ModelDecision
+from .contracts import Finding, ModelDecision, RunResult, WorkflowConfig
 
 
 _ACTIONS = frozenset({"report", "observe", "request_input", "request_approval"})
@@ -21,6 +22,37 @@ class ModelAdapter(Protocol):
 
     def ask(self, question: str, findings: list[Finding]) -> ModelDecision:
         """Return one decision without changing workflow policy or capabilities."""
+
+
+@dataclass(frozen=True, slots=True)
+class ModelRunContext:
+    """Immutable per-run identifiers and callbacks supplied to model factories."""
+
+    run_id: str
+    source_id: str
+    cancelled: Callable[[], bool]
+    snapshot: Callable[[], RunResult]
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not str or not self.run_id.strip():
+            raise ValueError("run_id must be a non-empty string")
+        if type(self.source_id) is not str or not self.source_id.strip():
+            raise ValueError("source_id must be a non-empty string")
+        if not callable(self.cancelled):
+            raise TypeError("cancelled must be callable")
+        if not callable(self.snapshot):
+            raise TypeError("snapshot must be callable")
+
+
+class RunModelFactory(Protocol):
+    """Create a model adapter with explicit run context, without replacing fixtures."""
+
+    def create_adapter(
+        self,
+        config: WorkflowConfig,
+        context: ModelRunContext,
+    ) -> ModelAdapter:
+        """Return the adapter used for exactly one run."""
 
 
 def _non_empty_string(value: Any, field: str) -> str:
@@ -146,4 +178,10 @@ class FixtureModelAdapter:
         return validate_model_decision(decision)
 
 
-__all__ = ["FixtureModelAdapter", "ModelAdapter", "validate_model_decision"]
+__all__ = [
+    "FixtureModelAdapter",
+    "ModelAdapter",
+    "ModelRunContext",
+    "RunModelFactory",
+    "validate_model_decision",
+]

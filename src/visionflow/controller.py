@@ -643,12 +643,26 @@ class Controller:
             with run.lock:
                 run.adapter_initialized = True
             raise RuntimeError("no model adapter is configured")
-        if hasattr(configured, "ask"):
+        create_adapter = getattr(configured, "create_adapter", None)
+        if callable(create_adapter):
+            from .model import ModelRunContext
+
+            context = ModelRunContext(
+                run_id=run.result.run_id,
+                source_id=self._current_source_id(run),
+                cancelled=run.cancel_event.is_set,
+                snapshot=lambda: self._snapshot(run),
+            )
+            adapter = create_adapter(copy.deepcopy(run.config), context)
+        elif hasattr(configured, "ask"):
             adapter = configured
         elif callable(configured):
             adapter = configured(copy.deepcopy(run.config))
         else:
-            raise TypeError("model_adapter must implement ask() or be a config factory")
+            raise TypeError(
+                "model_adapter must implement ask(), create_adapter(config, context), "
+                "or be a config factory"
+            )
         if not callable(getattr(adapter, "ask", None)):
             raise TypeError("model adapter factory must return an object with ask()")
         with run.lock:

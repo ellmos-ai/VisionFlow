@@ -5,14 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from visionflow.contracts import ConfigError, Frame, InputConfig, ModelDecision, WorkflowConfig
 from visionflow.registry import ToolDescriptor, ToolRegistry
 from visionflow.tools.direction import direction_handler
-
 from visionflow.tools.motion import MotionAnalyzer
 from visionflow.tools.quality import analyze_quality
+
+if TYPE_CHECKING:
+    from visionflow.model import FixtureModelAdapter, RunModelFactory
 
 
 def create_registry() -> ToolRegistry:
@@ -76,6 +78,52 @@ def _motion_handler(
     return analyzer.update(frame.image)
 
 
+def create_default_fixture_adapter(
+    config: WorkflowConfig,
+    *,
+    fixture_decisions: Sequence[ModelDecision | dict[str, Any]]
+    | Callable[[WorkflowConfig], Sequence[ModelDecision | dict[str, Any]]]
+    | None = None,
+) -> FixtureModelAdapter:
+    """Create the existing explicit or default offline adapter for one workflow."""
+    if not isinstance(config, WorkflowConfig):
+        raise ConfigError("model adapter factory requires a WorkflowConfig")
+    from visionflow.model import FixtureModelAdapter
+
+    if callable(fixture_decisions):
+        decisions = list(fixture_decisions(deepcopy(config)))
+    elif fixture_decisions is not None:
+        decisions = list(deepcopy(fixture_decisions))
+    else:
+        uses_motion = any(
+            node.type == "analyze" and node.params.get("tool") == "motion"
+            for node in config.nodes
+        )
+        authority = next(
+            (node for node in config.nodes if node.type == "observe"),
+            None,
+        )
+        if uses_motion and authority is not None:
+            duration = min(2.0, float(authority.params["duration_seconds"]))
+            sample_fps = min(1.0, float(authority.params["sample_fps"]))
+            decisions = [
+                ModelDecision(
+                    "observe",
+                    {
+                        "source_id": config.input.source,
+                        "region": deepcopy(authority.params.get("region")),
+                        "duration_seconds": duration,
+                        "sample_fps": sample_fps,
+                        "question": "Weitere Bewegung prüfen",
+                    },
+                ),
+                ModelDecision("report", {}),
+            ]
+        else:
+            decisions = [ModelDecision("report", {})]
+    return FixtureModelAdapter(decisions=decisions)
+
+
 def create_controller(
     data_dir: Path | str,
     *,
@@ -83,10 +131,11 @@ def create_controller(
     fixture_decisions: Sequence[ModelDecision | dict[str, Any]]
     | Callable[[WorkflowConfig], Sequence[ModelDecision | dict[str, Any]]]
     | None = None,
+    model_factory: RunModelFactory | None = None,
     clock: Any = None,
     source_override: Callable[[InputConfig, int], Any | None] | None = None,
 ):
-    """Build a controller whose media, model, evidence, and approval state is local.
+    """Build a local controller, optionally replacing the default fixture factory.
 
     Controller and fixture-model imports are deferred so registry-only tools can be
     used while optional orchestration modules are being assembled.
@@ -94,7 +143,12 @@ def create_controller(
     from visionflow.approval import ApprovalStore
     from visionflow.controller import Controller
     from visionflow import media
-    from visionflow.model import FixtureModelAdapter
+
+    if model_factory is not None:
+        if not callable(getattr(model_factory, "create_adapter", None)):
+            raise ConfigError("model_factory must implement create_adapter(config, context)")
+        if fixture_decisions is not None:
+            raise ConfigError("fixture_decisions cannot be combined with model_factory")
 
     root = Path(data_dir).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -175,44 +229,18 @@ def create_controller(
             allowed_camera_sources=permitted_cameras,
         )
 
-    def model_adapter_factory(config: WorkflowConfig):
-        if not isinstance(config, WorkflowConfig):
-            raise ConfigError("model adapter factory requires a WorkflowConfig")
-        if callable(fixture_decisions):
-            decisions = list(fixture_decisions(deepcopy(config)))
-        elif fixture_decisions is not None:
-            decisions = list(deepcopy(fixture_decisions))
-        else:
-            uses_motion = any(
-                node.type == "analyze" and node.params.get("tool") == "motion"
-                for node in config.nodes
-            )
-            authority = next(
-                (node for node in config.nodes if node.type == "observe"),
-                None,
-            )
-            if uses_motion and authority is not None:
-                duration = min(2.0, float(authority.params["duration_seconds"]))
-                sample_fps = min(1.0, float(authority.params["sample_fps"]))
-                decisions = [
-                    ModelDecision(
-                        "observe",
-                        {
-                            "source_id": config.input.source,
-                            "region": deepcopy(authority.params.get("region")),
-                            "duration_seconds": duration,
-                            "sample_fps": sample_fps,
-                            "question": "Weitere Bewegung prüfen",
-                        },
-                    ),
-                    ModelDecision("report", {}),
-                ]
-            else:
-                decisions = [ModelDecision("report", {})]
-        return FixtureModelAdapter(decisions=decisions)
+    def fixture_model_adapter_factory(config: WorkflowConfig):
+        return create_default_fixture_adapter(
+            config,
+            fixture_decisions=fixture_decisions,
+        )
 
     controller_options: dict[str, Any] = {
-        "model_adapter": model_adapter_factory,
+        "model_adapter": (
+            model_factory
+            if model_factory is not None
+            else fixture_model_adapter_factory
+        ),
         "source_factory": source_factory,
         "evidence_root": evidence_root,
         "approval_store": ApprovalStore(),
@@ -279,4 +307,4 @@ class _SourceIdView:
         self._source.close()
 
 
-__all__ = ["create_controller", "create_registry"]
+__all__ = ["create_controller", "create_default_fixture_adapter", "create_registry"]

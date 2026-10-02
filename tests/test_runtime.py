@@ -7,7 +7,15 @@ import cv2
 import numpy as np
 import pytest
 
-from visionflow.contracts import Frame, InputConfig, Limits, ModelDecision, Node, WorkflowConfig
+from visionflow.contracts import (
+    ConfigError,
+    Frame,
+    InputConfig,
+    Limits,
+    ModelDecision,
+    Node,
+    WorkflowConfig,
+)
 from visionflow.runtime import create_controller, create_registry
 
 
@@ -336,3 +344,90 @@ def test_runtime_rejects_foreign_source_override_and_closes_it(tmp_path):
     with pytest.raises(ConfigError, match="source"):
         controller.source_factory(InputConfig("camera", "simulation-1"), 5)
     assert foreign.closed
+
+
+def test_public_default_fixture_adapter_keeps_motion_observation_strategy():
+    import visionflow.runtime as runtime_module
+
+    fixture_helper = getattr(runtime_module, "create_default_fixture_adapter", None)
+    if not callable(fixture_helper):
+        pytest.fail("runtime does not expose create_default_fixture_adapter", pytrace=False)
+
+    config = WorkflowConfig(
+        schema_version=1,
+        name="routed-motion",
+        input=InputConfig("video", "clip.avi"),
+        limits=Limits(),
+        nodes=[
+            Node("motion", "analyze", {"tool": "motion"}, []),
+            Node(
+                "observe-authority",
+                "observe",
+                {
+                    "duration_seconds": 4.0,
+                    "sample_fps": 3.0,
+                    "region": (2, 3, 10, 8),
+                },
+                [],
+            ),
+        ],
+        outputs=[],
+    )
+
+    adapter = fixture_helper(config)
+
+    assert adapter.mode == "fixture"
+    assert adapter.ask("observe?", []).payload == {
+        "source_id": "clip.avi",
+        "region": (2.0, 3.0, 10.0, 8.0),
+        "duration_seconds": 2.0,
+        "sample_fps": 1.0,
+        "question": "Weitere Bewegung prüfen",
+    }
+    assert adapter.ask("finish?", []).action == "report"
+
+    image_config = WorkflowConfig(
+        schema_version=1,
+        name="routed-image",
+        input=InputConfig("image", "still.png"),
+        limits=Limits(),
+        nodes=[],
+        outputs=[],
+    )
+    image_adapter = fixture_helper(image_config)
+    assert image_adapter.ask("report?", []).action == "report"
+
+
+def test_create_controller_passes_run_model_factory_as_full_override(monkeypatch, tmp_path):
+    import visionflow.controller as controller_module
+
+    captured = {}
+
+    class ControllerDouble:
+        def __init__(self, registry, **kwargs):
+            captured.update(kwargs)
+
+    class RunFactory:
+        def create_adapter(self, config, context):
+            raise AssertionError("the fake controller should not start a run")
+
+    factory = RunFactory()
+    monkeypatch.setattr(controller_module, "Controller", ControllerDouble)
+
+    controller = create_controller(tmp_path / "factory-override", model_factory=factory)
+
+    assert isinstance(controller, ControllerDouble)
+    assert captured["model_adapter"] is factory
+
+
+def test_create_controller_rejects_fixture_decisions_with_model_factory(tmp_path):
+    class RunFactory:
+        def create_adapter(self, config, context):
+            raise AssertionError("the factory must not be invoked")
+
+    with pytest.raises(ConfigError, match="fixture_decisions"):
+        create_controller(
+            tmp_path / "factory-conflict",
+            fixture_decisions=[],
+            model_factory=RunFactory(),
+        )

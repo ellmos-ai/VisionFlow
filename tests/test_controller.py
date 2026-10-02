@@ -422,6 +422,78 @@ def test_model_adapter_factory_creates_an_adapter_for_each_run():
     assert created_for == ["controller-test", "controller-test"]
 
 
+def test_legacy_callable_model_factory_keeps_its_single_config_argument():
+    calls = []
+
+    class ReportModel:
+        mode = "legacy-fixture"
+
+        def ask(self, question: str, findings: list[Finding]) -> ModelDecision:
+            return ModelDecision("report")
+
+    def legacy_factory(config: WorkflowConfig):
+        calls.append((config.name, config.input.source))
+        return ReportModel()
+
+    controller = Controller(make_registry(), model_adapter=legacy_factory)
+    workflow = make_workflow([Node("ask", "ask_model", {"question": "report?"}, [])])
+
+    result = controller.wait(controller.start(workflow).run_id, timeout=2)
+
+    assert result.status == "completed"
+    assert calls == [("controller-test", "fixture-source")]
+
+
+def test_run_model_factory_receives_live_run_context_and_defensive_snapshots():
+    entered = threading.Event()
+    release = threading.Event()
+    captured = {}
+
+    class ReportModel:
+        mode = "run-factory"
+
+        def __init__(self, context):
+            self.context = context
+
+        def ask(self, question: str, findings: list[Finding]) -> ModelDecision:
+            captured["cancelled_before"] = self.context.cancelled()
+            captured["snapshot_before"] = self.context.snapshot()
+            entered.set()
+            release.wait(timeout=3)
+            return ModelDecision("report")
+
+    class Factory:
+        def create_adapter(self, config, context):
+            captured["config_name"] = config.name
+            captured["context"] = context
+            return ReportModel(context)
+
+    controller = Controller(make_registry(), model_adapter=Factory())
+    workflow = make_workflow([Node("ask", "ask_model", {"question": "report?"}, [])])
+    run_id = controller.start(workflow).run_id
+
+    try:
+        assert entered.wait(timeout=2)
+        context = captured["context"]
+        assert captured["config_name"] == "controller-test"
+        assert context.run_id == run_id
+        assert context.source_id == "fixture-source"
+        assert captured["cancelled_before"] is False
+        assert captured["snapshot_before"].status == "running"
+
+        detached = context.snapshot()
+        detached.status = "tampered"
+        assert context.snapshot().status == "running"
+
+        assert controller.cancel(run_id).status == "cancelled"
+        assert context.cancelled() is True
+        assert context.snapshot().status == "cancelled"
+    finally:
+        release.set()
+
+    assert controller.wait(run_id, timeout=2).status == "cancelled"
+
+
 def test_video_initial_frame_count_is_bounded_by_remaining_budget(tmp_path):
     source = FakeSource([Frame("frame-0", b"only frame")])
     calls: list[str] = []
