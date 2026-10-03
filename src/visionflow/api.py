@@ -88,6 +88,8 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
 
     daemon_threads = True
     allow_reuse_address = True
+    # Leave room for short bursts from concurrent local GUI polling.
+    request_queue_size = 32
 
     def server_close(self) -> None:
         try:

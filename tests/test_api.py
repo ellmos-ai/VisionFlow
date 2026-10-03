@@ -236,6 +236,37 @@ def test_confirm_without_local_session_is_rejected(api):
     assert payload["error"]["code"] == "session_required"
 
 
+def test_http_listener_accepts_twelve_pending_local_connections(tmp_path):
+    server = create_server(
+        object(),
+        host="127.0.0.1",
+        port=0,
+        data_dir=tmp_path / "data",
+        registry=object(),
+    )
+    address = server.server_address
+    clients = []
+    failures = []
+    try:
+        for _ in range(12):
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client.settimeout(0.25)
+            try:
+                client.connect(address)
+                clients.append(client)
+            except OSError as exc:
+                failures.append(f"{type(exc).__name__}: {exc}")
+                client.close()
+        assert len(clients) == 12, (
+            f"only {len(clients)}/12 local connections entered the pending listener queue; "
+            f"failures={failures}"
+        )
+    finally:
+        for client in clients:
+            client.close()
+        server.server_close()
+
+
 def test_early_rejection_with_delayed_small_body_returns_http_response(api):
     _client, server, controller, evidence_root = api
     address, port = server.server_address[:2]

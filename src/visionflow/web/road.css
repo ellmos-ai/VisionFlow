@@ -824,6 +824,21 @@
   max-width: 100%;
 }
 
+#road-model-root {
+  color: var(--road-text-primary);
+}
+
+#road-model-root .road-stream-output,
+#road-model-root .road-model-section-title,
+#road-model-root .road-model-clip-status {
+  color: var(--road-text-primary);
+}
+
+#road-model-root .road-model-evidence-gallery-status,
+#road-model-root .road-model-evidence-image-caption {
+  color: var(--road-text-secondary);
+}
+
 #road-model-root .road-stream-output {
   box-sizing: border-box;
   display: block;
