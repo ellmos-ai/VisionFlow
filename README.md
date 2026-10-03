@@ -20,7 +20,7 @@ $env:PYTHONPATH = (Resolve-Path .\src).Path
 $env:PYTHONIOENCODING = "utf-8"
 ```
 
-Die gepinnte Lockdatei umfasst Laufzeitpakete und die Testwerkzeuge. Prüfe die Installation mit:
+`requirements.lock` pinnt Laufzeitpakete und pytest. Playwright gehört nicht zur Core-Umgebung; dadurch bleibt die normale Testsammlung ohne Browserpaket und Browserprozess ausführbar. Prüfe die Installation mit:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip check
@@ -105,9 +105,29 @@ Der Straßenverkehrs-Demonstrator erweitert VisionFlow um eine interaktive Kamer
 
 Für den Video-Export wird FFmpeg mit `libx264` vorausgesetzt. Fehlt FFmpeg, bleibt der Core-Workflow uneingeschränkt nutzbar; die Clip-Erzeugung wird mit dem Grund `ffmpeg_required` deaktiviert.
 
+### Browserabnahme der Vier-Räume-Steuerung
+
+Die echte GUI-Abnahme läuft getrennt vom Core in einer optionalen Browserumgebung. Sie verwendet System-Edge und eine eigene Loopback-Serverinstanz mit frischem Datenordner. Es gibt keine API-Mocks, Modellprovider-Aufrufe oder externen Requests. Der Server läuft mit `.venv`; Playwright läuft mit `.venv-browser`:
+
+```powershell
+py -3.12 -m venv .venv-browser
+.\.venv-browser\Scripts\python.exe -m pip install -r requirements.browser.lock
+.\.venv-browser\Scripts\python.exe -m pip check
+
+$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+.\.venv-browser\Scripts\python.exe tests\gui_browser_acceptance.py `
+  --phase fast `
+  --server-python .\.venv\Scripts\python.exe `
+  --browser-path $edge `
+  --output ".local\acceptance\gui-controller-fast-$stamp"
+```
+
+`--phase full` ergänzt mehrere echte Jobs/Fälle, Fallauswahl nach Reload, Serverfrist, Modellprofile und Bedienprüfungen. `--phase red` ist der gezielte Vorher-Beleg für den alten UI-Fehler und soll im reparierten Stand nicht als PASS gewertet werden. Jeder Lauf verlangt einen noch nicht vorhandenen Ausgabeordner mit passendem Phasenpräfix und schreibt Bericht sowie Screenshots unter `.local/acceptance/`. Details und Einzelbefehle stehen in [docs/TESTING.md](docs/TESTING.md).
+
 ## Grenzen
 
-Der MVP enthält keine echte Modell- oder Provideranbindung, keine AWS-Ausführung und keine Wettbewerbsbewertung. Der Fixture-Modus nutzt festgelegte lokale Entscheidungen und macht keine Netzaufrufe. Die künstlichen Beispiele ersetzen weder einen realen Kamera-/Browser-Hardwaretest noch Datensatz-, Baseline- oder Wettbewerbs-Evaluationen. Die lokale Browser-Abnahme am 2026-10-02 bestand acht Fälle in Headless Edge: separate CLI-Prozesse, Unicode-Uploads und Neuaufnahme, Video-Folgebeobachtung mit Entwurfsfreigabe, Abbruch, defekte Medien, Mehrtabbetrieb und eine 390-Pixel-Ansicht ohne horizontalen Überlauf. Browserkonsole und externe Seitenanfragen blieben leer. Echte Kamera-Hardware und ein Mobilgerät wurden nicht geprüft.
+Der MVP enthält keine echte Modell- oder Provideranbindung, keine AWS-Ausführung und keine Wettbewerbsbewertung. Der Fixture-Modus nutzt festgelegte lokale Entscheidungen und macht keine Netzaufrufe. Die künstlichen Beispiele ersetzen weder einen realen Kamera-/Browser-Hardwaretest noch Datensatz-, Baseline- oder Wettbewerbs-Evaluationen. Die lokale Browserprüfung am 2026-10-02 deckte acht ältere Analyse-/CLI-Fälle ab, darunter Unicode-Uploads, Video-Folgebeobachtung und eine 390-Pixel-Ansicht. Sie belegt nicht die Vier-Räume-Steuerung mit echten Road-Cases, ModelExchanges, Clip-Bytes oder nativem Player. Echte Kamera-Hardware und ein Mobilgerät wurden nicht geprüft.
 
 Weitere Test- und Prüfschritte stehen in [docs/TESTING.md](docs/TESTING.md).
 

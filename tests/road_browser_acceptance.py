@@ -1,3 +1,9 @@
+"""Legacy Road DOM smoke; it does not prove real Case/Clip/Exchange/player behavior.
+
+Use ``tests/gui_browser_acceptance.py`` for identity-, byte-, deadline-, and
+native-player acceptance of the four-room controller.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -20,7 +26,7 @@ VENV_PYTHON = REPO / ".venv" / "Scripts" / "python.exe"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run VisionFlow road-camera acceptance in native headless Edge."
+        description="Legacy Road DOM smoke in native headless Edge; not controller acceptance."
     )
     parser.add_argument("--phase", choices=("camera", "review"), required=True)
     parser.add_argument(
@@ -82,6 +88,8 @@ def browser_probe(base_url: str, output: Path, phase: str) -> dict[str, Any]:
     external_hosts: set[str] = set()
     report: dict[str, Any] = {
         "phase": phase,
+        "test_level": "dom_smoke",
+        "scope": "DOM presence/visibility only; no real Case, ModelExchange, ClipRef, or native-player proof.",
         "base_url": base_url,
         "browser": "Microsoft Edge",
         "status": "running",

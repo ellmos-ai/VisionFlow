@@ -15,7 +15,7 @@ $env:PYTHONPATH = (Resolve-Path .\src).Path
 $env:PYTHONIOENCODING = "utf-8"
 ```
 
-Die editierbare Installation wird auch für die echten Windows-Konsolenprogrammtests benötigt. Diese Tests starten `.venv/Scripts/visionflow.exe` ohne `PYTHONIOENCODING` und prüfen UTF-8-Ausgabe. Für `pytest` setzt `pyproject.toml` den `src`-Pfad bereits. Nutze den Interpreter aus `.venv`, damit die geprüfte OpenCV-Version verwendet wird.
+Die editierbare Installation wird auch für die echten Windows-Konsolenprogrammtests benötigt. Diese Tests starten `.venv/Scripts/visionflow.exe` ohne `PYTHONIOENCODING` und prüfen UTF-8-Ausgabe. Für `pytest` setzt `pyproject.toml` den `src`-Pfad bereits. Nutze den Interpreter aus `.venv`, damit die geprüfte OpenCV-Version verwendet wird. Diese Core-Umgebung enthält absichtlich kein Playwright; Collection und normale pytest-Läufe starten keinen Browser.
 
 ## Gezielte Demosuite
 
@@ -62,7 +62,7 @@ Der CLI- und API-Vertrag ist zusätzlich über `tests/test_cli.py` und `tests/te
 
 Das Vorhandensein dieser Tests ersetzt keinen separat dokumentierten Browser- oder Hardwarelauf.
 
-## Straßendemo-Tests und Browserabnahme
+## Straßendemo-Coretests und Legacy-DOM-Smoke
 
 Die Tests für die Straßendemo umfassen Richtungsanalyse, Aufnahme-Journal, MP4-Clip-Export, Modellprüfung, Fristen und Arbeitsplatz:
 
@@ -70,27 +70,49 @@ Die Tests für die Straßendemo umfassen Richtungsanalyse, Aufnahme-Journal, MP4
 # Gezielte Road-Suite (API, CLI, Review)
 .\.venv\Scripts\python.exe -m pytest tests/test_road_api.py tests/test_road_cli.py tests/test_road_review_api.py tests/test_road_review_cli.py -q
 
-# Gesamtsuite inklusive aller 502 Tests
+# Vollständige Core-Testsuite
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Die automatisierte Browser-Abnahme prüft die Weboberfläche in nativem Microsoft Edge Headless (mit Playwright):
+Der ältere `road_browser_acceptance.py`-Lauf ist nur ein DOM-Smoke-Test. Er prüft, ob ausgewählte Controls und Container im DOM vorhanden sind und ob die Road-Kameraoberfläche sichtbar ist. Er beweist weder reale Case-/Job-/ModelExchange-/Clip-Identität noch Videobytes, Decode oder menschliche Reviewaktionen. Führe ihn nur als schnellen Oberflächen-Smoke mit einer separat verfügbaren Playwright-Installation aus:
 
 ```powershell
-# Kamera-Phase (Simulation, Event-Injektion, Controls)
+# Legacy-DOM-Smoke: Kameracontainer und Controls zählen
 python tests/road_browser_acceptance.py --phase camera --output .local/acceptance/run-camera-01
 
-# Review-Phase (Arbeitsplatz, Countdown, Inbox, Entwarnung)
+# Legacy-DOM-Smoke: Reviewcontainer zählen
 python tests/road_browser_acceptance.py --phase review --output .local/acceptance/run-review-01
 ```
 
-Der Prüfharness erzeugt JSON-Ergebnisberichte (`acceptance.json`), Konsolenlogs sowie Screenshots (`landing.png`, `road-camera-before-start.png`, `road-camera-ready.png`) im angegebenen Ausgabeordner unter `.local/`.
+Der Prüfharness kennzeichnet seine Berichte mit `test_level: dom_smoke`. JSON-Berichte und Screenshots sind keine GUI-Akzeptanzbelege.
+
+## Vier-Räume-Browserabnahme
+
+Der eigenständige Runner `tests/gui_browser_acceptance.py` prüft den realen lokalen API-/GUI-Pfad in nativem Microsoft Edge. Installiere Playwright in einer separaten Umgebung; `requirements.browser.lock` pinnt Playwright 1.60.0 einschließlich der lokal aufgelösten Abhängigkeiten. `pyproject.toml` stellt zusätzlich das optionale Extra `browser-test` für manuelle Installationen bereit. System-Edge und FFmpeg werden unabhängig verwaltet. Der echte Server verwendet die bestehende Core-Umgebung `.venv` und bekommt pro Lauf einen neuen lokalen Datenordner.
+
+```powershell
+py -3.12 -m venv .venv-browser
+.\.venv-browser\Scripts\python.exe -m pip install -r requirements.browser.lock
+.\.venv-browser\Scripts\python.exe -m pip check
+
+$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+.\.venv-browser\Scripts\python.exe tests\gui_browser_acceptance.py `
+  --phase fast `
+  --server-python .\.venv\Scripts\python.exe `
+  --browser-path $edge `
+  --output ".local\acceptance\gui-controller-fast-$stamp"
+```
+
+Der Runner nimmt ausschließlich frische Ordner der Form `.local/acceptance/gui-controller-{red|fast|full}-<timestamp>` an. `red` ist der Vorher-Beleg für die frühere GUI und endet erwartungsgemäß mit Exit-Code 1, sobald echte Case-, Exchange- und Clipdaten bereit sind und die alten UI-Assertions scheitern. Für den reparierten Stand sind `fast` und `full` maßgeblich. `fast` prüft einen echten `wrong_way/pending`-Fall einschließlich empfangener MP4-Bytes, SHA-256, nativem Play/Pause/Seek, sichtbarem Prompt/Antwort sowie Reject/Kaffee ohne Falscheskalation. `full` ergänzt mehrere serverseitige Jobs und Fälle, stabile Fallauswahl nach Reload, Serverfrist, Fehler-/Follow-up- und Profilpfade sowie Tastatur-, EN-, 390-Pixel-, Reduced-Motion-, CSP- und unerwartete JavaScript-Fehlerprüfungen. Der Runner erzeugt keine gemockten API-Antworten, sendet keine Modellprovideranfragen, verkürzt keine echte Serverfrist und bricht externe Browseranfragen ab.
+
+Jeder Bericht enthält Laufphase, Browser-/Serverumgebung, echte Case-/Job-/Exchange-/Clip-IDs, HTTP-Methoden und Pfade, SHA-256 der empfangenen Clipbytes, Playerzustand, Assertions und Screenshots. Ein Fall ohne echte serverseitige Bewertung bleibt ein Fehler; Testprofile werden explizit pro Job gewählt und niemals aus dem Ereignisnamen abgeleitet.
 
 ## Medienzeit und Browserbelege
 
 Dateivideo-Folgebeobachtung sampelt die Medienzeit, nicht die nächste Serie nativer Frames. Die lokale Implementierung benötigt eine positive, verlässliche FPS-Angabe und ein Backend, das die angeforderte Frameposition tatsächlich bestätigt. Unbekannte FPS oder unzuverlässiges Seek-Verhalten liefern einen strukturierten Medienfehler. Die synthetische AVI-Demo verwendet konstante Framerate; Videos mit variabler Framerate und reale Kameras sind nicht abgenommen.
 
-Die unabhängige lokale Headless-Edge-Prüfung am 2026-10-02 bestand acht CLI-/Browserfälle einschließlich Upload, Neuaufnahme, Video-Folgebeobachtung, Freigabe, Abbruch, defekter Medien, Mehrtabbetrieb und 390-Pixel-Ansicht. Sie verwendete echte Serverprozesse, OpenCV und gespeicherte Framebelege. Screenshots und Ergebnis-JSON sind lokale Abnahmebelege; es gab keine externen Seitenanfragen und keine Browserfehler. Diese Prüfung ist keine Hardware- oder Wettbewerbsabnahme.
+Die unabhängige lokale Headless-Edge-Prüfung am 2026-10-02 bestand acht ältere Analyse-/CLI-Fälle einschließlich Upload, Neuaufnahme, Video-Folgebeobachtung, Freigabe, Abbruch, defekter Medien, Mehrtabbetrieb und 390-Pixel-Ansicht. Sie ist kein Nachweis für den Vier-Räume-Controller und ersetzt dessen neue Browserabnahme nicht. Echte Kamera-Hardware und Wettbewerbsverhalten wurden nicht geprüft.
 
 ## Ausführungsregeln des Kerns
 
