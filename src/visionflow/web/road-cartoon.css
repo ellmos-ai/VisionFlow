@@ -858,30 +858,56 @@
   border-radius: 4px;
 }
 
-/* ==========================================================================
-   Clean Mission Control: Hide redundant legacy forms below the cartoon game
-   ========================================================================== */
-.road-camera__heading,
-.road-camera__case-options,
-.road-camera__toolbar,
-.road-camera__status,
-.road-camera__source,
-.road-camera__run,
-.road-camera__secondary,
-.road-camera__player-panel,
-.road-camera__live > h3,
-.road-camera__live > .road-camera__frame-meta,
-.road-workspace-grid {
-  display: none !important;
-}
-
+/* The real camera, model, and workplace mounts are embedded into their rooms. */
 .road-camera {
   margin: 0 !important;
   padding: 0 !important;
   border: none !important;
   background: transparent !important;
-  min-height: 1px !important;
+  min-height: 0 !important;
   min-width: 1px !important;
+}
+
+.road-camera-root,
+.road-camera-live-slot,
+#road-model-root,
+#road-workplace-root,
+#road-timeline-root,
+.road-workspace-panel {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+}
+
+.road-camera__case-options,
+.road-camera__toolbar,
+.road-camera__secondary,
+.road-model-grid,
+.road-office-scene,
+.road-workplace-panel,
+.road-timeline {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.road-model-prompt,
+.road-model-raw-output,
+.road-model-deltas,
+.road-model-evidence,
+.road-stream-output,
+.road-inspector-box,
+.road-workplace-panel,
+.road-timeline,
+.queue-item,
+.queue-item small {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.road-video-player,
+.road-camera__player,
+.road-camera__frame {
+  max-width: 100%;
 }
 
 /* ==========================================================================
@@ -1086,4 +1112,97 @@
 .transparency-sub {
   font-size: 0.8rem;
   color: #94a3b8;
+}
+
+@media (max-width: 600px) {
+  .cartoon-stage {
+    gap: 0.75rem;
+  }
+
+  .cartoon-header {
+    padding: 0.75rem;
+    gap: 0.6rem;
+  }
+
+  .cartoon-brand__title {
+    font-size: 1.05rem;
+  }
+
+  .cartoon-brand__subtitle {
+    font-size: 0.75rem;
+  }
+
+  .cartoon-top-controls {
+    flex-wrap: wrap;
+  }
+
+  .cartoon-room__stage {
+    padding: 0.75rem;
+    gap: 0.8rem;
+  }
+
+  .cartoon-character-row,
+  .traffic-screen-wrap,
+  .road-camera__content,
+  .road-model-grid,
+  .road-workplace-grid,
+  .road-timeline-list {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .cartoon-character-row {
+    flex-direction: column;
+  }
+
+  .cartoon-speech-bubble,
+  .traffic-monitor,
+  .traffic-control-panel,
+  .datacenter-card,
+  .beta-alert-box {
+    min-width: 0;
+    padding: 0.75rem;
+  }
+
+  .cartoon-station-node {
+    white-space: normal;
+    min-width: 4rem;
+    padding: 0.45rem;
+    font-size: 0.7rem;
+  }
+
+  .cartoon-conduit-nav {
+    gap: 0.25rem;
+    padding: 0.55rem;
+  }
+
+  .cartoon-job-status,
+  .cartoon-source-facts,
+  .road-camera__case-options,
+  .road-camera__toolbar,
+  .road-model-facts,
+  .road-model-clip-facts,
+  .road-case-details,
+  .road-inbox-list {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .road-camera__toolbar .button,
+  .cartoon-btn-grid .chunky-btn,
+  .dispatch-actions .chunky-btn {
+    max-width: 100%;
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

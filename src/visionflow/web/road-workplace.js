@@ -28,6 +28,36 @@ const ERROR_LABELS = Object.freeze({
   stale_content_hash: "Der Fallinhalt wurde inzwischen geändert. Bitte aktualisiere ihn und prüfe die Entscheidung erneut.",
 });
 
+const PHASE_LABELS_EN = Object.freeze({
+  initializing: "Preparing case",
+  starting: "Case is starting",
+  running: "Traffic is being analyzed",
+  model_review: "Model review in progress",
+  normal: "No issue detected",
+  source_ended: "Source ended",
+  human_review: "Human review required",
+  no_response: "No response before the deadline",
+  reported: "Initial report sent",
+  corrected: "Correction sent",
+  rejected: "Hazard rejected",
+  dismissed: "No suspected hazard",
+  cancelled: "Case cancelled",
+});
+
+const REASON_LABELS_EN = Object.freeze({
+  high_confidence: "Automatic initial report after high confidence and evidence were confirmed",
+  human_confirmed: "Initial report after human confirmation",
+  no_response: "Initial report after the server review deadline expired without a response",
+});
+
+const ERROR_LABELS_EN = Object.freeze({
+  model_timeout: "The model request timed out.",
+  invalid_json: "The model response could not be read as a valid assessment.",
+  invalid_evidence: "The model response referenced invalid evidence.",
+  stale_version: "The case has changed. Refresh it and review the decision again.",
+  stale_content_hash: "The case content has changed. Refresh it and review the decision again.",
+});
+
 function element(tagName, className, text) {
   const node = document.createElement(tagName);
   if (className) node.className = className;
@@ -43,7 +73,7 @@ function setHidden(node, hidden) {
   node.hidden = Boolean(hidden);
 }
 
-function valueText(value, fallback = "Nicht angegeben") {
+function valueText(value, fallback = document.documentElement.lang === "en" ? "Not provided" : "Nicht angegeben") {
   if (!hasValue(value)) return fallback;
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -55,13 +85,28 @@ function valueText(value, fallback = "Nicht angegeben") {
 }
 
 function hazardLabel(hazard) {
-  if (hazard === true) return "Ja";
-  if (hazard === false) return "Nein";
-  return "Unklar";
+  const english = document.documentElement.lang === "en";
+  if (hazard === true) return english ? "Yes" : "Ja";
+  if (hazard === false) return english ? "No" : "Nein";
+  return english ? "Unclear" : "Unklar";
 }
 
 function phaseLabel(phase) {
-  return PHASE_LABELS[phase] || (hasValue(phase) ? `Unbekannter Fallstatus (${valueText(phase)})` : "Fallstatus nicht angegeben");
+  const english = document.documentElement.lang === "en";
+  if (english && PHASE_LABELS_EN[phase]) return PHASE_LABELS_EN[phase];
+  return PHASE_LABELS[phase] || (hasValue(phase)
+    ? (english ? `Unknown case status (${valueText(phase)})` : `Unbekannter Fallstatus (${valueText(phase)})`)
+    : (english ? "Case status not provided" : "Fallstatus nicht angegeben"));
+}
+
+function reasonLabel(reason) {
+  if (document.documentElement.lang === "en") return REASON_LABELS_EN[reason] || "Report reason is not translated in the snapshot";
+  return REASON_LABELS[reason] || "Meldungsgrund im Snapshot nicht übersetzt";
+}
+
+function modelErrorLabel(code) {
+  if (document.documentElement.lang === "en") return ERROR_LABELS_EN[code] || `Model error (${valueText(code)}).`;
+  return ERROR_LABELS[code] || `Modellfehler (${valueText(code)}).`;
 }
 
 function errorLabel(error) {
@@ -154,7 +199,6 @@ export function mountRoadWorkplace(container, apiClient) {
   let activeViewGeneration = 0;
   let phaseAnnouncement = "";
   let remainingAtUpdate = null;
-  let remainingAtPerformance = 0;
   let latestInbox = [];
   let operationSequence = 0;
   let refreshGeneration = 0;
@@ -230,7 +274,7 @@ export function mountRoadWorkplace(container, apiClient) {
   setHidden(decisionFeedback, true);
   caseContainer.appendChild(decisionFeedback);
   const decisionActions = element("div", "road-btn-group road-decision-actions");
-  const confirmButton = element("button", "road-btn road-btn-danger", "Gefahr bestätigen und Behörden informieren");
+  const confirmButton = element("button", "road-btn road-btn-danger", "Gefahr bestätigen · simulierte Erstmeldung");
   confirmButton.type = "button";
   confirmButton.id = "btn-operator-confirm";
   confirmButton.disabled = true;
@@ -465,7 +509,7 @@ export function mountRoadWorkplace(container, apiClient) {
     confirmButton.disabled = destroyed || !bindingValid || !canConfirm || blocked || confirmOperation?.state === "succeeded";
     denyButton.disabled = destroyed || !bindingValid || !canReject || blocked || denyOperation?.state === "succeeded";
     denyButton.textContent = hasFirstReceipt
-      ? "Gefahr verneinen und Entwarnung an Behörden senden"
+      ? "Gefahr verneinen · simulierte Korrekturmeldung"
       : "Gefahr verneinen";
   }
 
@@ -520,7 +564,7 @@ export function mountRoadWorkplace(container, apiClient) {
   function renderCaseDetails(fields) {
     caseDetails.replaceChildren();
     setField(caseDetails, "Fall-ID", valueText(fields.caseId));
-    setField(caseDetails, "Fallversion", hasValue(fields.version) ? String(fields.version) : "Nicht angegeben");
+      setField(caseDetails, "Fallversion", hasValue(fields.version) ? String(fields.version) : valueText(null));
     setField(caseDetails, "Inhaltshash", valueText(fields.contentHash));
     setField(caseDetails, "Fallphase", phaseLabel(fields.phase));
     if (fields.assessment && typeof fields.assessment === "object") {
@@ -533,16 +577,16 @@ export function mountRoadWorkplace(container, apiClient) {
       const evidenceIds = Array.isArray(fields.assessment.evidence_frame_ids) ? fields.assessment.evidence_frame_ids : [];
       setField(caseDetails, "Belegte Frame-IDs", evidenceIds.length ? evidenceIds.map((item) => valueText(item)).join(", ") : "Keine Frame-IDs im Snapshot vorhanden");
     } else if (hasValue(fields.modelError)) {
-      setField(caseDetails, "Modellprüfung", ERROR_LABELS[fields.modelError] || `Modellfehler (${valueText(fields.modelError)}).`);
+      setField(caseDetails, "Modellprüfung", modelErrorLabel(fields.modelError));
     }
     if (fields.clip && typeof fields.clip === "object") {
       setField(caseDetails, "Clip-ID", valueText(fields.clip.clip_id));
-      setField(caseDetails, "Clipversion", hasValue(fields.clip.version) ? `v${valueText(fields.clip.version)}` : "Nicht angegeben");
+      setField(caseDetails, "Clipversion", hasValue(fields.clip.version) ? `v${valueText(fields.clip.version)}` : valueText(null));
       setField(caseDetails, "Clip-Hash", valueText(fields.clip.sha256));
     }
     if (fields.firstReceipt && typeof fields.firstReceipt === "object") {
       setField(caseDetails, "Erstmeldung", valueText(fields.firstReceipt.receipt_id));
-      setField(caseDetails, "Meldungsgrund", REASON_LABELS[fields.firstReceipt.reason] || "Meldungsgrund nicht übersetzt");
+      setField(caseDetails, "Meldungsgrund", reasonLabel(fields.firstReceipt.reason));
     }
     if (fields.correctionReceipt && typeof fields.correctionReceipt === "object") {
       setField(caseDetails, "Entwarnung", valueText(fields.correctionReceipt.receipt_id));
@@ -553,12 +597,11 @@ export function mountRoadWorkplace(container, apiClient) {
   function updateCountdown() {
     if (remainingAtUpdate === null || !Number.isFinite(remainingAtUpdate)) {
       countdownClock.textContent = "-- s";
+      countdownClock.classList.remove("road-badge-danger");
       return;
     }
-    const elapsed = Math.max(0, (performance.now() - remainingAtPerformance) / 1000);
-    const remaining = Math.max(0, remainingAtUpdate - elapsed);
-    countdownClock.textContent = `${remaining.toFixed(1)} s`;
-    countdownClock.classList.toggle("road-badge-danger", remaining <= 5);
+    countdownClock.textContent = `${Math.max(0, remainingAtUpdate).toFixed(1)} s`;
+    countdownClock.classList.toggle("road-badge-danger", remainingAtUpdate <= 5);
   }
 
   function renderActiveCase(snapshot) {
@@ -624,7 +667,6 @@ export function mountRoadWorkplace(container, apiClient) {
 
     const remaining = fields.remainingSeconds;
     remainingAtUpdate = typeof remaining === "number" && Number.isFinite(remaining) ? Math.max(0, remaining) : null;
-    remainingAtPerformance = performance.now();
     updateCountdown();
     deadline.textContent = hasValue(fields.deadlineAt)
       ? `Serverfrist endet: ${valueText(fields.deadlineAt)}`
@@ -781,7 +823,7 @@ export function mountRoadWorkplace(container, apiClient) {
   }
 
   function reasonText(record) {
-    return REASON_LABELS[record.reason] || "Meldungsgrund im Snapshot nicht übersetzt";
+    return reasonLabel(record.reason);
   }
 
   function buildInboxEntry(key, record) {
@@ -954,8 +996,6 @@ export function mountRoadWorkplace(container, apiClient) {
     if (activeFields) requestClip(activeClip, activeFields.clip, { case_id: activeFields.caseId, run_id: activeFields.runId }, true);
   });
 
-  const countdownTimer = globalThis.setInterval(updateCountdown, 250);
-
   function update(caseSnapshot, inbox) {
     if (destroyed) return;
     if (Array.isArray(inbox)) latestInbox = inbox;
@@ -966,7 +1006,6 @@ export function mountRoadWorkplace(container, apiClient) {
   function destroy() {
     if (destroyed) return;
     destroyed = true;
-    globalThis.clearInterval(countdownTimer);
     activeViewGeneration += 1;
     refreshGeneration += 1;
     activeClip.isMounted = false;

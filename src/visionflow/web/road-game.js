@@ -1,6 +1,6 @@
 /**
- * FlowVision Emergency Leitstelle – Interactive Browser Game Engine
- * Inspired by Emergency / Bibi Blocksberg / Benjamin Blümchen Rettungszentrale
+ * VisionFlow four-room controller view. The cartoon room illustrations are
+ * presentational; case, queue, model, clip, and deadline data come from mounts.
  * 
  * Manages 4 Rooms:
  *   Room 1: 🚦 Verkehrsraumüberwachung (B4 Nord & Techniker Alex)
@@ -109,885 +109,978 @@
     </svg>`
   };
 
-  // State
+  // The game shell owns navigation and illustration only. Operational data
+  // arrives through update() and the explicit callbacks below.
   let currentRoom = 1;
   let currentLang = "de";
-  let activeCaseId = null;
-  let activeClipUrl = null;
-  let cameraRunning = false;
-  let countdownSeconds = 20;
-  let countdownTimer = null;
-  let caseQueue = [];
-  let selectedTicketId = null;
+  let currentState = { source: null, cases: [], jobs: [], selectedCase: null, exchanges: [], inbox: [] };
+  let callbacks = {};
+  let gameRoot = null;
+  let requestedSelectedCaseId = null;
 
-  // Translation table
-  const I18N = {
+  const COPY = {
     de: {
-      title: "FlowVision – Emergency Einsatzleitstelle",
-      subtitle: "Autonome Video-KI · Leitwarten-Workflow",
-      soundOn: "🔊 Ton: An",
-      soundOff: "🔇 Ton: Aus",
-      langToggle: "🌐 EN",
-      room1: "🚦 1. Verkehrsraum",
-      room2: "🏢 2. Rechenzentrum",
-      room3: "🚓 3. Leitstelle Alpha",
-      room4: "🚨 4. Leitstelle Beta (Fallback)",
-      followCableTo2: "Dem Datenkabel ins Rechenzentrum folgen ➔",
-      followCableTo3: "Dem Alarmkabel zur Leitstelle folgen ➔",
-      followCableTo4: "Dem Kabel zu Tisch 2 folgen ➔",
-      alexIntro: "Hallo! Ich bin Techniker Alex am B4-Nord Kontrollposten. Der OpenCV 5 Vektor-Kernel überwacht kontinuierlich alle Fahrspuren und puffert die letzten 15 Sekunden. Das Live-Video läuft dauerhaft. Teste das System mit den Event-Buttons!",
-      alexEventFired: "Auffällige Bewegung erkannt! Der OpenCV 5 Vektor-Kernel hat eine Anomalie im Live-Bild erfasst. Das Live-Video läuft unterbrechungsfrei weiter! Der neutrale 15s-H.264 Buffer wurde geschnitten, gehasht und an das Rechenzentrum übertragen. Folge dem Datenkabel!",
-      kiraIntro: "Willkommen im KI-Rechenzentrum! Hier trifft der neutrale H.264-Buffer ein. In 2 Stufen analysieren wir: Stufe 1 (OpenCV 5 Vektorkern) filtert Bewegungsmuster, Stufe 2 (Multimodales LLM) analysiert unvoreingenommen Objekt und Verkehrssituation.",
-      kiraSafe: "Stufe 2 Entwarnung! Das multimodale LLM identifiziert ein harmloses Umweltobjekt (Score < 0.1). Kein Polizeieinsatz erforderlich.",
-      kiraDanger: "Stufe 2 Alarm! Das multimodale LLM erkennt akute Lebensgefahr durch Falschfahrer (Score 0.98)! Sofortige Übergabe an die Leitstelle!",
-      schmidtIntro: "Polizeileitstelle Alpha. Officer Schmidt am Apparat. Ich prüfe den eingehenden neutralen Beweisclip...",
-      schmidtRadio: "📻 Funkgerät: Einsatzwagen alarmieren!",
-      schmidtFalseAlarm: "❌ Fehlalarm verwerfen",
-      schmidtCoffee: "☕ Kaffeepause (Logout & Weiterleiten)",
-      schmidtDispatched: "Funkspruch an Streife 4 abgesetzt! Einsatzwagen rückt mit Blaulicht zur B4 Nord aus!",
-      schmidtRejected: "Fehlalarm bestätigt. Ticket geschlossen, kein Einsatz nötig.",
-      schmidtCoffeeAway: "Ich hol mir schnell einen Kaffee! Übergebe den Fall an Kollege Weber an Tisch 2.",
-      weberSticky: "☕ Bin kurz Kaffee holen – Weber",
-      weberAlert: "Officer Weber ist abwesend! Sicherheits-Frist läuft!",
-      weberManual: "🚨 Manuell Freigeben",
-      weberTimeout: "🚨 SICHERHEITS-AUTOMATISMUS EINGEGRIFFEN! Keine Reaktion innerhalb der 20s Frist – Notfall-Einsatz automatisch ausgelöst, um Menschenleben zu retten!"
+      title: "VisionFlow · Verkehrsleitstelle",
+      subtitle: "Lokale Controlleransicht · vier Räume, echte Falldaten",
+      soundOn: "🔊 Ton: An", soundOff: "🔇 Ton: Aus", langToggle: "🌐 EN",
+      navLabel: "Controller-Räume",
+      room1: "🚦 1. Verkehrsraum", room2: "🏢 2. Rechenzentrum",
+      room3: "🚓 3. Leitstelle Alpha", room4: "🚨 4. Leitstelle Beta",
+      alexName: "Alex · Techniker B4 Nord",
+      alexIntro: "Die Kameraquelle und Aufzeichnung erscheinen hier. Ein Ereignis startet einen Prüfauftrag; es ist noch kein Befund.",
+      cameraTitle: "Aktuelle Kameraquelle", eventTitle: "Prüfauftrag starten",
+      eventHelp: "Wähle Ereignis, Modus und die sichtbare Offline-Testantwort. Das Ereignis sagt nichts über das Prüfergebnis aus.",
+      wrongWay: "⚠️ Falschfahrer-Szenario", bird: "🐦 Vogel-Szenario", leaf: "🍂 Blatt-Szenario",
+      noSource: "Starte zuerst eine Kameraquelle.", sourceReady: "Quelle läuft",
+      profileMissing: "Die ausgewählte Testantwort konnte nicht gelesen werden.",
+      sourceEnded: "Quelle beendet", noSourceData: "Noch keine Quelle ausgewählt.",
+      followTo2: "Dem Datenkabel ins Rechenzentrum folgen ➔",
+      kiraName: "Dr. Kira · Modellprüfung",
+      kiraIntro: "Hier erscheinen tatsächliche Jobs, Modellprüfungen, Prompts, Belege und Antworten.",
+      jobQueue: "Prüfaufträge und Fälle", noJobs: "Noch keine Prüfaufträge oder Fälle vorhanden.",
+      resultTitle: "Befund des ausgewählten Falls",
+      noAssessment: "Noch kein Ergebnis verfügbar. Ein Befund erscheint erst nach der tatsächlichen Bewertung.",
+      noCase: "Wähle einen Fall aus der Warteschlange.",
+      followTo3: "Dem Kabel zur Leitstelle folgen ➔",
+      schmidtName: "Officer Schmidt · Menschliche Prüfung",
+      schmidtIntro: "Wähle einen tatsächlichen Fall und prüfe dessen gespeicherten Clip und Befund.",
+      historyTitle: "Fallauswahl", noHistory: "Noch keine Fälle vorhanden.",
+      workplaceTitle: "Menschlicher Arbeitsplatz",
+      coffee: "☕ Kaffeepause · Fallübersicht öffnen",
+      coffeeStatus: "Kaffeepause. Fall, Frist und Entscheidung bleiben unverändert.",
+      followTo4: "Dem Kabel zur Fallchronik folgen ➔",
+      weberName: "Officer Weber · Serverstatus",
+      room4Intro: "Dieser Raum zeigt ausschließlich Phase, Frist und Belege aus dem ausgewählten Serverfall.",
+      selectedCase: "Ausgewählter Fall", noSelection: "Kein Fall ausgewählt",
+      remaining: "Vom Server gemeldete Restzeit", receiptTitle: "Serverbelege",
+      noReceipt: "Für diesen Fall ist kein Serverbeleg gespeichert.",
+      firstReceipt: "Erstmeldung", correctionReceipt: "Korrekturmeldung",
+      timelineTitle: "Fallchronik",
+      noTimeline: "Für den ausgewählten Fall liegen noch keine Chronikeinträge vor.",
+      sourceId: "Quellenkennung", frames: "Aufgezeichnete Quellbilder", sourceStatus: "Quellenstatus",
+      phase: "Serverphase", mode: "Modus", profile: "Testantwort",
+      job: "Prüfauftrag", event: "Szenario", error: "Fehler",
+      clipId: "Ereignisclip-ID", clipHash: "Ereignisclip-Prüfsumme",
+      noClip: "Für diesen Fall ist kein Ereignisclip im Snapshot vorhanden.",
+      coffeeAway: "Kollegin oder Kollege ist in der Kaffeepause. Der Server überwacht die Frist weiter.",
+      patrol: "Simulierte Streife · keine echte Entsendung",
+      roadTab: "🚦 VisionFlow Verkehrsleitstelle",
     },
     en: {
-      title: "FlowVision – Emergency Dispatch Mission Control",
-      subtitle: "Autonomous Video AI · Traffic Control Center",
-      soundOn: "🔊 Sound: ON",
-      soundOff: "🔇 Sound: OFF",
-      langToggle: "🌐 DE",
-      room1: "🚦 1. Traffic Outpost",
-      room2: "🏢 2. Datacenter",
-      room3: "🚓 3. Dispatch Alpha",
-      room4: "🚨 4. Dispatch Beta (Fallback)",
-      followCableTo2: "Follow Data Cable to Datacenter ➔",
-      followCableTo3: "Follow Alert Cable to Dispatch ➔",
-      followCableTo4: "Follow Cable to Desk 2 ➔",
-      alexIntro: "Hello! I am Field Technician Alex at the B4 North station. The OpenCV 5 vector kernel continuously monitors traffic lanes and keeps a rolling 15s buffer. The live stream runs uninterrupted. Test the system using the event buttons!",
-      alexEventFired: "Motion anomaly detected! The OpenCV 5 vector kernel identified abnormal vectors in the live stream. The live video continues to play without stopping! The neutral 15s H.264 buffer was clipped, hashed, and sent over the optic cable. Follow the cable!",
-      kiraIntro: "Welcome to the AI Datacenter! The neutral H.264 buffer arrives here. We run a 2-stage analysis: Stage 1 (OpenCV 5 Vector Kernel) validates motion vectors, Stage 2 (Multimodal LLM) unbiasedly reasons over object semantics and traffic hazard.",
-      kiraSafe: "Stage 2 All-Clear! The multimodal LLM classified a harmless environmental object (Score < 0.1). No dispatch required.",
-      kiraDanger: "Stage 2 Emergency! The multimodal LLM identified acute danger from a wrong-way driver (Score 0.98)! High priority dispatch forwarded to Police Command!",
-      schmidtIntro: "Police Dispatch Alpha. Officer Schmidt on duty. Reviewing the incoming neutral video proof clip...",
-      schmidtRadio: "📻 Radio: Dispatch Patrol Car!",
-      schmidtFalseAlarm: "❌ Dismiss False Alarm",
-      schmidtCoffee: "☕ Coffee Break (Logout & Forward)",
-      schmidtDispatched: "Radio call sent to Patrol 4! Emergency vehicle dispatched to B4 North with sirens blaring!",
-      schmidtRejected: "False alarm confirmed. Ticket resolved, no unit dispatched.",
-      schmidtCoffeeAway: "Stepping out for coffee! Forwarding case to Officer Weber at Desk 2.",
-      weberSticky: "☕ Grabbing coffee, be right back – Weber",
-      weberAlert: "Officer Weber is away! Emergency fallback countdown running!",
-      weberManual: "🚨 Manual Override Dispatch",
-      weberTimeout: "🚨 FAIL-SAFE AUTOMATION ACTIVATED! No human response within 20s deadline – Patrol car dispatched automatically to protect lives!"
-    }
+      title: "VisionFlow · Traffic Control",
+      subtitle: "Local controller view · four rooms, real case data",
+      soundOn: "🔊 Sound: on", soundOff: "🔇 Sound: off", langToggle: "🌐 DE",
+      navLabel: "Controller rooms",
+      room1: "🚦 1. Traffic room", room2: "🏢 2. Datacenter",
+      room3: "🚓 3. Dispatch Alpha", room4: "🚨 4. Dispatch Beta",
+      alexName: "Alex · B4 North technician",
+      alexIntro: "The camera source and recording appear here. An event starts an analysis job; it is not a finding.",
+      cameraTitle: "Current camera source", eventTitle: "Start an analysis job",
+      eventHelp: "Choose an event, mode, and the visible offline test response. The event does not determine the result.",
+      wrongWay: "⚠️ Wrong-way scenario", bird: "🐦 Bird scenario", leaf: "🍂 Leaf scenario",
+      noSource: "Start a camera source first.", sourceReady: "Source running",
+      profileMissing: "The selected test response could not be read.",
+      sourceEnded: "Source ended", noSourceData: "No source selected yet.",
+      followTo2: "Follow the data cable to the datacenter ➔",
+      kiraName: "Dr. Kira · Model review",
+      kiraIntro: "Actual jobs, model reviews, prompts, evidence, and responses appear here.",
+      jobQueue: "Jobs and cases", noJobs: "There are no jobs or cases yet.",
+      resultTitle: "Selected case assessment",
+      noAssessment: "No result is available yet. A finding appears only after an actual assessment.",
+      noCase: "Select a case from the queue.",
+      followTo3: "Follow the cable to dispatch ➔",
+      schmidtName: "Officer Schmidt · Human review",
+      schmidtIntro: "Select an actual case to review its saved clip and assessment.",
+      historyTitle: "Case selection", noHistory: "There are no cases yet.",
+      workplaceTitle: "Human review workspace",
+      coffee: "☕ Coffee break · open case overview",
+      coffeeStatus: "Coffee break. The case, deadline, and decision remain unchanged.",
+      followTo4: "Follow the cable to the case timeline ➔",
+      weberName: "Officer Weber · Server status",
+      room4Intro: "This room shows only the phase, deadline, and receipts from the selected server case.",
+      selectedCase: "Selected case", noSelection: "No case selected",
+      remaining: "Server-reported time remaining", receiptTitle: "Server receipts",
+      noReceipt: "No server receipt is stored for this case.",
+      firstReceipt: "Initial report", correctionReceipt: "Correction report",
+      timelineTitle: "Case timeline",
+      noTimeline: "There are no timeline entries for the selected case yet.",
+      sourceId: "Source ID", frames: "Recorded source frames", sourceStatus: "Source status",
+      phase: "Server phase", mode: "Mode", profile: "Test response",
+      job: "Job", event: "Scenario", error: "Error",
+      clipId: "Event clip ID", clipHash: "Event clip checksum",
+      noClip: "No event clip is present in this case snapshot.",
+      coffeeAway: "A colleague is on a coffee break. The server continues to enforce the deadline.",
+      patrol: "Simulated patrol · no real dispatch",
+      roadTab: "🚦 VisionFlow Controller",
+    },
   };
 
+  const MODULE_COPY = [
+    ["Straßenkamera-Demo", "Road camera"],
+    ["Eine lokale synthetische Verkehrsszene liefert echte Bildpixel für die freigegebenen OpenCV-Werkzeuge.", "A local synthetic traffic scene provides real image pixels to the enabled OpenCV tools."],
+    ["Modellmodus", "Model mode"], ["Offline-Testantwort", "Offline test response"],
+    ["Gemini Video (nicht freigeschaltet)", "Gemini Video (not enabled)"],
+    ["CAM-01 · B4 NORD", "CAM-01 · B4 NORTH"],
+    ["Kamera im Bereitschaftsmodus", "Camera ready"],
+    ["Sitzung starten oder ⚡ 1-Klick Demo aktivieren", "Start a session to begin"],
+    ["Aktuelles Bild der synthetischen Straßenkamera", "Current synthetic road camera image"],
+    ["Vollständiger Ereignisclip zur menschlichen Fallprüfung", "Full event clip for human case review"],
+    ["Lokale synthetische Straßenkamera und H.264-Aufzeichnung sind bereit.", "The local synthetic road camera and H.264 recording are ready."],
+    ["Die Kamerafunktion konnte nicht geprüft werden. Prüfe den lokalen FFmpeg-Server.", "The camera feature could not be checked. Check the local FFmpeg server."],
+    ["Für die Straßenkamera-Aufzeichnung muss FFmpeg mit libx264 verfügbar sein.", "FFmpeg with libx264 must be available for road camera recording."],
+    ["Neue synthetische Quelle gestartet.", "New synthetic source started."],
+    ["Neue Quelle gestartet; frühere Clips bleiben erhalten.", "New source started; earlier clips remain available."],
+    ["Quelle aktiv; noch kein Prüfauftrag gestartet.", "Source is active; no analysis job has been started yet."],
+    ["Quelle wiederhergestellt; Prüfaufträge und Fälle werden vom Server geladen.", "Source restored; jobs and cases are loading from the server."],
+    ["Wiederhergestellte Quelle; warte auf das aktuelle Kamerabild.", "Restored source; waiting for the current camera image."],
+    ["Beendete Quelle; historische Fälle und Clips bleiben verfügbar.", "Ended source; historical cases and clips remain available."],
+    ["Warte auf das erste Kamerabild.", "Waiting for the first camera image."],
+    ["Quelle mit einem technischen Fehler beendet.", "Source ended with a technical error."],
+    ["Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.", "Source ended; the last actual camera image remains visible."],
+    ["Quelle beendet; die vollständige Aufnahme wird angezeigt.", "Source ended; the complete recording is available."],
+    ["Die Quelle war bereits beendet; ihre gespeicherte Aufnahme ist nun fertiggestellt.", "The source had already ended; its saved recording is now complete."],
+    ["Aufnahmedaten konnten nicht geladen werden.", "Recording data could not be loaded."],
+    ["Das aktuelle Kamerabild konnte nicht geladen werden.", "The current camera image could not be loaded."],
+    ["Starte zuerst eine Quelle.", "Start a source first."],
+    ["Ereignisse werden erst freigegeben, wenn drei echte Startframes analysiert wurden.", "Events are enabled after three actual startup frames have been analyzed."],
+    ["Das Analyseereignis verändert nur die Szene. Ein positiver Befund entsteht ausschließlich aus analysierten Frames.", "The event changes only the scene. A positive finding comes only from analyzed frames."],
+    ["Das Ereignis verändert nur die Szene. Ein positiver Befund entsteht ausschließlich aus analysierten Frames.", "The event changes only the scene. A positive finding comes only from analyzed frames."],
+    ["Während einer Prüfung sind neue Szenarioereignisse gesperrt. Stoppen und Zurücksetzen bleiben verfügbar.", "New scenario events are locked during a review. Stop and reset remain available."],
+    ["Die Straßenkamera ist nicht verfügbar. Prüfe die FFmpeg-Voraussetzung.", "The road camera is unavailable. Check the FFmpeg requirement."],
+    ["Der Analyse-Lauf ist beendet. Starte eine neue Sitzung für eine weitere Prüfung.", "The analysis run is complete. Start a new session for another review."],
+    ["Ereignis in die Szene eingeblendet. Das ist noch kein Analysebefund.", "Event added to the scene. This is not an analysis finding."],
+    ["Analyse abgebrochen; die Kameraquelle zeichnet weiter auf.", "Analysis cancelled; the camera source continues recording."],
+    ["Die Quelle läuft, aber der Analyse-Lauf ist fehlgeschlagen.", "The source is running, but the analysis run failed."],
+    ["Die Quelle ist beendet; der letzte Laufstatus ist nicht verfügbar.", "The source has ended; the last run status is unavailable."],
+    ["Der Kameraablauf konnte nicht gestartet werden.", "The camera workflow could not be started."],
+    ["Der Controllerstatus konnte nicht geladen werden.", "Controller status could not be loaded."],
+    ["Der Server lieferte keinen abspielbaren Clip.", "The server did not return a playable clip."],
+    ["Die Clip-Prüfsumme passt nicht zu den gespeicherten Metadaten.", "The clip checksum does not match the stored metadata."],
+    ["Der gespeicherte Clip konnte nicht geöffnet werden.", "The saved clip could not be opened."],
+    ["Der Server lieferte keinen gültigen Fall- und Laufbezug.", "The server did not return a valid case and run reference."],
+    ["Der Server lieferte keinen gültigen Prüfauftrag zurück.", "The server did not return a valid analysis job."],
+    ["Starte zuerst eine Kameraquelle.", "Start a camera source first."],
+    ["Wähle Ereignis und Modellmodus explizit aus.", "Choose an event and model mode explicitly."],
+    ["Wähle die sichtbare Offline-Testantwort explizit aus.", "Choose the visible offline test response explicitly."],
+    ["Die aufgezeichnete Quelle passt nicht zur gespeicherten Quellenkennung.", "The recording does not match the stored source ID."],
+    ["Die ausgewählte Fallansicht konnte nicht vollständig geladen werden.", "The selected case view could not be fully loaded."],
+    ["Quellen-, Fall- oder Postfachdaten konnten nicht geladen werden.", "Source, case, or inbox data could not be loaded."],
+    ["Der gespeicherte Kamerastatus enthält keine Quellenkennung.", "The stored camera status has no source ID."],
+    ["Der Server lieferte keine neue Quellenkennung.", "The server did not return a new source ID."],
+    ["Straßenkamera-Demo", "Road camera"],
+    ["Offline-Testantwort · menschliche Prüfung (Sicherheit 0,80)", "Offline test response · human review (confidence 0.80)"],
+    ["Offline-Testantwort · hohe Sicherheit (0,99)", "Offline test response · high confidence (0.99)"],
+    ["Offline-Testantwort · Vogel, keine Gefahr (0,99)", "Offline test response · bird, no hazard (0.99)"],
+    ["Offline-Testantwort · Blatt, keine Gefahr (0,99)", "Offline test response · leaf, no hazard (0.99)"],
+    ["Offline-Testantwort · Folgebeobachtung", "Offline test response · follow-up observation"],
+    ["Offline-Testantwort · unklar", "Offline test response · unclear"],
+    ["Offline-Testantwort · Modellfehler", "Offline test response · model error"],
+    ["Wartet", "Queued"],
+    ["Gemini Video (gemini_video)", "Gemini Video (gemini_video)"],
+    ["Neue Sitzung starten", "Start new session"], ["Neue Straßenkamera-Sitzung starten", "Start a new road camera session"],
+    ["Aufnahme beenden", "Stop recording"], ["Aufnahme speichern", "Save recording"], ["Zurücksetzen", "Reset"],
+    ["Analyse abbrechen", "Cancel analysis"], ["Noch keine Sitzung gestartet.", "No session started yet."],
+    ["Quelle: –", "Source: –"], ["Analyse und Controller-Trace", "Analysis and controller trace"],
+    ["Noch kein Analyse-Lauf gestartet.", "No analysis run started yet."], ["Noch kein Analyse-Lauf gestartet.", "No analysis run started yet."],
+    ["Noch keine Analysebefunde.", "No analysis findings yet."], ["Noch kein Trace vorhanden.", "No trace available yet."],
+    ["Gespeicherte Controller-Ereignisse", "Stored controller events"], ["Livebild", "Live image"],
+    ["Bereit. Starte eine Sitzung oder nutze die ⚡ 1-Klick Demo.", "Ready. Start a session to begin."],
+    ["Szenarioereignis", "Scenario event"], ["Ereignis für die Szene", "Event for the scene"],
+    ["Ereignis einblenden", "Add event to the scene"], ["Aufzeichnung", "Recording"],
+    ["Warte auf Aufnahmedaten.", "Waiting for recording data."], ["Gespeicherter Clip", "Saved clip"],
+    ["Noch kein gespeicherter Clip.", "No saved clip yet."],
+    ["Noch kein Clip geladen. Wähle nach Beenden der Aufnahme einen Clip aus der Liste.", "No clip loaded. Select a clip after recording ends."],
+    ["Wähle einen gespeicherten Clip aus.", "Select a saved clip."], ["Gespeicherte Clips", "Saved clips"],
+    ["Gespeicherte Straßenkamera-Aufzeichnung", "Saved road camera recording"],
+    ["Noch kein Clip geladen.", "No clip loaded yet."], ["Der Ereignisclip konnte nicht geöffnet werden.", "The event clip could not be opened."],
+    ["Der authentifizierte Ereignisclip konnte nicht geladen werden.", "The authenticated event clip could not be loaded."],
+    ["Clip geladen. Native Videosteuerung ist verfügbar.", "Clip loaded. Native video controls are available."],
+    ["Authentifizierter Ereignisclip wird geladen.", "Loading authenticated event clip."],
+    ["Kein Clip im Snapshot vorhanden.", "No clip is present in the snapshot."],
+    ["Kein Clip in der Meldung vorhanden.", "No clip is attached to this report."],
+    ["Für diese Korrektur gibt es keinen eigenen Clip.", "This correction has no separate clip."],
+    ["Clip erneut laden", "Reload clip"], ["Clip-Hash", "Clip hash"], ["SHA-256", "SHA-256"],
+    ["Modellprüfung und Ereignisclips", "Model reviews and event clips"],
+    ["Modellprüfungen", "Model reviews"], ["Warten auf Modellprüfungen", "Waiting for model reviews"],
+    ["Keine Modellprüfungen vorhanden", "No model reviews available"],
+    ["Noch liegt keine Modellprüfung vor. Sobald ein Ereignisclip geprüft wird, erscheinen hier der tatsächliche Prompt, die Belege und die Modellantwort.", "No model review is available yet. The actual prompt, evidence, and model response will appear here when an event clip is reviewed."],
+    ["Tatsächlicher Modell-Prompt", "Actual model prompt"], ["Unveränderte Modellantwort", "Unmodified model response"],
+    ["Echte Belegreferenzen und Frame-IDs", "Actual evidence references and frame IDs"],
+    ["Übergebene Bildbelege", "Submitted image evidence"], ["Bildbelege aus dem Modelllauf", "Image evidence from the model run"],
+    ["Keine Bildbelege im Snapshot vorhanden.", "No image evidence is present in the snapshot."],
+    ["Bildbelege können ohne Lauf-ID nicht geladen werden.", "Image evidence cannot be loaded without a run ID."],
+    ["Authentifizierter Bildbeleg wird geladen.", "Loading authenticated image evidence."],
+    ["Bildbeleg geladen.", "Image evidence loaded."], ["Bildbeleg konnte nicht dargestellt werden. Bitte erneut laden.", "Image evidence could not be displayed. Please reload it."],
+    ["Authentifizierter Bildbeleg konnte nicht geladen werden. Bitte erneut laden.", "Authenticated image evidence could not be loaded. Please reload it."],
+    ["Bildbelegformat nicht unterstützt. Erlaubt sind PNG und JPEG.", "Image evidence format is not supported. PNG and JPEG are allowed."],
+    ["Bild erneut laden", "Reload image"], ["Antwort-Deltas", "Response deltas"], ["Validierte Bewertung", "Validated assessment"],
+    ["Keine Belegreferenzen im Snapshot vorhanden.", "No evidence references are present in the snapshot."],
+    ["Kein Prompt im Snapshot vorhanden.", "No prompt is present in the snapshot."],
+    ["Keine Antwort-Deltas im Snapshot vorhanden.", "No response deltas are present in the snapshot."],
+    ["Keine Rohantwort im Snapshot vorhanden.", "No raw response is present in the snapshot."],
+    ["Noch liegt keine validierte Bewertung vor.", "No validated assessment is available yet."],
+    ["Status nicht angegeben", "Status not provided"], ["Wird geprüft", "Under review"],
+    ["Abgeschlossen", "Completed"], ["Fehlgeschlagen", "Failed"], ["Abgebrochen", "Cancelled"],
+    ["Die Modellanfrage hat das Zeitlimit erreicht.", "The model request timed out."],
+    ["Die Modellantwort ließ sich nicht als gültige Bewertung lesen.", "The model response could not be read as a valid assessment."],
+    ["Die Modellantwort verwies auf ungültige Belege.", "The model response referenced invalid evidence."],
+    ["Die Modellprüfung wurde abgebrochen.", "The model review was cancelled."],
+    ["Modus", "Mode"], ["Clip-ID", "Clip ID"], ["Clipversion", "Clip version"],
+    ["Aufnahmebildrate", "Recording frame rate"], ["Verarbeitungsbildrate", "Processing frame rate"], ["Clipdauer", "Clip duration"],
+    ["Modell-ID", "Model ID"], ["Fall-ID", "Case ID"], ["Lauf-ID", "Run ID"], ["Austausch-ID", "Exchange ID"],
+    ["Objektklasse", "Object class"], ["Gefahrenstatus", "Hazard status"], ["Vom Modell angegebene Sicherheit", "Model-reported confidence"],
+    ["Sicherheit", "Confidence"], ["Zusammenfassung", "Summary"], ["Validierte Folgeaktion", "Validated next action"],
+    ["Ereignisclip-ID", "Event clip ID"], ["Ereignisclip-Prüfsumme", "Event clip checksum"],
+    ["Fallinhaltshash nicht angegeben.", "Case content hash not provided."],
+    ["Vollständiger Ereignisclip zur Modellprüfung", "Full event clip for model review"],
+    ["Menschlicher Arbeitsplatz und Demo-Postfach", "Human review workspace and demo inbox"],
+    ["Kein offener Fall", "No open case"], ["Warten auf einen Fall zur menschlichen Prüfung.", "Waiting for a case for human review."],
+    ["Fallzusammenfassung", "Case summary"], ["Fallstatus nicht angegeben", "Case status not provided"],
+    ["Serverfrist für die menschliche Prüfung", "Server deadline for human review"],
+    ["Frist: im Snapshot nicht angegeben", "Deadline not provided in snapshot"],
+    ["Serverfrist: im Snapshot nicht angegeben", "Server deadline not provided in snapshot"],
+    ["Noch keine Benachrichtigung für eine menschliche Prüfung.", "No human review notification yet."],
+    ["Büroarbeitsplatz mit Laptop", "Office workspace with laptop"],
+    ["Einsatz-Arbeitsplatz auf dem Laptop", "Operations workspace on laptop"],
+    ["Schreibtisch – menschliche Fallprüfung", "Desk · human case review"],
+    ["Simulierter Behördeneingang", "Simulated agency inbox"], ["Demo-Postfach des Behördenempfängers", "Demo inbox for the agency recipient"],
+    ["Erstmeldungen und Entwarnungen", "Initial reports and corrections"],
+    ["Im Demo-Postfach ist noch keine Meldung eingegangen.", "No reports have arrived in the demo inbox yet."],
+    ["Noch keine Benachrichtigung für eine menschliche Prüfung.", "No human review notification yet."],
+    ["Fall öffnen", "Open case"], ["Fall aktualisieren", "Refresh case"],
+    ["Gleiche Entscheidung erneut senden", "Resend the same decision"],
+    ["Clip-ID:", "Clip ID:"], ["Fall-ID:", "Case ID:"], ["Fallversion:", "Case version:"],
+    ["Inhaltshash:", "Content hash:"], ["Fallphase:", "Case phase:"], ["Gefahrenstatus:", "Hazard status:"],
+    ["Belegte Frame-IDs:", "Evidence frame IDs:"], ["Modellprüfung:", "Model review:"],
+    ["Erstmeldung:", "Initial report:"], ["Meldungsgrund:", "Report reason:"], ["Entwarnung:", "Correction:"],
+    ["Verknüpft mit Erstmeldung:", "Linked to initial report:"],
+    ["Clipversion:", "Clip version:"], ["Clip-Hash:", "Clip hash:"],
+    ["Fallstatus:", "Case status:"], ["Objektklasse:", "Object class:"], ["Zusammenfassung:", "Summary:"],
+    ["Meldungsgrund nicht übersetzt", "Report reason is not translated"],
+    ["Meldungsgrund im Snapshot nicht übersetzt", "Report reason is not translated in the snapshot"],
+    ["Keine Frame-IDs im Snapshot vorhanden", "No frame IDs are present in the snapshot"],
+    ["Nicht angegeben", "Not provided"], ["Unklar", "Unclear"], ["Ja", "Yes"], ["Nein", "No"],
+    ["Wartet", "Queued"], ["Läuft", "Running"], ["Beobachtet", "Observing"],
+    ["Eingabe erforderlich", "Input required"], ["Freigabe erforderlich", "Approval required"],
+    ["Fall wird vorbereitet", "Preparing case"], ["Fallstart läuft", "Case is starting"],
+    ["Verkehr wird ausgewertet", "Traffic is being analyzed"], ["Modellprüfung läuft", "Model review in progress"],
+    ["Keine Auffälligkeit festgestellt", "No issue detected"], ["Quelle beendet", "Source ended"],
+    ["Menschliche Prüfung erforderlich", "Human review required"], ["Keine Antwort bis zum Fristende", "No response before the deadline"],
+    ["Erstmeldung gesendet", "Initial report sent"], ["Entwarnung gesendet", "Correction sent"],
+    ["Gefahr verneint", "Hazard rejected"], ["Kein Gefahrverdacht", "No suspected hazard"], ["Fall abgebrochen", "Case cancelled"],
+    ["Grund: Der Fall wurde nach der Erstmeldung menschlich korrigiert.", "Reason: A human corrected the case after the initial report."],
+    ["Automatische Erstmeldung nach bestätigter hoher Sicherheit und Belegen", "Automatic initial report after high confidence and evidence were confirmed"],
+    ["Erstmeldung nach menschlicher Bestätigung", "Initial report after human confirmation"],
+    ["Erstmeldung nach Ablauf der serverseitigen Prüfzeit ohne Antwort", "Initial report after the server review deadline expired without a response"],
+    ["Grund:", "Reason:"], ["Meldung", "Report"], ["Bestätigen", "Confirm"], ["Ablehnen", "Reject"],
+    ["Gefahr bestätigen · simulierte Erstmeldung", "Confirm hazard · simulated initial report"],
+    ["Gefahr verneinen", "Reject hazard"], ["Gefahr verneinen · simulierte Korrekturmeldung", "Reject hazard · simulated correction report"],
+    ["Die Entscheidung wird übertragen. Weitere Entscheidungen bleiben bis zur Antwort gesperrt.", "Sending the decision. Further decisions are locked until a response arrives."],
+    ["Die Antwort ist nicht angekommen. Es ist unklar, ob der Server den Antrag gespeichert hat. Du kannst exakt denselben Antrag mit derselben Kennung erneut senden.", "The response did not arrive. It is unclear whether the server stored the request. You can resend the exact same request with the same identifier."],
+    ["Der Fall wurde inzwischen geändert. Bitte aktualisiere ihn und prüfe die Entscheidung erneut.", "The case has changed. Refresh it and review the decision again."],
+    ["Der Server hat die Entscheidung abgelehnt. Bitte aktualisiere den Fall und prüfe ihn erneut.", "The server rejected the decision. Refresh the case and review it again."],
+    ["Entscheidung vom Server angenommen.", "Decision accepted by the server."],
+    ["Für diese Entscheidung konnte keine sichere Kennung erstellt werden. Bitte lade den Fall erneut.", "A safe identifier could not be created for this decision. Reload the case."],
+    ["Der aktuelle Fall wird vom Server neu geladen.", "Reloading the current case from the server."],
+    ["Der Fall konnte nicht aktualisiert werden. Bitte versuche es erneut.", "The case could not be refreshed. Please try again."],
+    ["Authentifizierter Ereignisclip wird geladen.", "Loading authenticated event clip."],
+    ["Keine Bildbelege im Snapshot vorhanden.", "No image evidence is present in the snapshot."],
+    ["Modellfehler", "Model error"],
+    ["Keine offenen Prüfungen", "No open reviews"],
+  ];
+
   function t(key) {
-    return I18N[currentLang][key] || key;
+    return COPY[currentLang][key] || key;
   }
 
-  // DOM Builder helper
   function h(tag, attrs, children) {
-    const el = document.createElement(tag);
+    const node = document.createElement(tag);
     if (attrs) {
-      for (const [k, v] of Object.entries(attrs)) {
-        if (k === "className") el.className = v;
-        else if (k === "textContent") el.textContent = v;
-        else if (k === "innerHTML") el.innerHTML = v;
-        else if (k === "onclick") el.addEventListener("click", v);
-        else if (k === "hidden") el.hidden = Boolean(v);
-        else el.setAttribute(k, v);
+      for (const [key, value] of Object.entries(attrs)) {
+        if (key === "className") node.className = value;
+        else if (key === "textContent") node.textContent = value;
+        else if (key === "innerHTML") node.innerHTML = value;
+        else if (key === "onclick") node.addEventListener("click", value);
+        else if (key === "hidden") node.hidden = Boolean(value);
+        else if (key === "disabled") node.disabled = Boolean(value);
+        else node.setAttribute(key, value);
       }
     }
     if (children) {
       for (const child of Array.isArray(children) ? children : [children]) {
-        if (typeof child === "string") el.appendChild(document.createTextNode(child));
-        else if (child instanceof Node) el.appendChild(child);
+        if (typeof child === "string") node.appendChild(document.createTextNode(child));
+        else if (child instanceof Node) node.appendChild(child);
       }
     }
-    return el;
+    return node;
   }
 
-  // --- Dispatch Patrol Car Animation ---
-  function dispatchPatrolCar() {
-    if (global.RoadSFX) global.RoadSFX.playSiren();
-    const car = document.getElementById("cartoon-patrol-car");
-    if (!car) return;
-    car.classList.remove("dispatching");
-    void car.offsetWidth; // trigger reflow
-    car.classList.add("dispatching");
+  function tx(tag, key, className, extra = {}) {
+    return h(tag, { ...extra, className, textContent: t(key), "data-i18n": key });
   }
 
-  // --- Room Switching ---
-  function switchRoom(roomNum) {
+  function navigate(room) {
+    currentRoom = room;
     if (global.RoadSFX) global.RoadSFX.playClick();
-    currentRoom = roomNum;
-
-    // Update Nav buttons
-    [1, 2, 3, 4].forEach((idx) => {
-      const navBtn = document.getElementById(`nav-node-room-${idx}`);
-      const roomEl = document.getElementById(`cartoon-room-${idx}`);
-      if (navBtn) navBtn.classList.toggle("active", idx === currentRoom);
-      if (roomEl) roomEl.hidden = idx !== currentRoom;
+    [1, 2, 3, 4].forEach((index) => {
+      const button = document.getElementById("nav-node-room-" + index);
+      const section = document.getElementById("cartoon-room-" + index);
+      if (button) {
+        button.classList.toggle("active", index === room);
+        button.setAttribute("aria-current", index === room ? "page" : "false");
+      }
+      if (section) section.hidden = index !== room;
     });
+  }
 
-    if (currentRoom === 3) {
-      renderSchmidtWorkspace();
+  function appendRoomNavigation(root, room) {
+    root.appendChild(tx("button", "followTo" + room, "cable-follow-btn", {
+      id: "follow-btn-" + room,
+      type: "button",
+      onclick: () => navigate(room),
+    }));
+    return root;
+  }
+
+  function characterRow(svg, nameKey, speechKey, id) {
+    return h("div", { className: "cartoon-character-row" }, [
+      h("div", { className: "cartoon-avatar", innerHTML: svg }),
+      h("div", { className: "cartoon-speech-bubble" }, [
+        tx("div", nameKey, "cartoon-speaker-name"),
+        tx("p", speechKey, "cartoon-speech-text", { id }),
+      ]),
+    ]);
+  }
+
+  function eventPayload(event) {
+    const mode = document.getElementById("road-model-mode")?.value || "fixture";
+    const fixtureProfile = document.getElementById("road-fixture-profile")?.value || "";
+    return mode === "fixture"
+      ? { event, mode, fixture_profile: fixtureProfile }
+      : { event, mode };
+  }
+
+  function enqueue(event) {
+    const source = currentState.source;
+    if (!source || source.closed === true || source.status === "stopped" || source.status === "ended") {
+      setStatus(t("noSource"), true);
+      return;
     }
-  }
-
-  // --- Update Cable States ---
-  function setCablePulsing(cableId, pulsing) {
-    const cable = document.getElementById(cableId);
-    if (cable) {
-      cable.classList.toggle("pulsing", Boolean(pulsing));
-      if (pulsing && global.RoadSFX) global.RoadSFX.playCablePulse();
+    const payload = eventPayload(event);
+    if (payload.mode === "fixture" && !payload.fixture_profile) {
+      setStatus(t("profileMissing"), true);
+      return;
     }
-  }
-
-  function pad2(n) {
-    return String(n).padStart(2, "0");
-  }
-
-  function generateNeutralClipName() {
-    const d = new Date();
-    const stamp = `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
-    const seq = Math.floor(1000 + Math.random() * 9000);
-    return `cam01_b4nord_${stamp}_seq${seq}.mp4`;
-  }
-
-  // --- Handle Real Event Trigger ---
-  async function triggerEvent(eventType) {
     if (global.RoadSFX) global.RoadSFX.playEventTrigger();
+    setStatus("");
+    Promise.resolve(callbacks.onEnqueue?.(payload)).catch((error) => {
+      setStatus(error?.message || t("error"), true);
+    });
+  }
 
-    // 1. Ensure camera is started in backend if not running, but NEVER restart if running!
-    const stopBtn = document.getElementById("road-camera-stop");
-    let isCameraRunning = cameraRunning || (stopBtn && !stopBtn.disabled);
-    if (!isCameraRunning) {
-      if (window.roadCameraMount && typeof window.roadCameraMount.createSource === "function") {
-        try {
-          await window.roadCameraMount.createSource();
-          cameraRunning = true;
-        } catch (_) {}
-      } else {
-        const startBtn = document.getElementById("road-camera-create");
-        if (startBtn && !startBtn.disabled) {
-          startBtn.click();
-          cameraRunning = true;
-        }
-      }
-      const camStatus = document.getElementById("cartoon-cam-status");
-      if (camStatus) camStatus.textContent = "[● LIVE STREAM]";
-    }
+  function setStatus(message, isError = false) {
+    const status = document.getElementById("cartoon-job-status");
+    if (!status) return;
+    status.textContent = message || "";
+    status.classList.toggle("error-message", Boolean(isError));
+    localizeModules();
+  }
 
-    // 2. Anomaly Alert Banner on Live Stream (OpenCV 5 Motion Detection) - never interrupts video!
-    const feedMount = document.getElementById("cartoon-feed-mount");
-    if (feedMount) {
-      let banner = document.getElementById("live-anomaly-banner");
-      if (!banner) {
-        banner = h("div", { id: "live-anomaly-banner", className: "traffic-anomaly-banner" });
-        feedMount.prepend(banner);
-      }
-      const eventLabel = eventType === "wrong_way"
-        ? "⚠️ Falschfahrer auf Spur 2 detektiert!"
-        : (eventType === "bird" ? "🐦 Vogel im Querflug detektiert!" : "🍂 Herbstlaub im Wind detektiert!");
-      banner.textContent = `⚠️ STUFE 1 (OpenCV 5 Vektorkern): ${eventLabel} Puffer (15s H.264) wird geschnitten...`;
-      banner.hidden = false;
-      window.setTimeout(() => {
-        if (banner) banner.hidden = true;
-      }, 5000);
-    }
+  function formatValue(value) {
+    if (value === null || value === undefined || value === "") return "–";
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    return String(value);
+  }
 
-    // 3. Update Alex's Speech Bubble
-    const speechAlex = document.getElementById("speech-alex");
-    if (speechAlex) speechAlex.textContent = t("alexEventFired");
-
-    // 4. Inject event to backend - direct API injection, completely bypasses review lock!
-    try {
-      if (window.roadCameraMount && typeof window.roadCameraMount.injectScenarioEvent === "function") {
-        await window.roadCameraMount.injectScenarioEvent(eventType);
-      } else {
-        const select = document.getElementById("road-camera-event") || document.querySelector("select.road-camera__event-select");
-        const injectBtn = document.getElementById("road-camera-inject");
-        if (select && injectBtn) {
-          select.value = eventType;
-          injectBtn.click();
-        }
-      }
-    } catch (err) {
-      console.warn("Event injection warning:", err);
-    }
-
-    // 5. Light up Cable 1 -> 2
-    setCablePulsing("cable-1-2", true);
-    const followBtn1 = document.getElementById("follow-btn-1");
-    if (followBtn1) followBtn1.hidden = false;
-
-    // 6. Generate neutral ticket (Filename NEVER contains event name to ensure unbiased model test!)
-    const ticketId = "T-" + Math.floor(1000 + Math.random() * 9000);
-    const clipName = generateNeutralClipName();
-    const hash = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-    const isDanger = eventType === "wrong_way";
-    const score = isDanger ? 0.98 : (eventType === "bird" ? 0.04 : 0.02);
-
-    const ticket = {
-      id: ticketId,
-      clipName,
-      type: eventType,
-      hash: "3a" + hash + "...",
-      isDanger,
-      score,
-      time: new Date().toLocaleTimeString(),
-      status: isDanger ? "Einsatzprüfung" : "Entwarnung",
-      modelInterface: "offline-fixture/high (Lokaler Fallback)"
+  function phaseText(snapshot) {
+    const value = snapshot && typeof snapshot.phase === "string" ? snapshot.phase : null;
+    if (!value) return "–";
+    const phases = {
+      queued: ["Warteschlange", "Queued"],
+      starting: ["Startet", "Starting"],
+      running: ["Läuft", "Running"],
+      observing: ["Beobachtet", "Observing"],
+      model_review: ["Modellprüfung", "Model review"],
+      human_review: ["Menschliche Prüfung", "Human review"],
+      no_response: ["Keine Antwort", "No response"],
+      reported: ["Gemeldet", "Reported"],
+      rejected: ["Abgelehnt", "Rejected"],
+      completed: ["Abgeschlossen", "Completed"],
+      cancelled: ["Abgebrochen", "Cancelled"],
+      failed: ["Fehlgeschlagen", "Failed"],
     };
-    caseQueue.unshift(ticket);
-    selectedTicketId = ticket.id;
-
-    // Render Queue in Datacenter (Room 2)
-    renderDatacenterQueue();
-
-    // Render Schmidt's Ticket Inbox and Video Monitor in Room 3
-    renderSchmidtWorkspace(ticket);
-
-    // 8. Stream 2-Stage Logs to Room 2 Datacenter Terminal
-    appendDatacenterLog(`[INGEST] Neutraler H.264 Puffer empfangen: ${clipName}`);
-    appendDatacenterLog(`[BUFFER] 15.00 Sekunden Rolling-Puffer (450 Frames @ 30 FPS, B4 Nord)`);
-    appendDatacenterLog(`[CRYPTO] SHA-256 Integrität: ${ticket.hash} (Unverändert)`);
-    appendDatacenterLog(`[SCHNITTSTELLE] Adapter: offline-fixture/high · Typ: Deterministischer lokaler Fallback`);
-    appendDatacenterLog(`[TRANSPARENZ] Fallback aktiv (Kein externer GEMINI_API_KEY hinterlegt)`);
-    appendDatacenterLog(`[STUFE 1 - OPENCV 5] Vektor-Bewegungsanalyse im Bildstrom...`);
-    appendDatacenterLog(` -> Auffällige Bewegungsvektoren detektiert (Schwellenwert überschritten)`);
-
-    // Highlighting Stage Chips in Room 2
-    const chip1 = document.getElementById("stage-chip-1");
-    const chip2 = document.getElementById("stage-chip-2");
-    if (chip1) chip1.classList.add("active-stage");
-    if (chip2) chip2.classList.remove("active-stage");
-
-    window.setTimeout(() => {
-      if (chip2) chip2.classList.add("active-stage");
-      appendDatacenterLog(`[STUFE 2 - FIXTURE/LLM] Unvoreingenommene semantische Situations- & Objektanalyse...`);
-      if (isDanger) {
-        appendDatacenterLog(` ↳ Erkanntes Objekt: Kraftfahrzeug entgegen regulärem Verkehrsfluss`);
-        appendDatacenterLog(` ↳ Situationskontext: Akute Geisterfahrer-Kollisionsgefahr auf B4 Nord!`);
-        appendDatacenterLog(`[BEWERTUNG] Gefahren-Score: 0.98 -> KRITISCHER NOTFALL (Menschliche Prüfung)`);
-        appendDatacenterLog(`[FORWARD] Fall ${ticketId} mit neutralem Beweisclip an Leitstelle Alpha übergeben!`);
-      } else if (eventType === "leaf") {
-        appendDatacenterLog(` ↳ Erkanntes Objekt: Herabfallendes Herbstlaub im Wind`);
-        appendDatacenterLog(` ↳ Situationskontext: Harmloses Umweltpartikel ohne Verkehrsgefährdung`);
-        appendDatacenterLog(`[BEWERTUNG] Gefahren-Score: 0.02 -> HARMLOS / ENTWARNUNG (Kein Einsatz)`);
-      } else {
-        appendDatacenterLog(` ↳ Erkanntes Objekt: Vogel im Querflug über der Trasse`);
-        appendDatacenterLog(` ↳ Situationskontext: Temporäre Luftraumbewegung, Fahrbahn frei`);
-        appendDatacenterLog(`[BEWERTUNG] Gefahren-Score: 0.04 -> HARMLOS / ENTWARNUNG (Kein Einsatz)`);
-      }
-    }, 450);
-
-    // 9. Update Room 2 Verdict with 2-Stage breakdown & Honest Transparency
-    const verdictBox = document.getElementById("datacenter-verdict-box");
-    const speechKira = document.getElementById("speech-kira");
-    if (verdictBox) {
-      if (isDanger) {
-        verdictBox.innerHTML = `
-          <div class="stage-breakdown">
-            <span class="stage-badge">Stufe 1 (OpenCV 5): Vektoranomalie erfasst</span>
-            <span class="verdict-badge danger">⚠️ Stufe 2 (LLM): Falschfahrer erkannt! (Score: 0.98)</span>
-            <small class="inference-interface-hint">Schnittstelle: Lokaler Fallback (offline-fixture/high)</small>
-          </div>`;
-        if (speechKira) speechKira.textContent = t("kiraDanger");
-        setCablePulsing("cable-2-3", true);
-        const followBtn2 = document.getElementById("follow-btn-2");
-        if (followBtn2) followBtn2.hidden = false;
-      } else {
-        const objName = eventType === "leaf" ? "Herbstlaub" : "Vogel";
-        verdictBox.innerHTML = `
-          <div class="stage-breakdown">
-            <span class="stage-badge">Stufe 1 (OpenCV 5): Vektoranomalie erfasst</span>
-            <span class="verdict-badge safe">✅ Stufe 2 (LLM): Harmloses Umweltobjekt (${objName}, Score: ${score.toFixed(2)})</span>
-            <small class="inference-interface-hint">Schnittstelle: Lokaler Fallback (offline-fixture/high)</small>
-          </div>`;
-        if (speechKira) speechKira.textContent = t("kiraSafe");
-      }
-    }
+    const pair = phases[value];
+    return pair ? pair[currentLang === "de" ? 0 : 1] : value;
   }
 
-  function appendDatacenterLog(msg) {
-    const consoleEl = document.getElementById("datacenter-console");
-    if (consoleEl) {
-      const line = document.createElement("div");
-      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      consoleEl.appendChild(line);
-      consoleEl.scrollTop = consoleEl.scrollHeight;
-    }
+  function eventText(value) {
+    const labels = {
+      wrong_way: ["Falschfahrer-Szenario", "Wrong-way scenario"],
+      bird: ["Vogel-Szenario", "Bird scenario"],
+      leaf: ["Blatt-Szenario", "Leaf scenario"],
+    };
+    const pair = labels[value];
+    return pair ? pair[currentLang === "de" ? 0 : 1] : formatValue(value);
   }
 
-  function renderDatacenterQueue() {
-    const listEl = document.getElementById("datacenter-queue-list");
-    if (!listEl) return;
-    listEl.replaceChildren();
-    caseQueue.slice(0, 5).forEach((item) => {
-      const div = h("div", {
-        className: `queue-item ${item.isDanger ? "high-risk" : ""}`,
-        innerHTML: `<strong>${item.clipName}</strong> · ${item.time}<br><small>CAM-01 · 15.0s H.264 · SHA256: ${item.hash}</small>`
-      });
-      listEl.appendChild(div);
+  function modeText(value) {
+    if (value === "fixture") return currentLang === "de" ? "Offline-Testantwort" : "Offline test response";
+    if (value === "gemini_video") return "Gemini Video";
+    return formatValue(value);
+  }
+
+  function selectCase(caseId) {
+    if (typeof caseId !== "string" || !caseId) return;
+    requestedSelectedCaseId = caseId;
+    if (gameRoot) gameRoot.dataset.selectedCaseId = caseId;
+    gameRoot?.querySelectorAll("button[data-testid='case-ticket']").forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.caseId === caseId));
     });
+    callbacks.onSelectCase?.(caseId);
   }
 
-  function updateSchmidtReviewMonitor(ticket) {
-    const reviewBox = document.getElementById("cartoon-review-video-box");
-    if (!reviewBox) return;
-    reviewBox.replaceChildren();
-
-    const banner = h("div", {
-      className: "review-clip-meta",
-      innerHTML: `<span class="proof-badge">Neutraler Beweisclip: ${ticket ? ticket.clipName : "cam01_b4nord_current.mp4"}</span><br><small>15s H.264 Buffer · SHA-256: ${ticket ? ticket.hash : "–"}</small>`
+  function ticketButton(record, selectedId, jobs) {
+    const isJob = record.kind === "job";
+    const caseId = isJob ? record.job.case_id : record.snapshot.case_id;
+    const id = isJob ? record.job.job_id : record.snapshot.case_id;
+    const button = h("button", {
+      type: "button",
+      className: "queue-item",
+      "data-testid": "case-ticket",
+      "aria-pressed": String(Boolean(caseId && caseId === selectedId)),
+      disabled: !caseId,
+      onclick: () => selectCase(caseId),
     });
-
-    const realPlayer = document.getElementById("road-camera-player");
-    if (realPlayer && realPlayer.src && realPlayer.src.startsWith("blob:")) {
-      const vid = document.createElement("video");
-      vid.className = "road-video-player";
-      vid.src = realPlayer.src;
-      vid.autoplay = true;
-      vid.loop = true;
-      vid.controls = true;
-      vid.muted = true;
-      reviewBox.append(banner, vid);
+    if (caseId) button.dataset.caseId = caseId;
+    if (isJob) button.dataset.jobId = id;
+    const title = document.createElement("strong");
+    title.textContent = isJob ? t("job") + " " + formatValue(id) : t("selectedCase") + " " + formatValue(caseId);
+    const details = document.createElement("small");
+    if (isJob) {
+      details.textContent = [
+        t("event") + ": " + eventText(record.job.event),
+        t("mode") + ": " + modeText(record.job.mode),
+        t("profile") + ": " + formatValue(record.job.fixture_profile),
+        phaseText({ phase: record.job.state }),
+      ].join(" · ");
     } else {
-      const typeLabel = ticket ? (ticket.type === "wrong_way" ? "⚠️ FALSCHFAHRER GEFAHR" : (ticket.type === "bird" ? "🐦 VOGEL IM QUERFLUG" : "🍂 HERBSTLAUB IM WIND")) : "BEWEIS-LOOP";
-      const badgeClass = ticket && ticket.isDanger ? "danger-tag" : "safe-tag";
-      const animBox = h("div", {
-        className: "review-anim-box",
-        innerHTML: `<div class="review-anim-inner">
-          <div class="review-radar-scan"></div>
-          <p class="review-anim-text">
-            ▶ Beweis-Loop aktiv<br>
-            <strong>${ticket ? ticket.clipName : "cam01_b4nord_seq1042.mp4"}</strong><br>
-            <span class="${badgeClass}">${typeLabel}</span>
-            <br><small class="review-clip-meta">15s H.264 Clip · Rekonstruktion aus Video-Buffer</small>
-          </p>
-        </div>`
-      });
-      reviewBox.append(banner, animBox);
+      const job = jobs.find((item) => item && item.case_id === caseId);
+      const parts = [t("phase") + ": " + phaseText(record.snapshot), t("mode") + ": " + modeText(record.snapshot.mode)];
+      if (record.snapshot.fixture_profile) parts.push(t("profile") + ": " + String(record.snapshot.fixture_profile));
+      if (job) {
+        parts.push(t("job") + ": " + formatValue(job.job_id));
+        parts.push(phaseText({ phase: job.state }));
+        if (job.event) parts.push(t("event") + ": " + eventText(job.event));
+      }
+      details.textContent = parts.join(" · ");
+    }
+    button.append(title, details);
+    return button;
+  }
+
+  function renderTickets(target, selectedId) {
+    if (!target) return;
+    const cases = Array.isArray(currentState.cases) ? currentState.cases : [];
+    const jobs = Array.isArray(currentState.jobs) ? currentState.jobs : [];
+    const records = [];
+    const caseIds = new Set();
+    for (const snapshot of cases) {
+      if (!snapshot || typeof snapshot.case_id !== "string") continue;
+      caseIds.add(snapshot.case_id);
+      records.push({ kind: "case", snapshot });
+    }
+    for (const job of jobs) {
+      if (!job || typeof job.job_id !== "string") continue;
+      if (job.case_id && caseIds.has(job.case_id)) continue;
+      records.push({ kind: "job", job });
+    }
+    records.sort((left, right) => {
+      const leftTime = String(left.kind === "job" ? left.job.created_at || "" : left.snapshot.created_at || "");
+      const rightTime = String(right.kind === "job" ? right.job.created_at || "" : right.snapshot.created_at || "");
+      return rightTime.localeCompare(leftTime);
+    });
+    const focused = document.activeElement;
+    const focusId = focused && target.contains(focused)
+      ? (focused.dataset.caseId || focused.dataset.jobId || null)
+      : null;
+    target.replaceChildren();
+    if (!records.length) {
+      const empty = document.createElement("p");
+      empty.className = "road-empty-state";
+      empty.textContent = t("noJobs");
+      target.appendChild(empty);
+      return;
+    }
+    for (const record of records) target.appendChild(ticketButton(record, selectedId, jobs));
+    if (focusId) {
+      const restored = [...target.querySelectorAll("button[data-case-id],button[data-job-id]")]
+        .find((item) => item.dataset.caseId === focusId || item.dataset.jobId === focusId);
+      if (restored) restored.focus({ preventScroll: true });
     }
   }
 
-  function renderSchmidtWorkspace(activeTicket) {
-    const ticket = activeTicket || caseQueue.find(t => t.id === selectedTicketId) || caseQueue[0];
-    if (ticket) selectedTicketId = ticket.id;
+  function appendActualValue(target, label, value) {
+    const row = document.createElement("p");
+    const strong = document.createElement("strong");
+    strong.textContent = label + ": ";
+    const text = document.createElement("span");
+    text.className = "road-case-field-value";
+    text.textContent = formatValue(value);
+    row.append(strong, text);
+    target.appendChild(row);
+  }
 
-    // 1. Update Video Monitor
-    updateSchmidtReviewMonitor(ticket);
+  function renderSource(state) {
+    const target = document.getElementById("cartoon-source-facts");
+    if (!target) return;
+    target.replaceChildren();
+    const source = state.source;
+    if (!source || typeof source !== "object") {
+      const empty = document.createElement("p");
+      empty.className = "road-empty-state";
+      empty.textContent = t("noSourceData");
+      target.appendChild(empty);
+      return;
+    }
+    appendActualValue(target, t("sourceId"), source.source_id);
+    if (typeof source.frame_count === "number") appendActualValue(target, t("frames"), source.frame_count);
+    appendActualValue(target, t("sourceStatus"), source.status);
+    const status = document.createElement("p");
+    status.textContent = source.closed === true || source.status === "stopped" || source.status === "ended"
+      ? t("sourceEnded")
+      : t("sourceReady");
+    target.appendChild(status);
+  }
 
-    // 2. Render Ticket Inbox
-    const inboxList = document.getElementById("schmidt-ticket-list");
-    if (inboxList) {
-      inboxList.replaceChildren();
-      if (caseQueue.length === 0) {
-        inboxList.appendChild(h("p", { className: "hint", textContent: "Noch keine Tickets eingegangen. Löse ein Ereignis in Raum 1 aus." }));
-      } else {
-        caseQueue.forEach((item) => {
-          const isSelected = item.id === selectedTicketId;
-          const card = h("div", {
-            className: `schmidt-ticket-card ${item.isDanger ? "danger-ticket" : "safe-ticket"} ${isSelected ? "active-ticket" : ""}`,
-            onclick: () => {
-              selectedTicketId = item.id;
-              renderSchmidtWorkspace(item);
-            }
-          }, [
-            h("div", { className: "ticket-header" }, [
-              h("strong", { textContent: item.id }),
-              h("span", {
-                className: `ticket-badge ${item.isDanger ? "danger" : "safe"}`,
-                textContent: item.isDanger ? "⚠️ Falschfahrer (0.98)" : (item.type === "bird" ? "🐦 Vogel (0.04)" : "🍂 Blatt (0.02)")
-              })
-            ]),
-            h("span", { className: "ticket-clip-title", textContent: `${item.clipName} · ${item.time}` })
-          ]);
-          inboxList.appendChild(card);
-        });
+  function renderAssessment(state) {
+    const target = document.getElementById("datacenter-verdict-box");
+    if (!target) return;
+    target.replaceChildren();
+    const snapshot = state.selectedCase;
+    if (!snapshot) {
+      const empty = document.createElement("p");
+      empty.className = "road-empty-state";
+      empty.textContent = t("noCase");
+      target.appendChild(empty);
+      return;
+    }
+    appendActualValue(target, t("selectedCase"), snapshot.case_id);
+    appendActualValue(target, t("phase"), phaseText(snapshot));
+    if (snapshot.mode) appendActualValue(target, t("mode"), modeText(snapshot.mode));
+    if (snapshot.fixture_profile) appendActualValue(target, t("profile"), snapshot.fixture_profile);
+    const clip = snapshot.clip && typeof snapshot.clip === "object" ? snapshot.clip : null;
+    if (clip) {
+      appendActualValue(target, t("clipId"), clip.clip_id);
+      appendActualValue(target, t("clipHash"), clip.sha256);
+    } else {
+      const noClip = document.createElement("p");
+      noClip.className = "road-empty-state";
+      noClip.textContent = t("noClip");
+      target.appendChild(noClip);
+    }
+    if (snapshot.model_error) appendActualValue(target, t("error"), snapshot.model_error);
+    if (snapshot.assessment && typeof snapshot.assessment === "object") {
+      const assessment = snapshot.assessment;
+      const labels = currentLang === "de"
+        ? { object_class: "Objektklasse", hazard: "Gefahrenstatus", confidence: "Sicherheit", summary: "Zusammenfassung" }
+        : { object_class: "Object class", hazard: "Hazard status", confidence: "Confidence", summary: "Summary" };
+      for (const key of ["object_class", "hazard", "confidence", "summary"]) {
+        if (assessment[key] !== null && assessment[key] !== undefined && assessment[key] !== "") {
+          appendActualValue(target, labels[key], assessment[key]);
+        }
+      }
+    } else {
+      const pending = document.createElement("p");
+      pending.className = "road-empty-state";
+      pending.textContent = t("noAssessment");
+      target.appendChild(pending);
+    }
+  }  function receiptSummary(receipt) {
+    if (!receipt || typeof receipt !== "object") return null;
+    return {
+      caseId: receipt.case_id,
+      receiptId: receipt.receipt_id || receipt.message_id || receipt.id,
+      decision: receipt.decision || receipt.action || receipt.status,
+    };
+  }
+
+  function renderRoom4(state) {
+    const snapshot = state.selectedCase;
+    const selected = document.getElementById("beta-selected-case");
+    const remaining = document.getElementById("beta-countdown-clock");
+    const message = document.getElementById("beta-alert-msg");
+    const receipts = document.getElementById("beta-receipts");
+    if (!selected || !remaining || !message || !receipts) return;
+    selected.textContent = snapshot
+      ? t("selectedCase") + ": " + formatValue(snapshot.case_id)
+      : t("noSelection");
+    remaining.textContent = snapshot && typeof snapshot.remaining_seconds === "number"
+      ? String(Math.max(0, Math.ceil(snapshot.remaining_seconds))) + " s"
+      : "–";
+    message.textContent = snapshot ? t("phase") + ": " + phaseText(snapshot) : "";
+    receipts.replaceChildren();
+    const initial = receiptSummary(snapshot?.first_receipt);
+    const correction = receiptSummary(snapshot?.correction_receipt);
+    let count = 0;
+    for (const [label, receipt] of [[t("firstReceipt"), initial], [t("correctionReceipt"), correction]]) {
+      if (!receipt) continue;
+      const row = document.createElement("p");
+      row.dataset.receiptCaseId = receipt.caseId || (snapshot && snapshot.case_id) || "";
+      const parts = [label];
+      if (receipt.receiptId) parts.push(formatValue(receipt.receiptId));
+      if (receipt.decision) parts.push(formatValue(receipt.decision));
+      row.textContent = parts.join(" · ");
+      receipts.appendChild(row);
+      count += 1;
+    }
+    if (count === 0) {
+      const empty = document.createElement("p");
+      empty.className = "road-empty-state";
+      empty.textContent = t("noReceipt");
+      receipts.appendChild(empty);
+    }
+    const character = document.getElementById("speech-weber");
+    if (character) character.textContent = t("room4Intro");
+  }
+
+  function localizeModules() {
+    if (!gameRoot) return;
+    const forward = new Map(MODULE_COPY);
+    const reverse = new Map(MODULE_COPY.map(([de, en]) => [en, de]));
+    const translations = currentLang === "en" ? forward : reverse;
+    const dynamicTranslations = currentLang === "en" ? [
+      [/^Quelle: (.*)$/, (_match, value) => `Source: ${value}`],
+      [/^Quelle beendet · (.+) Frames · (.+) \(max\. 20 FPS\) · (.+) Sek\. · (.+) Byte$/, (_match, frames, rate, seconds, bytes) => `Source ended · ${frames} recorded frames · ${rate} (max. 20 FPS) · ${seconds} s · ${bytes} bytes`],
+      [/^Aufzeichnung läuft · (.+) Frames · (.+) \(max\. 20 FPS\) · (.+) Sek\. · (.+) Byte$/, (_match, frames, rate, seconds, bytes) => `Recording · ${frames} recorded frames · ${rate} (max. 20 FPS) · ${seconds} s · ${bytes} bytes`],
+      [/^FPS noch nicht gemessen$/, () => "FPS not measured yet"],
+      [/^([0-9.,]+) FPS gemessen$/, (_match, value) => `${value} FPS measured`],
+      [/^Frame (.+) · Quellenzeit (.+) Sek\.$/, (_match, frame, seconds) => `Frame ${frame} · source time ${seconds} s`],
+      [/^(.+) in die Szene eingeblendet\. Das ist noch kein Analysebefund\.$/, (_match, event) => `${event === "Falschfahrer" ? "Wrong-way event" : event === "Vogel" ? "Bird event" : event === "Blatt" ? "Leaf event" : event} added to the scene. This is not an analysis finding.`],
+      [/^Quelle (.+) · Version (.+) · (.+)–(.+) Sek\.$/, (_match, source, version, start, end) => `Source ${source} · Version ${version} · ${start}–${end} s`],
+      [/^Fall ([^ ·]+) · (.+)$/, (_match, caseId, phase) => `Case ${caseId} · ${translations.get(phase) || phase}`],
+      [/^Fallphase: (.+)$/, (_match, phase) => `Case phase: ${translations.get(phase) || phase}`],
+      [/^Fall ([^ ·]+) · ([A-Za-z0-9_-]+)$/, (_match, caseId, phase) => `Case ${caseId} · ${phase}`],
+      [/^Serverfrist endet: (.+)$/, (_match, value) => `Server deadline ends: ${value}`],
+      [/^Serverfrist: (.+)$/, (_match, value) => `Server deadline: ${value}`],
+      [/^Frist: (.+)$/, (_match, value) => `Deadline: ${value}`],
+      [/^Meldungs-ID: (.+)$/, (_match, value) => `Report ID: ${value}`],
+      [/^Gebundener Fallinhalt: (.+)$/, (_match, value) => `Bound case content: ${value}`],
+      [/^Fallinhaltshash nicht angegeben\.$/, () => "Case content hash not provided."],
+      [/^Vollständiger Ereignisclip (.+) zur Modellprüfung$/, (_match, id) => `Full event clip ${id} for model review`],
+      [/^Vollständiger Ereignisclip (.+) zur menschlichen Prüfung$/, (_match, id) => `Full event clip ${id} for human review`],
+      [/^Vollständiger Ereignisclip zur Modellprüfung (.+)$/, (_match, id) => `Full event clip for model review ${id}`],
+      [/^Entwarnung zu Fall (.+)$/, (_match, value) => `Correction for case ${value}`],
+      [/^Erstmeldung zu Fall (.+)$/, (_match, value) => `Initial report for case ${value}`],
+      [/^Verknüpft mit ursprünglicher Erstmeldung (.+)\.$/, (_match, value) => `Linked to original initial report ${value}.`],
+      [/^Grund: (.+)$/, (_match, value) => `Reason: ${translations.get(value) || value}`],
+      [/^Fallphase: (.+)$/, (_match, value) => `Case phase: ${translations.get(value) || value}`],
+      [/^Modellprüfung (.+)$/, (_match, id) => `Model review ${id}`],
+      [/^(\d+) Modellprüfung(?:en)?$/, (_match, count) => `${count} model review${count === "1" ? "" : "s"}`],
+      [/^(Wartet|Läuft|Beobachtet|Eingabe erforderlich|Freigabe erforderlich|Abgeschlossen|Fehlgeschlagen|Abgebrochen) · Lauf (.+) · Startanalyse mit drei Frames abgeschlossen$/, (_match, status, id) => `${translations.get(status) || status} · Run ${id} · Startup analysis with three frames completed`],
+      [/^(Wartet|Läuft|Beobachtet|Eingabe erforderlich|Freigabe erforderlich|Abgeschlossen|Fehlgeschlagen|Abgebrochen) · Lauf (.+) · Startframes (\d+\/3)$/, (_match, status, id, frames) => `${translations.get(status) || status} · Run ${id} · Startup frames ${frames}`],
+    ] : [
+      [/^Source: (.*)$/, (_match, value) => `Quelle: ${value}`],
+      [/^Source ended · (.+) recorded frames · (.+) \(max\. 20 FPS\) · (.+) s · (.+) bytes$/, (_match, frames, rate, seconds, bytes) => `Quelle beendet · ${frames} Frames · ${rate} (max. 20 FPS) · ${seconds} Sek. · ${bytes} Byte`],
+      [/^Recording · (.+) recorded frames · (.+) \(max\. 20 FPS\) · (.+) s · (.+) bytes$/, (_match, frames, rate, seconds, bytes) => `Aufzeichnung läuft · ${frames} Frames · ${rate} (max. 20 FPS) · ${seconds} Sek. · ${bytes} Byte`],
+      [/^FPS not measured yet$/, () => "FPS noch nicht gemessen"],
+      [/^([0-9.,]+) FPS measured$/, (_match, value) => `${value} FPS gemessen`],
+      [/^Frame (.+) · source time (.+) s$/, (_match, frame, seconds) => `Frame ${frame} · Quellenzeit ${seconds} Sek.`],
+      [/^(.+) added to the scene\. This is not an analysis finding\.$/, (_match, event) => `${event === "Wrong-way event" ? "Falschfahrer" : event === "Bird event" ? "Vogel" : event === "Leaf event" ? "Blatt" : event} in die Szene eingeblendet. Das ist noch kein Analysebefund.`],
+      [/^Source (.+) · Version (.+) · (.+)–(.+) s$/, (_match, source, version, start, end) => `Quelle ${source} · Version ${version} · ${start}–${end} Sek.`],
+      [/^Case ([^ ·]+) · (.+)$/, (_match, caseId, phase) => `Fall ${caseId} · ${translations.get(phase) || phase}`],
+      [/^Case phase: (.+)$/, (_match, phase) => `Fallphase: ${translations.get(phase) || phase}`],
+      [/^Server deadline ends: (.+)$/, (_match, value) => `Serverfrist endet: ${value}`],
+      [/^Server deadline: (.+)$/, (_match, value) => `Serverfrist: ${value}`],
+      [/^Deadline: (.+)$/, (_match, value) => `Frist: ${value}`],
+      [/^Report ID: (.+)$/, (_match, value) => `Meldungs-ID: ${value}`],
+      [/^Bound case content: (.+)$/, (_match, value) => `Gebundener Fallinhalt: ${value}`],
+      [/^Case content hash not provided\.$/, () => "Fallinhaltshash nicht angegeben."],
+      [/^Full event clip (.+) for model review$/, (_match, id) => `Vollständiger Ereignisclip ${id} zur Modellprüfung`],
+      [/^Full event clip (.+) for human review$/, (_match, id) => `Vollständiger Ereignisclip ${id} zur menschlichen Prüfung`],
+      [/^Full event clip for model review (.+)$/, (_match, id) => `Vollständiger Ereignisclip zur Modellprüfung ${id}`],
+      [/^Correction for case (.+)$/, (_match, value) => `Entwarnung zu Fall ${value}`],
+      [/^Initial report for case (.+)$/, (_match, value) => `Erstmeldung zu Fall ${value}`],
+      [/^Linked to original initial report (.+)\.$/, (_match, value) => `Verknüpft mit ursprünglicher Erstmeldung ${value}.`],
+      [/^Reason: (.+)$/, (_match, value) => `Grund: ${translations.get(value) || value}`],
+      [/^Model review (.+)$/, (_match, id) => `Modellprüfung ${id}`],
+      [/^(\d+) model review(?:s)?$/, (_match, count) => `${count} Modellprüfung${count === "1" ? "" : "en"}`],
+      [/^(Queued|Running|Observing|Input required|Approval required|Completed|Failed|Cancelled) · Run (.+) · Startup analysis with three frames completed$/, (_match, status, id) => `${translations.get(status) || status} · Lauf ${id} · Startanalyse mit drei Frames abgeschlossen`],
+      [/^(Queued|Running|Observing|Input required|Approval required|Completed|Failed|Cancelled) · Run (.+) · Startup frames (\d+\/3)$/, (_match, status, id, frames) => `${translations.get(status) || status} · Lauf ${id} · Startframes ${frames}`],
+    ];
+    const translate = (original) => {
+      const exact = translations.get(original);
+      if (exact) return exact;
+      for (const [pattern, render] of dynamicTranslations) {
+        const match = original.match(pattern);
+        if (match) return render(...match);
+      }
+      return null;
+    };
+    const walker = document.createTreeWalker(gameRoot, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      if (node.parentElement?.closest("pre,code,video,audio,.road-model-field-value,.road-case-field-value,#road-controller-trace,#road-timeline-content")) continue;
+      const original = node.nodeValue.trim();
+      const translated = translate(original);
+      if (translated) node.nodeValue = node.nodeValue.replace(original, translated);
+    }
+    const attributeNodes = gameRoot.querySelectorAll("[aria-label],[title]");
+    for (const node of attributeNodes) {
+      for (const attribute of ["aria-label", "title"]) {
+        const original = node.getAttribute(attribute);
+        if (!original) continue;
+        const translated = translate(original);
+        if (translated) node.setAttribute(attribute, translated);
       }
     }
+  }
 
-    // 3. Update Schmidt Speech Bubble
-    const speech = document.getElementById("speech-schmidt");
-    if (speech && ticket) {
-      if (ticket.isDanger) {
-        speech.textContent = `Achtung! Ticket ${ticket.id} (${ticket.clipName}) zeigt akute Falschfahrer-Gefahr auf B4 Nord! Der H.264-Beweisclip läuft auf meinem Monitor. Ich kann per Funk den Einsatzwagen losschicken.`;
-      } else {
-        const obj = ticket.type === "leaf" ? "herabfallendes Herbstlaub" : "einen Vogel im Querflug";
-        speech.textContent = `Ticket ${ticket.id} (${ticket.clipName}): Das Modell meldet ${obj} (Score ${ticket.score.toFixed(2)}). Auf meinem Monitor sehe ich keine Verkehrsbehinderung. Ich verwerfe das Ticket als Fehlalarm.`;
-      }
+  function refreshLanguage() {
+    if (!gameRoot) return;
+    gameRoot.querySelectorAll("[data-i18n]").forEach((node) => {
+      node.textContent = t(node.dataset.i18n);
+    });
+    document.documentElement.lang = currentLang;
+    localizeModules();
+    const sound = document.getElementById("cartoon-sound-btn");
+    if (sound && global.RoadSFX) {
+      sound.textContent = global.RoadSFX.getMuted() ? t("soundOff") : t("soundOn");
     }
+    const roadTab = document.getElementById("road-tab");
+    if (roadTab) roadTab.textContent = t("roadTab");
+    update(currentState);
+    gameRoot.dispatchEvent(new CustomEvent("road-language-changed", {
+      bubbles: true,
+      detail: { locale: currentLang },
+    }));
   }
 
-  // --- Room 3 Actions ---
-  function onSchmidtRadio() {
-    if (global.RoadSFX) global.RoadSFX.playRadio();
-    dispatchPatrolCar();
-
-    const speech = document.getElementById("speech-schmidt");
-    if (speech) speech.textContent = t("schmidtDispatched");
-
-    // Click confirm in real backend workplace if present
-    const confirmBtn = document.getElementById("btn-operator-confirm");
-    if (confirmBtn) confirmBtn.click();
-  }
-
-  function onSchmidtReject() {
-    if (global.RoadSFX) global.RoadSFX.playClick();
-    const speech = document.getElementById("speech-schmidt");
-    if (speech) speech.textContent = t("schmidtRejected");
-
-    const denyBtn = document.getElementById("btn-operator-deny");
-    if (denyBtn) denyBtn.click();
-  }
-
-  function onSchmidtCoffee() {
-    if (global.RoadSFX) global.RoadSFX.playCoffee();
-    const speech = document.getElementById("speech-schmidt");
-    if (speech) speech.textContent = t("schmidtCoffeeAway");
-
-    setCablePulsing("cable-3-4", true);
-    const followBtn3 = document.getElementById("follow-btn-3");
-    if (followBtn3) followBtn3.hidden = false;
-
-    // Start 20-second countdown in Room 4
-    startBetaCountdown();
-  }
-
-  // --- Room 4 Countdown & Fail-Safe ---
-  function startBetaCountdown() {
-    if (countdownTimer) clearInterval(countdownTimer);
-    countdownSeconds = 20;
-
-    const display = document.getElementById("beta-countdown-clock");
-    if (display) display.textContent = `${countdownSeconds}s`;
-
-    countdownTimer = setInterval(() => {
-      countdownSeconds -= 1;
-      if (display) display.textContent = `${countdownSeconds}s`;
-
-      if (countdownSeconds <= 0) {
-        clearInterval(countdownTimer);
-        countdownTimer = null;
-        triggerBetaTimeout();
-      }
-    }, 1000);
-  }
-
-  function triggerBetaTimeout() {
-    dispatchPatrolCar();
-    const alertBanner = document.getElementById("beta-alert-msg");
-    if (alertBanner) {
-      alertBanner.textContent = t("weberTimeout");
-      alertBanner.hidden = false;
-    }
-  }
-
-  function onBetaManualDispatch() {
-    if (countdownTimer) {
-      clearInterval(countdownTimer);
-      countdownTimer = null;
-    }
-    dispatchPatrolCar();
-    const alertBanner = document.getElementById("beta-alert-msg");
-    if (alertBanner) {
-      alertBanner.textContent = "🚨 Notfalleinsatz manuell freigegeben – Streifenwagen rückt aus!";
-      alertBanner.hidden = false;
-    }
-  }
-
-  // --- Build Full Cartoon Interface ---
   function buildCartoonDOM() {
     const root = h("div", { className: "cartoon-stage road-cartoon-stage" });
+    root.dataset.selectedCaseId = "";
 
-    // 1. Header with Title & Toggles
-    const header = h("header", { className: "cartoon-header" }, [
+    root.appendChild(h("header", { className: "cartoon-header" }, [
       h("div", { className: "cartoon-brand" }, [
-        h("span", { className: "cartoon-brand__badge", textContent: "🚨" }),
+        h("span", { className: "cartoon-brand__badge", textContent: "🚦" }),
         h("div", {}, [
-          h("h2", { id: "cartoon-title", className: "cartoon-brand__title", textContent: t("title") }),
-          h("p", { id: "cartoon-subtitle", className: "cartoon-brand__subtitle", textContent: t("subtitle") })
-        ])
+          tx("h2", "title", "cartoon-brand__title", { id: "cartoon-title" }),
+          tx("p", "subtitle", "cartoon-brand__subtitle", { id: "cartoon-subtitle" }),
+        ]),
       ]),
       h("div", { className: "cartoon-top-controls" }, [
         h("button", {
           id: "cartoon-sound-btn",
           className: "cartoon-pill-btn",
+          type: "button",
           textContent: global.RoadSFX && global.RoadSFX.getMuted() ? t("soundOff") : t("soundOn"),
           onclick: () => {
-            const next = !global.RoadSFX.getMuted();
-            global.RoadSFX.setMuted(next);
-            document.getElementById("cartoon-sound-btn").textContent = next ? t("soundOff") : t("soundOn");
-          }
+            if (!global.RoadSFX) return;
+            global.RoadSFX.setMuted(!global.RoadSFX.getMuted());
+            refreshLanguage();
+          },
         }),
-        h("button", {
+        tx("button", "langToggle", "cartoon-pill-btn", {
           id: "cartoon-lang-btn",
-          className: "cartoon-pill-btn",
-          textContent: t("langToggle"),
+          type: "button",
           onclick: () => {
             currentLang = currentLang === "de" ? "en" : "de";
-            refreshI18n();
-          }
-        })
-      ])
-    ]);
-    root.appendChild(header);
+            refreshLanguage();
+          },
+        }),
+      ]),
+    ]));
 
-    // 2. Conduit Navigation Bar (Rooms + Cables)
-    const conduitNav = h("nav", { className: "cartoon-conduit-nav", "aria-label": "Rettungszentrale Räume" }, [
-      h("button", {
-        id: "nav-node-room-1",
-        className: "cartoon-station-node active",
-        onclick: () => switchRoom(1)
+    const nav = h("nav", { className: "cartoon-conduit-nav", "aria-label": t("navLabel") });
+    for (let room = 1; room <= 4; room += 1) {
+      if (room > 1) nav.appendChild(h("div", {
+        id: "cable-" + (room - 1) + "-" + room,
+        className: "cartoon-cable-segment",
+        "aria-hidden": "true",
+      }));
+      nav.appendChild(h("button", {
+        id: "nav-node-room-" + room,
+        className: "cartoon-station-node" + (room === 1 ? " active" : ""),
+        type: "button",
+        "aria-current": room === 1 ? "page" : "false",
+        onclick: () => navigate(room),
       }, [
-        h("span", { className: "cartoon-station-icon", textContent: "🚦" }),
-        h("span", { id: "nav-text-1", textContent: t("room1") })
-      ]),
-      h("div", { id: "cable-1-2", className: "cartoon-cable-segment" }),
-      h("button", {
-        id: "nav-node-room-2",
-        className: "cartoon-station-node",
-        onclick: () => switchRoom(2)
-      }, [
-        h("span", { className: "cartoon-station-icon", textContent: "🏢" }),
-        h("span", { id: "nav-text-2", textContent: t("room2") })
-      ]),
-      h("div", { id: "cable-2-3", className: "cartoon-cable-segment" }),
-      h("button", {
-        id: "nav-node-room-3",
-        className: "cartoon-station-node",
-        onclick: () => switchRoom(3)
-      }, [
-        h("span", { className: "cartoon-station-icon", textContent: "🚓" }),
-        h("span", { id: "nav-text-3", textContent: t("room3") })
-      ]),
-      h("div", { id: "cable-3-4", className: "cartoon-cable-segment" }),
-      h("button", {
-        id: "nav-node-room-4",
-        className: "cartoon-station-node",
-        onclick: () => switchRoom(4)
-      }, [
-        h("span", { className: "cartoon-station-icon", textContent: "🚨" }),
-        h("span", { id: "nav-text-4", textContent: t("room4") })
-      ])
-    ]);
-    root.appendChild(conduitNav);
+        h("span", { className: "cartoon-station-icon", textContent: ["🚦", "🏢", "🚓", "🚨"][room - 1], "aria-hidden": "true" }),
+        tx("span", "room" + room, "", { id: "nav-text-" + room }),
+      ]));
+    }
+    root.appendChild(nav);
+    root.appendChild(h("p", {
+      id: "road-workspace-status",
+      className: "road-workspace-status",
+      role: "status",
+      "aria-live": "polite",
+    }));
 
-    // 3. Room 1: Verkehrsraumüberwachung (Roadside Station B4 Nord)
-    const room1 = h("section", { id: "cartoon-room-1", className: "cartoon-room" }, [
+    const room1 = h("section", { id: "cartoon-room-1", className: "cartoon-room", "aria-label": t("room1") }, [
       h("div", { className: "cartoon-room__stage" }, [
-        // Character row
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.technicianAlex }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Alex · Techniker B4 Nord" }),
-            h("p", { id: "speech-alex", className: "cartoon-speech-text", textContent: t("alexIntro") })
-          ])
-        ]),
-        // Traffic Screen & Trigger Pad
+        characterRow(SVGS.technicianAlex, "alexName", "alexIntro", "speech-alex"),
         h("div", { className: "traffic-screen-wrap" }, [
-          h("div", { className: "traffic-monitor" }, [
+          h("section", { className: "traffic-monitor" }, [
             h("div", { className: "traffic-monitor__header" }, [
-              h("span", { textContent: "CAM-01 · B4 NORD LIVE FEED" }),
-              h("span", { id: "cartoon-cam-status", textContent: "[● STANDBY]" })
+              tx("span", "cameraTitle", "", {}),
+              h("span", { id: "cartoon-cam-status", textContent: t("noSourceData") }),
             ]),
-            h("div", { id: "cartoon-feed-mount", className: "traffic-feed-box" })
+            h("div", { id: "road-camera-live-slot", className: "road-camera-live-slot" }),
           ]),
-          h("div", { className: "traffic-control-panel" }, [
-            h("h3", { textContent: "Ereignis-Pult (Echtzeit-Simulation)" }),
+          h("section", { className: "traffic-control-panel" }, [
+            tx("h3", "eventTitle", "", {}),
+            tx("p", "eventHelp", "hint", {}),
             h("div", { className: "cartoon-btn-grid" }, [
-              h("button", {
-                id: "btn-toggle-cam",
-                className: "chunky-btn chunky-btn--power",
-                textContent: "📷 Kamera AN / AUS",
-                onclick: () => {
-                  if (global.RoadSFX) global.RoadSFX.playClick();
-                  const startBtn = document.getElementById("road-camera-create");
-                  const stopBtn = document.getElementById("road-camera-stop");
-                  if (!cameraRunning && startBtn && !startBtn.disabled) {
-                    startBtn.click();
-                    cameraRunning = true;
-                    document.getElementById("cartoon-cam-status").textContent = "[● LIVE STREAM]";
-                  } else if (cameraRunning && stopBtn && !stopBtn.disabled) {
-                    stopBtn.click();
-                    cameraRunning = false;
-                    document.getElementById("cartoon-cam-status").textContent = "[● STANDBY]";
-                  }
-                }
+              tx("button", "wrongWay", "chunky-btn chunky-btn--wrongway", {
+                id: "btn-sim-wrongway", type: "button", disabled: true, onclick: () => enqueue("wrong_way"),
               }),
-              h("button", {
-                id: "btn-sim-leaf",
-                className: "chunky-btn chunky-btn--leaf",
-                textContent: "🍂 Blatt simulieren",
-                onclick: () => triggerEvent("leaf")
+              tx("button", "bird", "chunky-btn chunky-btn--bird", {
+                id: "btn-sim-bird", type: "button", disabled: true, onclick: () => enqueue("bird"),
               }),
-              h("button", {
-                id: "btn-sim-bird",
-                className: "chunky-btn chunky-btn--bird",
-                textContent: "🐦 Vogel simulieren",
-                onclick: () => triggerEvent("bird")
+              tx("button", "leaf", "chunky-btn chunky-btn--leaf", {
+                id: "btn-sim-leaf", type: "button", disabled: true, onclick: () => enqueue("leaf"),
               }),
-              h("button", {
-                id: "btn-sim-wrongway",
-                className: "chunky-btn chunky-btn--wrongway",
-                textContent: "⚠️ Falschfahrer simulieren!",
-                onclick: () => triggerEvent("wrong_way")
-              })
             ]),
-            h("button", {
-              id: "follow-btn-1",
-              className: "cable-follow-btn",
-              textContent: t("followCableTo2"),
-              hidden: true,
-              onclick: () => switchRoom(2)
-            })
-          ])
-        ])
-      ])
+            h("p", { id: "cartoon-job-status", className: "road-workspace-status", role: "status", "aria-live": "polite" }),
+            h("div", { id: "cartoon-source-facts", className: "cartoon-source-facts" }),
+          ]),
+        ]),
+        h("div", { id: "road-camera-root", className: "road-camera-root" }),
+        appendRoomNavigation(h("div", { className: "cartoon-follow-row" }), 2),
+      ]),
     ]);
     root.appendChild(room1);
 
-    // 4. Room 2: AI-Rechenzentrum (Serverraum & Dr. Kira)
-    const room2 = h("section", { id: "cartoon-room-2", className: "cartoon-room", hidden: true }, [
+    const room2 = h("section", { id: "cartoon-room-2", className: "cartoon-room", "aria-label": t("room2"), hidden: true }, [
       h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.drKira }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Dr. Kira · Lead Vision AI" }),
-            h("p", { id: "speech-kira", className: "cartoon-speech-text", textContent: t("kiraIntro") })
-          ])
+        characterRow(SVGS.drKira, "kiraName", "kiraIntro", "speech-kira"),
+        h("section", { className: "datacenter-card" }, [
+          tx("h3", "jobQueue", "datacenter-card__title", {}),
+          h("div", { id: "datacenter-queue-list", className: "datacenter-queue-list" }),
         ]),
-        h("div", { className: "pipeline-flow-banner" }, [
-          h("div", { id: "stage-chip-1", className: "pipeline-stage-chip active-stage" }, [
-            h("span", { className: "stage-badge", textContent: "STUFE 1 (OpenCV 5 Vektorkern)" }),
-            h("span", { textContent: "📹 Vektor-Bewegungsanalyse im Live-Stream" })
-          ]),
-          h("span", { className: "pipeline-arrow", textContent: "➔" }),
-          h("div", { id: "stage-chip-2", className: "pipeline-stage-chip" }, [
-            h("span", { className: "stage-badge", textContent: "STUFE 2 (Multimodales LLM)" }),
-            h("span", { textContent: "🧠 Semantische Situations- & Objektanalyse" })
-          ])
+        h("section", { className: "datacenter-card" }, [
+          tx("h3", "resultTitle", "datacenter-card__title", {}),
+          h("div", { id: "datacenter-verdict-box", className: "datacenter-verdict" }),
         ]),
-        h("div", { className: "inference-transparency-card" }, [
-          h("div", { className: "transparency-header" }, [
-            h("div", { className: "transparency-pill fallback" }, [
-              h("span", { className: "dot" }),
-              h("span", { textContent: "SCHNITTSTELLE: LOKALER OFFLINE-FIXTURE FALLBACK (AKTIV)" })
-            ]),
-            h("span", { className: "transparency-sub", textContent: "100% Deterministisch & Lokal" })
-          ]),
-          h("div", { className: "transparency-grid" }, [
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Schnittstellen-Profil" }),
-              h("span", { className: "value", id: "transparency-profile-val", textContent: "offline-fixture/high" })
-            ]),
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Hardware / Ausführung" }),
-              h("span", { className: "value", textContent: "Lokaler Host (ASUS-GEI)" })
-            ]),
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Vektor-Engine" }),
-              h("span", { className: "value", textContent: "OpenCV 5.0.0 Farnebäck Flow" })
-            ]),
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Video-Pufferung" }),
-              h("span", { className: "value", textContent: "15s H.264 (libx264, SHA-256)" })
-            ])
-          ]),
-          h("p", { className: "transparency-notice", textContent: "🛡️ Wissenschaftliche Ehrlichkeit & Zero-Hallucination: Da kein externer Cloud-API-Schlüssel (GEMINI_API_KEY) aktiv ist, arbeitet die Inferenz im lokalen Offline-Fixture-Modus. Alle Vektorberechnungen, Trigger-Analysen und H.264-Videoclippings sind 100% echt und laufen live auf dieser Maschine." })
-        ]),
-        h("div", { className: "datacenter-layout" }, [
-          h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: "Eingehende Videoclips" }),
-            h("div", { id: "datacenter-queue-list", className: "datacenter-queue-list", textContent: "Warte auf Events..." })
-          ]),
-          h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: "Live Inferenz Terminal" }),
-            h("div", { id: "datacenter-console", className: "datacenter-console" })
-          ]),
-          h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: "Modell-Interpretation" }),
-            h("div", { id: "datacenter-verdict-box", className: "datacenter-verdict", textContent: "Bereit für Inferenz" })
-          ])
-        ]),
-        h("button", {
-          id: "follow-btn-2",
-          className: "cable-follow-btn",
-          textContent: t("followCableTo3"),
-          hidden: true,
-          onclick: () => switchRoom(3)
-        })
-      ])
+        h("section", { id: "road-model-root", className: "road-workspace-panel", "aria-label": t("jobQueue") }),
+        appendRoomNavigation(h("div", { className: "cartoon-follow-row" }), 3),
+      ]),
     ]);
-    root.appendChild(room2);
-
-    // 5. Room 3: Leitstelle Alpha (Officer Schmidt)
-    const room3 = h("section", { id: "cartoon-room-3", className: "cartoon-room", hidden: true }, [
+    root.appendChild(room2);    const coffeeButton = tx("button", "coffee", "chunky-btn chunky-btn--coffee", {
+      id: "btn-schmidt-coffee",
+      type: "button",
+      onclick: () => {
+        if (global.RoadSFX) global.RoadSFX.playCoffee();
+        callbacks.onCoffeeNavigation?.();
+        const speech = document.getElementById("speech-schmidt");
+        if (speech) speech.textContent = t("coffeeStatus");
+        navigate(4);
+      },
+    });
+    const room3 = h("section", { id: "cartoon-room-3", className: "cartoon-room", "aria-label": t("room3"), hidden: true }, [
       h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.officerSchmidt }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Officer Schmidt · Leitstelle Alpha" }),
-            h("p", { id: "speech-schmidt", className: "cartoon-speech-text", textContent: t("schmidtIntro") })
-          ])
+        characterRow(SVGS.officerSchmidt, "schmidtName", "schmidtIntro", "speech-schmidt"),
+        h("section", { className: "datacenter-card" }, [
+          tx("h3", "historyTitle", "datacenter-card__title", {}),
+          h("div", { id: "schmidt-ticket-list", className: "schmidt-ticket-list" }),
         ]),
-        h("div", { className: "dispatch-grid" }, [
-          h("div", { id: "schmidt-video-mount", className: "traffic-monitor" }, [
-            h("div", { className: "traffic-monitor__header", textContent: "Beweis-Videoauswertung" }),
-            h("div", { id: "cartoon-review-video-box", className: "traffic-feed-box" }),
-            h("div", { className: "schmidt-ticket-inbox" }, [
-              h("div", { className: "schmidt-ticket-inbox__title" }, [
-                h("span", { textContent: "Eingehende Einsatz-Tickets" }),
-                h("small", { textContent: "Klick zum Prüfen & Video abspielen" })
-              ]),
-              h("div", { id: "schmidt-ticket-list", className: "schmidt-ticket-list" })
-            ])
-          ]),
-          h("div", { className: "dispatch-desk" }, [
-            h("h3", { textContent: "Einsatzentscheidung" }),
-            h("div", { className: "dispatch-actions" }, [
-              h("button", {
-                id: "btn-schmidt-radio",
-                className: "chunky-btn chunky-btn--radio",
-                textContent: t("schmidtRadio"),
-                onclick: onSchmidtRadio
-              }),
-              h("button", {
-                id: "btn-schmidt-reject",
-                className: "chunky-btn",
-                textContent: t("schmidtFalseAlarm"),
-                onclick: onSchmidtReject
-              }),
-              h("button", {
-                id: "btn-schmidt-coffee",
-                className: "chunky-btn chunky-btn--coffee",
-                textContent: t("schmidtCoffee"),
-                onclick: onSchmidtCoffee
-              })
-            ]),
-            h("button", {
-              id: "follow-btn-3",
-              className: "cable-follow-btn",
-              textContent: t("followCableTo4"),
-              hidden: true,
-              onclick: () => switchRoom(4)
-            })
-          ])
-        ])
-      ])
+        h("section", { id: "road-workplace-root", className: "road-workspace-panel", "aria-label": t("workplaceTitle") }),
+        coffeeButton,
+        appendRoomNavigation(h("div", { className: "cartoon-follow-row" }), 4),
+      ]),
     ]);
     root.appendChild(room3);
 
-    // 6. Room 4: Leitstelle Beta (Fallback Station & Frist-Eskalation)
-    const room4 = h("section", { id: "cartoon-room-4", className: "cartoon-room", hidden: true }, [
+    const room4 = h("section", { id: "cartoon-room-4", className: "cartoon-room", "aria-label": t("room4"), hidden: true }, [
       h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.officerWeberEmpty }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Officer Weber · Leitstelle Beta (Abwesend)" }),
-            h("p", { className: "cartoon-speech-text", textContent: t("weberAlert") })
-          ])
+        characterRow(SVGS.officerWeberEmpty, "weberName", "room4Intro", "speech-weber"),
+        h("section", { className: "beta-alert-box" }, [
+          tx("h3", "selectedCase", "", {}),
+          h("p", { id: "beta-selected-case", textContent: t("noSelection") }),
+          h("p", { className: "beta-alert-label", textContent: t("remaining") }),
+          h("div", { id: "beta-countdown-clock", className: "beta-countdown-display", textContent: "–" }),
+          h("div", { id: "beta-alert-msg", className: "road-server-phase", role: "status", "aria-live": "polite" }),
+          tx("h3", "receiptTitle", "", {}),
+          h("div", { id: "beta-receipts" }),
         ]),
-        h("div", { className: "beta-alert-box" }, [
-          h("div", { className: "sticky-note", textContent: t("weberSticky") }),
-          h("div", { id: "beta-countdown-clock", className: "beta-countdown-display", textContent: "20s" }),
-          h("button", {
-            id: "btn-manual-dispatch",
-            className: "chunky-btn chunky-btn--wrongway",
-            textContent: t("weberManual"),
-            onclick: onBetaManualDispatch
-          }),
-          h("div", { id: "beta-alert-msg", className: "verdict-badge danger", textContent: "", hidden: true })
-        ])
-      ])
+        h("section", { id: "road-timeline-root", className: "road-workspace-panel road-timeline" }, [
+          tx("h3", "timelineTitle", "road-panel-title", {}),
+          h("div", { id: "road-controller-trace" }),
+          h("div", { id: "road-timeline-content" }, [
+            tx("p", "noTimeline", "road-empty-state", {}),
+          ]),
+        ]),
+      ]),
     ]);
     root.appendChild(room4);
 
-    // 7. Bottom Patrol Car Track
-    const patrolStage = h("div", { className: "patrol-car-stage" }, [
+    root.appendChild(h("div", { className: "patrol-car-stage", "aria-label": t("patrol") }, [
       h("div", { className: "patrol-car-road" }),
-      h("div", { id: "cartoon-patrol-car", className: "patrol-car", innerHTML: SVGS.patrolCar })
-    ]);
-    root.appendChild(patrolStage);
-
+      h("div", { id: "cartoon-patrol-car", className: "patrol-car", innerHTML: SVGS.patrolCar, "aria-hidden": "true" }),
+    ]));
     return root;
   }
 
-  function refreshI18n() {
-    document.getElementById("cartoon-title").textContent = t("title");
-    document.getElementById("cartoon-subtitle").textContent = t("subtitle");
-    document.getElementById("cartoon-sound-btn").textContent = global.RoadSFX && global.RoadSFX.getMuted() ? t("soundOff") : t("soundOn");
-    document.getElementById("cartoon-lang-btn").textContent = t("langToggle");
-    document.getElementById("nav-text-1").textContent = t("room1");
-    document.getElementById("nav-text-2").textContent = t("room2");
-    document.getElementById("nav-text-3").textContent = t("room3");
-    document.getElementById("nav-text-4").textContent = t("room4");
-    document.getElementById("follow-btn-1").textContent = t("followCableTo2");
-    document.getElementById("follow-btn-2").textContent = t("followCableTo3");
-    document.getElementById("follow-btn-3").textContent = t("followCableTo4");
+  function update(state = {}) {
+    if (!gameRoot) return;
+    currentState = {
+      ...currentState,
+      ...state,
+      cases: Array.isArray(state.cases) ? state.cases : currentState.cases,
+      jobs: Array.isArray(state.jobs) ? state.jobs : currentState.jobs,
+    };
+    const selectedCase = currentState.selectedCase || null;
+    const selectedId = selectedCase && typeof selectedCase.case_id === "string" ? selectedCase.case_id : "";
+    if (selectedId) requestedSelectedCaseId = selectedId;
+    else if (requestedSelectedCaseId && !currentState.cases.some((item) => item?.case_id === requestedSelectedCaseId)) {
+      requestedSelectedCaseId = null;
+    }
+    gameRoot.dataset.selectedCaseId = selectedId || requestedSelectedCaseId || "";
+    renderSource(currentState);
+    const displayedSelectedId = selectedId || requestedSelectedCaseId;
+    renderTickets(document.getElementById("datacenter-queue-list"), displayedSelectedId);
+    renderTickets(document.getElementById("schmidt-ticket-list"), displayedSelectedId);
+    renderAssessment(currentState);
+    renderRoom4(currentState);
+    const source = currentState.source;
+    const camStatus = document.getElementById("cartoon-cam-status");
+    const eventButtons = ["btn-sim-wrongway", "btn-sim-bird", "btn-sim-leaf"];
+    const sourceOpen = Boolean(source && source.closed !== true && source.status !== "stopped" && source.status !== "ended");
+    const modeSelect = document.getElementById("road-model-mode");
+    const profileSelect = document.getElementById("road-fixture-profile");
+    const nativeOption = modeSelect?.selectedOptions?.[0];
+    const modeReady = Boolean(modeSelect?.value) && !(modeSelect.value === "gemini_video" && nativeOption?.disabled);
+    const profileReady = modeSelect?.value !== "fixture" || Boolean(profileSelect?.value);
+    if (camStatus) camStatus.textContent = !source
+      ? t("noSourceData")
+      : sourceOpen ? t("sourceReady") : t("sourceEnded");
+    for (const id of eventButtons) {
+      const button = document.getElementById(id);
+      if (button) button.disabled = !sourceOpen || !modeReady || !profileReady;
+    }
+    localizeModules();
   }
 
-  // --- Public Mount Function ---
-  function mountCartoonGame(container) {
+  function mountCartoonGame(container, options = {}) {
     if (!container) return null;
     const existing = container.querySelector(".road-cartoon-stage");
-    if (existing) {
-      return {
-        destroy: () => {
-          if (countdownTimer) clearInterval(countdownTimer);
-          existing.remove();
-        }
-      };
-    }
-    const gameDom = buildCartoonDOM();
-    container.prepend(gameDom);
-
-    function attachLiveFeedToCartoon() {
-      const feedBox = document.getElementById("cartoon-feed-mount");
-      const realViewport = document.querySelector(".road-camera__viewport");
-      if (feedBox && realViewport && realViewport.parentElement !== feedBox) {
-        feedBox.appendChild(realViewport);
-        return true;
-      }
-      return false;
-    }
-
-    // Reparent live feed elements into cartoon room viewport as soon as mounted
-    attachLiveFeedToCartoon();
-    const attachTimer = window.setInterval(() => {
-      if (attachLiveFeedToCartoon()) {
-        window.clearInterval(attachTimer);
-      }
-    }, 150);
-    window.setTimeout(() => window.clearInterval(attachTimer), 10000);
-
+    if (existing) existing.remove();
+    callbacks = options || {};
+    currentRoom = 1;
+    requestedSelectedCaseId = null;
+    gameRoot = buildCartoonDOM();
+    container.prepend(gameRoot);
+    update(currentState);
     return {
+      update,
       destroy: () => {
-        window.clearInterval(attachTimer);
-        if (countdownTimer) clearInterval(countdownTimer);
-        gameDom.remove();
-      }
+        if (!gameRoot) return;
+        gameRoot.remove();
+        gameRoot = null;
+      },
     };
   }
 
-  global.RoadGame = {
-    mountCartoonGame,
-    switchRoom,
-    triggerEvent,
-    dispatchPatrolCar
-  };
-
-  // Auto-mount if workspace-road already exists in DOM
-  if (typeof document !== "undefined") {
-    const ws = document.getElementById("workspace-road");
-    if (ws && !ws.querySelector(".road-cartoon-stage")) {
-      mountCartoonGame(ws);
-    }
-  }
+  global.RoadGame = { mountCartoonGame };
 })(window);

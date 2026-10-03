@@ -30,7 +30,7 @@ function setHidden(node, hidden) {
   node.hidden = Boolean(hidden);
 }
 
-function displayValue(value, fallback = "Nicht angegeben") {
+function displayValue(value, fallback = document.documentElement.lang === "en" ? "Not provided" : "Nicht angegeben") {
   if (!hasValue(value)) return fallback;
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -52,15 +52,19 @@ function errorLabel(code) {
 }
 
 function modeLabel(mode) {
-  if (mode === "fixture") return "Offline-Testantwort (fixture)";
+  const english = document.documentElement.lang === "en";
+  if (mode === "fixture") return english ? "Offline test response (fixture)" : "Offline-Testantwort (fixture)";
   if (mode === "gemini_video") return "Gemini Video (gemini_video)";
-  return hasValue(mode) ? `Modus (${displayValue(mode)})` : "Im Snapshot nicht angegeben";
+  return hasValue(mode)
+    ? (english ? `Mode (${displayValue(mode)})` : `Modus (${displayValue(mode)})`)
+    : (english ? "Not provided in snapshot" : "Im Snapshot nicht angegeben");
 }
 
 function hazardLabel(hazard) {
-  if (hazard === true) return "Ja";
-  if (hazard === false) return "Nein";
-  return "Unklar";
+  const english = document.documentElement.lang === "en";
+  if (hazard === true) return english ? "Yes" : "Ja";
+  if (hazard === false) return english ? "No" : "Nein";
+  return english ? "Unclear" : "Unklar";
 }
 
 function clipIdentity(clip) {
@@ -587,11 +591,15 @@ export function mountRoadModel(container, apiClient) {
 
   function renderExchange(entry, exchange) {
     entry.exchange = exchange;
+    entry.card.dataset.caseId = typeof exchange.case_id === "string" ? exchange.case_id : "";
+    entry.video.dataset.caseId = typeof exchange.case_id === "string" ? exchange.case_id : "";
     entry.name.textContent = `Modellprüfung ${displayValue(exchange.exchange_id)}`;
     const status = statusLabel(exchange.status);
     if (entry.status.textContent !== status) entry.status.textContent = status;
 
     const clip = exchange.clip && typeof exchange.clip === "object" ? exchange.clip : null;
+    entry.video.dataset.clipId = clip && typeof clip.clip_id === "string" ? clip.clip_id : "";
+    entry.video.dataset.clipHash = clip && typeof clip.sha256 === "string" ? clip.sha256 : "";
     entry.clipFacts.replaceChildren();
     appendField(entry.clipFacts, "Modus", modeLabel(exchange.mode));
     appendField(entry.clipFacts, "Clip-ID", displayValue(clip?.clip_id));

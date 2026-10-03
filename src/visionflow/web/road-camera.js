@@ -18,8 +18,6 @@ const CAMERA_STANDBY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
   <line x1="320" y1="130" x2="320" y2="360" stroke="#f59e0b" stroke-width="3" stroke-dasharray="16,12" opacity="0.6"/>
   <circle cx="320" cy="115" r="30" fill="#131b2e" stroke="#38bdf8" stroke-width="2" />
   <path d="M310,107 L328,107 L328,123 L310,123 Z M328,111 L336,107 L336,123 L328,119 Z" fill="#38bdf8"/>
-  <text x="320" y="195" fill="#f8fafc" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="700" text-anchor="middle">Kamera im Bereitschaftsmodus</text>
-  <text x="320" y="222" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="12" text-anchor="middle">Sitzung starten oder ⚡ 1-Klick Demo aktivieren</text>
 </svg>`;
 
 let standbyBlobUrl = null;
@@ -69,11 +67,11 @@ function button(text, className = "button secondary") {
 
 function formatNumber(value, digits = 1) {
   return typeof value === "number" && Number.isFinite(value)
-    ? value.toLocaleString("de-DE", { maximumFractionDigits: digits })
+    ? value.toLocaleString(document.documentElement.lang === "en" ? "en-US" : "de-DE", { maximumFractionDigits: digits })
     : "–";
 }
 
-export function mountRoadCamera(container, apiClient) {
+export function mountRoadCamera(container, apiClient, options = {}) {
   if (!container || typeof container.replaceChildren !== "function") {
     throw new TypeError("mountRoadCamera benötigt einen DOM-Container.");
   }
@@ -83,6 +81,8 @@ export function mountRoadCamera(container, apiClient) {
   }
 
   const instanceId = ++mountSequence;
+  const autoStartCaseByDefault = options.autoStartCase !== false;
+  const embeddedScenarioJobs = options.embeddedScenarioJobs === true;
   let destroyed = false;
   let roadAvailable = false;
   let capabilities = null;
@@ -247,7 +247,17 @@ export function mountRoadCamera(container, apiClient) {
   secondaryGrid.append(eventPanel, recordingPanel);
   content.append(livePanel, secondaryGrid, playerPanel);
   root.append(heading, caseOptions, toolbar, status, sourceSummary, runPanel, content);
+  if (embeddedScenarioJobs) {
+    root.classList.add("road-camera--scenario-jobs");
+    quickDemoButton.hidden = true;
+    eventPanel.hidden = true;
+    runPanel.hidden = true;
+    playerPanel.hidden = true;
+  }
   container.replaceChildren(root);
+  if (options.liveContainer && typeof options.liveContainer.replaceChildren === "function") {
+    options.liveContainer.replaceChildren(livePanel);
+  }
 
   function setStatus(message, isError = false) {
     if (destroyed) return;
@@ -388,13 +398,15 @@ export function mountRoadCamera(container, apiClient) {
       if (destroyed || viewGeneration !== view) return;
       rememberClips(payload);
       if (source === sourceId && sourceGeneration === generation) {
-        const fps = formatNumber(payload.source_fps, 2);
         const frames = formatNumber(payload.frame_count, 0);
         const seconds = formatNumber(payload.end_seconds, 2);
         const compressed = formatNumber(payload.compressed_bytes, 0);
         const state = payload.closed ? "Quelle beendet" : "Aufzeichnung läuft";
+        const measuredFps = Number(payload.frame_count) >= 2 && Number(payload.end_seconds) > 0
+          ? `${formatNumber(payload.source_fps, 2)} FPS gemessen`
+          : "FPS noch nicht gemessen";
         recordingSummary.textContent =
-          `${state} · ${frames} Frames · ${fps} Bilder/Sek. gemessen · ${seconds} Sek. · ${compressed} Byte`;
+          `${state} · ${frames} Frames · ${measuredFps} (max. 20 FPS) · ${seconds} Sek. · ${compressed} Byte`;
         if (payload.closed) {
           sourceOpen = false;
           clearFrameTimer();
@@ -477,9 +489,9 @@ export function mountRoadCamera(container, apiClient) {
     stopButton.disabled = !sourceId || destroyed;
     stopButton.textContent = hasOpenSource ? "Aufnahme beenden" : "Aufnahme speichern";
     resetButton.disabled = !sourceId || destroyed;
-    modeSelect.disabled = !roadAvailable || hasOpenSource || locked || destroyed;
+    modeSelect.disabled = !roadAvailable || (hasOpenSource && !embeddedScenarioJobs) || locked || destroyed;
     profileSelect.disabled =
-      modeSelect.value !== "fixture" || hasOpenSource || locked || destroyed;
+      modeSelect.value !== "fixture" || (hasOpenSource && !embeddedScenarioJobs) || locked || destroyed;
     profileLabel.hidden = modeSelect.value !== "fixture";
     profileSelect.hidden = modeSelect.value !== "fixture";
   }
@@ -720,7 +732,7 @@ export function mountRoadCamera(container, apiClient) {
     });
   }
 
-  function applySource(nextSource, message) {
+  function applySource(nextSource, message, startInitialCase = autoStartCaseByDefault) {
     sourceGeneration += 1;
     viewGeneration += 1;
     clearRunTimer();
@@ -738,18 +750,26 @@ export function mountRoadCamera(container, apiClient) {
     setStatus(message);
     updateEventControls();
     startPolling();
-    startCase(nextSource, sourceGeneration)
-      .catch((error) => {
-        if (sourceId === nextSource && sourceOpen) {
-          runSummary.textContent = error.message || "Der Kameraablauf konnte nicht gestartet werden.";
-          runSummary.classList.add("road-camera__run-summary--error");
-          updateEventControls();
-          setStatus("Die Quelle läuft, aber der Analyse-Lauf ist fehlgeschlagen.", true);
-        }
-      });
+    if (startInitialCase) {
+      startCase(nextSource, sourceGeneration)
+        .catch((error) => {
+          if (sourceId === nextSource && sourceOpen) {
+            runSummary.textContent = error.message || "Der Kameraablauf konnte nicht gestartet werden.";
+            runSummary.classList.add("road-camera__run-summary--error");
+            updateEventControls();
+            setStatus("Die Quelle läuft, aber der Analyse-Lauf ist fehlgeschlagen.", true);
+          }
+        });
+    } else {
+      runSummary.textContent = "Quelle aktiv; noch kein Prüfauftrag gestartet.";
+      root.dispatchEvent(new CustomEvent("road-source-changed", {
+        bubbles: true,
+        detail: { sourceId: nextSource, sourceOpen: true },
+      }));
+    }
   }
 
-  async function createSource() {
+  async function createSource({ autoStartCase = autoStartCaseByDefault } = {}) {
     return enqueue("create", async () => {
       if (sourceId && sourceOpen) {
         const previous = sourceId;
@@ -763,7 +783,41 @@ export function mountRoadCamera(container, apiClient) {
       }
       const created = await apiClient.post("/road/sessions", { seed: 42 });
       if (destroyed || typeof created.source_id !== "string") return;
-      applySource(created.source_id, "Neue synthetische Quelle gestartet.");
+      applySource(created.source_id, "Neue synthetische Quelle gestartet.", autoStartCase);
+    });
+  }
+
+  async function restoreSource(snapshot) {
+    return enqueue("restore", async () => {
+      const recording = snapshot && typeof snapshot.recording === "object" ? snapshot.recording : snapshot;
+      const restoredId = recording && typeof recording.source_id === "string" ? recording.source_id : null;
+      if (!restoredId) throw new Error("Der gespeicherte Kamerastatus enthält keine Quellenkennung.");
+      sourceGeneration += 1;
+      viewGeneration += 1;
+      clearRunTimer();
+      clearFrameTimer();
+      clearRecordingTimer();
+      sourceId = restoredId;
+      sourceOpen = recording.closed !== true && !["stopped", "ended", "closed"].includes(recording.status);
+      caseId = null;
+      caseSnapshot = null;
+      runId = null;
+      runActive = false;
+      warmedUp = false;
+      root.dataset.sourceId = restoredId;
+      sourceSummary.textContent = "Quelle: " + restoredId;
+      runSummary.textContent = "Quelle wiederhergestellt; Prüfaufträge und Fälle werden vom Server geladen.";
+      clearFrameImage();
+      frameMeta.textContent = sourceOpen
+        ? "Wiederhergestellte Quelle; warte auf das aktuelle Kamerabild."
+        : "Beendete Quelle; historische Fälle und Clips bleiben verfügbar.";
+      updateEventControls();
+      root.dispatchEvent(new CustomEvent("road-source-changed", {
+        bubbles: true,
+        detail: { sourceId: restoredId, sourceOpen },
+      }));
+      if (sourceOpen) startPolling();
+      await refreshRecording(restoredId, sourceGeneration, viewGeneration);
     });
   }
 
@@ -814,6 +868,10 @@ export function mountRoadCamera(container, apiClient) {
         : "Die Quelle war bereits beendet; ihre gespeicherte Aufnahme ist nun fertiggestellt.");
       await refreshRecording(source, generation, viewGeneration);
       renderClipList();
+      root.dispatchEvent(new CustomEvent("road-source-changed", {
+        bubbles: true,
+        detail: { sourceId: source, sourceOpen: false },
+      }));
     });
   }
 
@@ -1020,10 +1078,28 @@ export function mountRoadCamera(container, apiClient) {
     for (const entry of clipUrls.values()) URL.revokeObjectURL(entry.url);
     clipUrls.clear();
     clipInflight.clear();
+    if (options.liveContainer && typeof options.liveContainer.replaceChildren === "function") {
+      options.liveContainer.replaceChildren();
+    }
     container.replaceChildren();
   }
 
   setLocked(false);
   loadRoadCapabilities();
-  return { destroy, getCaseId, getSourceId, setLocked, setCase, injectScenarioEvent: (e) => injectEvent(e), createSource };
+  function getSourceOpen() {
+    return Boolean(sourceId && sourceOpen);
+  }
+
+  return {
+    destroy,
+    getCaseId,
+    getSourceId,
+    getSourceOpen,
+    setLocked,
+    setCase,
+    injectScenarioEvent: (e) => injectEvent(e),
+    createSource,
+    stopSource,
+    restoreSource,
+  };
 }

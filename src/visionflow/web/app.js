@@ -40,8 +40,14 @@
   let roadWorkspaceReady = false;
   let roadRefreshTimer = null;
   let roadRefreshInFlight = false;
-  let roadActiveCaseId = null;
+  let roadRefreshQueued = false;
+  let roadLocaleListener = null;
   let roadViewedCaseId = null;
+  let roadSourceSnapshot = null;
+  let roadCases = [];
+  let roadJobs = [];
+  let roadInbox = [];
+  const ROAD_VIEW_STATE_KEY = "visionflow.road-controller.v1";
   let roadRefreshGeneration = 0;
   let sessionReady = false;
 
@@ -53,9 +59,9 @@
   function apiError(payload, status) {
     const error = payload && payload.error;
     if (error && typeof error.message === "string") {
-      return new Error(`${error.message} (HTTP ${status})`);
+      return Object.assign(new Error(`${error.message} (HTTP ${status})`), { status });
     }
-    return new Error(`Die lokale Anfrage ist fehlgeschlagen (HTTP ${status}).`);
+    return Object.assign(new Error(`Die lokale Anfrage ist fehlgeschlagen (HTTP ${status}).`), { status });
   }
 
   async function jsonRequest(path, options = {}) {
@@ -680,14 +686,72 @@
   }
 
   function roadCaseEvent(event) {
-    const detail = event && event.detail ? event.detail : {};
-    const id = typeof detail.caseId === "string" ? detail.caseId : null;
-    if (!id) return;
-    roadActiveCaseId = id;
-    roadViewedCaseId = id;
-    if (roadMount) roadMount.setCase(detail.case || { case_id: id });
     roadRefreshGeneration += 1;
     void refreshRoadViews();
+  }
+
+  function readRoadViewState() {
+    try {
+      const value = JSON.parse(window.localStorage.getItem(ROAD_VIEW_STATE_KEY) || "null");
+      return {
+        sourceId: typeof value?.sourceId === "string" ? value.sourceId : null,
+        selectedCaseId: typeof value?.selectedCaseId === "string" ? value.selectedCaseId : null,
+      };
+    } catch (_error) {
+      return { sourceId: null, selectedCaseId: null };
+    }
+  }
+
+  function persistRoadViewState() {
+    try {
+      if (!roadSourceSnapshot?.source_id) {
+        window.localStorage.removeItem(ROAD_VIEW_STATE_KEY);
+        return;
+      }
+      window.localStorage.setItem(ROAD_VIEW_STATE_KEY, JSON.stringify({
+        sourceId: roadSourceSnapshot.source_id,
+        selectedCaseId: roadViewedCaseId || null,
+      }));
+    } catch (_error) {
+      // Private browsing/storage restrictions do not prevent the live controller view.
+    }
+  }
+
+  function roadSourceEvent(event) {
+    const sourceId = event?.detail?.sourceId || roadMount?.getSourceId?.();
+    if (typeof sourceId === "string") {
+      const changed = roadSourceSnapshot?.source_id && roadSourceSnapshot.source_id !== sourceId;
+      if (changed) {
+        roadViewedCaseId = null;
+        roadModelMount?.update([]);
+        roadWorkplaceMount?.update(null, roadInbox);
+        renderRoadTimeline(null);
+      }
+      roadSourceSnapshot = { ...(roadSourceSnapshot || {}), source_id: sourceId };
+      persistRoadViewState();
+    }
+    roadRefreshGeneration += 1;
+    void refreshRoadViews();
+  }
+
+  function roadEnqueue(payload) {
+    const sourceId = roadMount?.getSourceId?.();
+    if (!sourceId) return Promise.reject(new Error("Starte zuerst eine Kameraquelle."));
+    if (!payload || typeof payload.event !== "string" || typeof payload.mode !== "string") {
+      return Promise.reject(new Error("Wähle Ereignis und Modellmodus explizit aus."));
+    }
+    if (payload.mode === "fixture" && typeof payload.fixture_profile !== "string") {
+      return Promise.reject(new Error("Wähle die sichtbare Offline-Testantwort explizit aus."));
+    }
+    return postJson(`/road/sessions/${encodeURIComponent(sourceId)}/jobs`, payload)
+      .then((result) => {
+        if (!result?.job || typeof result.job.job_id !== "string") {
+          throw new Error("Der Server lieferte keinen gültigen Prüfauftrag zurück.");
+        }
+        roadRefreshGeneration += 1;
+        void refreshRoadViews();
+        return result.job;
+      });
   }
 
   function roadOpenCase(event) {
@@ -695,51 +759,79 @@
     const id = typeof detail.caseId === "string" ? detail.caseId : null;
     if (!id) return;
     roadViewedCaseId = id;
+    persistRoadViewState();
     roadRefreshGeneration += 1;
+    roadModelMount?.update([]);
+    roadWorkplaceMount?.update(null, roadInbox);
+    renderRoadTimeline(null);
+    if (roadGameMount) roadGameMount.update({
+      source: roadSourceSnapshot,
+      cases: roadCases,
+      jobs: roadJobs,
+      selectedCase: null,
+      exchanges: [],
+      inbox: roadInbox,
+    });
+    const status = $("road-workspace-status");
+    if (status) status.textContent = document.documentElement.lang === "en"
+      ? "Loading the selected case from the server…"
+      : "Der ausgewählte Fall wird vom Server geladen …";
     void refreshRoadViews();
-  }
-
-  function phaseLocksCamera(snapshot) {
-    return Boolean(snapshot && [
-      "model_review",
-      "human_review",
-      "no_response",
-    ].includes(snapshot.phase));
   }
 
   function renderRoadTimeline(snapshot) {
     const target = $("road-timeline-content");
     if (!target) return;
     target.replaceChildren();
+    const english = document.documentElement.lang === "en";
+    const emptyMessage = english
+      ? "Start a camera source to view the actual trace and decision journal."
+      : "Starte eine Kameraquelle, um den echten Trace und das Entscheidungsjournal zu sehen.";
+    const phases = {
+      queued: english ? "Queued" : "Warteschlange",
+      starting: english ? "Starting" : "Startet",
+      running: english ? "Running" : "Läuft",
+      observing: english ? "Observing" : "Beobachtet",
+      model_review: english ? "Model review" : "Modellprüfung",
+      human_review: english ? "Human review" : "Menschliche Prüfung",
+      no_response: english ? "No response" : "Keine Antwort",
+      reported: english ? "Reported" : "Gemeldet",
+      rejected: english ? "Rejected" : "Abgelehnt",
+      completed: english ? "Completed" : "Abgeschlossen",
+      cancelled: english ? "Cancelled" : "Abgebrochen",
+      failed: english ? "Failed" : "Fehlgeschlagen",
+    };
     if (!snapshot || typeof snapshot !== "object") {
       const empty = document.createElement("p");
       empty.className = "road-empty-state";
-      empty.textContent = "Starte eine Kameraquelle, um den echten Trace und das Entscheidungsjournal zu sehen.";
+      empty.textContent = emptyMessage;
       target.append(empty);
       return;
     }
     const heading = document.createElement("p");
     heading.className = "road-timeline-case";
-    heading.textContent = "Fall " + String(snapshot.case_id || "–") +
-      " · " + String(snapshot.phase || "Status nicht angegeben");
+    const phase = typeof snapshot.phase === "string"
+      ? phases[snapshot.phase] || snapshot.phase
+      : english ? "Status not provided" : "Status nicht angegeben";
+    heading.textContent = (english ? "Case " : "Fall ") + String(snapshot.case_id || "–") + " · " + phase;
     target.append(heading);
     const events = [];
     const trace = Array.isArray(snapshot.perception_trace) ? snapshot.perception_trace : [];
     for (const entry of trace) {
       if (!entry || typeof entry !== "object") continue;
       const label = {
-        state_change: "Laufstatus geändert",
-        frame_analyzed: "Frame ausgewertet",
-        monitor_stopped: "Beobachtung beendet",
-        node_completed: "Ablaufschritt abgeschlossen",
-        run_started: "Lauf gestartet",
-      }[entry.type] || "Laufereignis";
+        state_change: english ? "Run status changed" : "Laufstatus geändert",
+        frame_analyzed: english ? "Frame analyzed" : "Frame ausgewertet",
+        monitor_stopped: english ? "Observation ended" : "Beobachtung beendet",
+        node_completed: english ? "Workflow step completed" : "Ablaufschritt abgeschlossen",
+        run_started: english ? "Run started" : "Lauf gestartet",
+      }[entry.type] || (english ? "Run event" : "Laufereignis");
       const parts = [label];
       if (typeof entry.node_id === "string") parts.push(entry.node_id);
       if (typeof entry.frame_id === "string") parts.push("Frame " + entry.frame_id);
-      if (typeof entry.timestamp_seconds === "number") {
-        parts.push("Quellenzeit " + entry.timestamp_seconds.toFixed(2) + " Sek.");
-      }
+      if (typeof entry.timestamp_seconds === "number") parts.push(english
+        ? "Source time " + entry.timestamp_seconds.toFixed(2) + " s"
+        : "Quellenzeit " + entry.timestamp_seconds.toFixed(2) + " Sek.");
       if (typeof entry.reason === "string") parts.push(entry.reason);
       events.push({
         order: events.length,
@@ -758,7 +850,7 @@
       events.push({
         order: events.length,
         time: entry.created_at || entry.timestamp || entry.at || null,
-        text: "Entscheidung · " + text,
+        text: (english ? "Decision · " : "Entscheidung · ") + text,
       });
     }
     const ordered = events.slice();
@@ -775,7 +867,9 @@
     if (ordered.length === 0) {
       const empty = document.createElement("p");
       empty.className = "road-empty-state";
-      empty.textContent = "Für diesen Fall sind noch keine Trace- oder Journalereignisse vorhanden.";
+      empty.textContent = english
+        ? "There are no trace or journal events for this case yet."
+        : "Für diesen Fall sind noch keine Trace- oder Journalereignisse vorhanden.";
       target.append(empty);
       return;
     }
@@ -790,11 +884,25 @@
   }
 
   async function refreshRoadViews() {
-    if (!roadWorkspaceReady || roadRefreshInFlight) return;
+    if (!roadWorkspaceReady) return;
+    if (roadRefreshInFlight) {
+      roadRefreshQueued = true;
+      return;
+    }
     roadRefreshInFlight = true;
     const generation = ++roadRefreshGeneration;
     try {
-      const inboxResult = await jsonRequest("/road/inbox");
+      const sourceId = roadMount?.getSourceId?.() || roadSourceSnapshot?.source_id || null;
+      const requests = [jsonRequest("/road/inbox")];
+      if (sourceId) {
+        const encoded = encodeURIComponent(sourceId);
+        requests.push(
+          jsonRequest(`/road/sessions/${encoded}/recording`),
+          jsonRequest(`/road/sessions/${encoded}/jobs`),
+          jsonRequest(`/road/sessions/${encoded}/cases`),
+        );
+      }
+      const [inboxResult, sourceResult, jobsResult, casesResult] = await Promise.all(requests);
       const inbox = Array.isArray(inboxResult)
         ? inboxResult
         : Array.isArray(inboxResult?.records)
@@ -802,46 +910,84 @@
           : Array.isArray(inboxResult?.cases)
             ? inboxResult.cases
             : [];
-      const ids = [...new Set([roadActiveCaseId, roadViewedCaseId].filter(Boolean))];
-      const loaded = new Map();
-      await Promise.all(ids.map(async (caseId) => {
-        try {
-          const encoded = encodeURIComponent(caseId);
-          const [snapshot, model] = await Promise.all([
-            jsonRequest("/road/cases/" + encoded),
-            jsonRequest("/road/cases/" + encoded + "/model"),
-          ]);
-          loaded.set(caseId, {
-            snapshot: snapshot && snapshot.case ? snapshot.case : snapshot,
-            exchanges: Array.isArray(model?.exchanges) ? model.exchanges : [],
-          });
-        } catch (error) {
-          loaded.set(caseId, { error });
-        }
-      }));
-      if (generation !== roadRefreshGeneration) return;
-      const active = roadActiveCaseId ? loaded.get(roadActiveCaseId) : null;
-      const viewed = roadViewedCaseId ? loaded.get(roadViewedCaseId) : null;
-      if (roadMount) roadMount.setLocked(phaseLocksCamera(active?.snapshot));
-      if (roadWorkplaceMount) {
-        roadWorkplaceMount.update(viewed?.snapshot || null, inbox);
+      const source = sourceResult?.recording && typeof sourceResult.recording === "object"
+        ? sourceResult.recording
+        : sourceResult;
+      if (sourceId && (!source || source.source_id !== sourceId)) {
+        throw new Error("Die aufgezeichnete Quelle passt nicht zur gespeicherten Quellenkennung.");
       }
-      if (roadModelMount) roadModelMount.update(viewed?.exchanges || []);
-      renderRoadTimeline(viewed?.snapshot || null);
-      const failure = (viewed && viewed.error) || (active && active.error);
+      const jobs = Array.isArray(jobsResult?.jobs) ? jobsResult.jobs : [];
+      const cases = Array.isArray(casesResult?.cases) ? casesResult.cases : [];
+      const caseMap = new Map(cases
+        .filter((item) => item && typeof item.case_id === "string")
+        .map((item) => [item.case_id, item]));
+      if (roadViewedCaseId && !caseMap.has(roadViewedCaseId)) {
+        roadViewedCaseId = null;
+        persistRoadViewState();
+      }
+      roadSourceSnapshot = source && typeof source === "object" ? source : null;
+      roadJobs = jobs;
+      roadCases = cases;
+      roadInbox = inbox;
+      let viewedSnapshot = roadViewedCaseId ? caseMap.get(roadViewedCaseId) || null : null;
+      let exchanges = [];
+      let loadError = null;
+      if (roadViewedCaseId && viewedSnapshot) {
+        const encodedCase = encodeURIComponent(roadViewedCaseId);
+        const [caseResponse, modelResponse] = await Promise.allSettled([
+          jsonRequest("/road/cases/" + encodedCase),
+          jsonRequest("/road/cases/" + encodedCase + "/model"),
+        ]);
+        if (caseResponse.status === "fulfilled") {
+          const result = caseResponse.value;
+          viewedSnapshot = result && result.case ? result.case : result;
+        } else {
+          loadError = caseResponse.reason;
+        }
+        if (modelResponse.status === "fulfilled") {
+          exchanges = Array.isArray(modelResponse.value?.exchanges) ? modelResponse.value.exchanges : [];
+        } else {
+          loadError ||= modelResponse.reason;
+        }
+      }
+      if (generation !== roadRefreshGeneration) return;
+      persistRoadViewState();
+      if (roadMount) roadMount.setLocked(false);
+      if (roadWorkplaceMount) roadWorkplaceMount.update(viewedSnapshot, inbox);
+      if (roadModelMount) roadModelMount.update(exchanges);
+      renderRoadTimeline(viewedSnapshot);
+      if (roadGameMount) roadGameMount.update({
+        source: roadSourceSnapshot,
+        cases: roadCases,
+        jobs: roadJobs,
+        selectedCase: viewedSnapshot,
+        exchanges,
+        inbox,
+      });
       const status = $("road-workspace-status");
       if (status) {
-        status.textContent = failure
-          ? "Die lokale Fallansicht konnte nicht aktualisiert werden. Bitte erneut öffnen."
+        status.textContent = loadError
+          ? "Die ausgewählte Fallansicht konnte nicht vollständig geladen werden."
           : "";
       }
-    } catch (_error) {
+    } catch (error) {
       if (generation === roadRefreshGeneration) {
+        if (error?.status === 404 || error?.status === 403 || error?.status === 401) {
+          roadSourceSnapshot = null;
+          roadViewedCaseId = null;
+          roadCases = [];
+          roadJobs = [];
+          persistRoadViewState();
+        }
         const status = $("road-workspace-status");
-        if (status) status.textContent = "Fallinformationen oder Postfach konnten nicht geladen werden.";
+        if (status) status.textContent = error?.message || "Quellen-, Fall- oder Postfachdaten konnten nicht geladen werden.";
       }
     } finally {
       roadRefreshInFlight = false;
+      if (roadRefreshQueued) {
+        roadRefreshQueued = false;
+        void refreshRoadViews();
+      }
     }
   }
 
@@ -857,6 +1003,18 @@
     showWorkspace("road");
     try {
       if (!sessionReady) throw new Error("Die lokale Sitzung ist noch nicht bereit.");
+      const roadContainer = $("workspace-road");
+      if (roadContainer && !roadLocaleListener) {
+        roadLocaleListener = () => { void refreshRoadViews(); };
+        roadContainer.addEventListener("road-language-changed", roadLocaleListener);
+      }
+      if (!roadGameMount) {
+        roadGameMount = window.RoadGame.mountCartoonGame($("workspace-road"), {
+          onSelectCase: (caseId) => roadOpenCase({ detail: { caseId } }),
+          onEnqueue: roadEnqueue,
+          onCoffeeNavigation: () => {},
+        });
+      }
       if (!roadWorkspaceReady) {
         roadModulePromise ||= Promise.all([
           import("/road-camera.js"),
@@ -868,35 +1026,60 @@
           const client = roadApiClient();
           const cameraRoot = $("road-camera-root");
           const workplaceRoot = $("road-workplace-root");
+          cameraRoot.addEventListener("road-source-changed", roadSourceEvent);
           cameraRoot.addEventListener("road-case-started", roadCaseEvent);
           cameraRoot.addEventListener("road-case-changed", roadCaseEvent);
           workplaceRoot.addEventListener("road-open-case", roadOpenCase);
           workplaceRoot.addEventListener("roaddecision", (event) => {
-            const caseId = event?.detail?.caseId;
-            if (typeof caseId === "string") {
-              roadViewedCaseId = caseId;
-              roadRefreshGeneration += 1;
-              void refreshRoadViews();
-            }
+            roadRefreshGeneration += 1;
+            void refreshRoadViews();
           });
           roadModelMount = modelModule.mountRoadModel($("road-model-root"), client);
           roadWorkplaceMount = workplaceModule.mountRoadWorkplace(workplaceRoot, client);
           roadMount = cameraModule.mountRoadCamera(cameraRoot, {
             ...client,
             timelineContainer: $("road-controller-trace"),
+          }, {
+            autoStartCase: false,
+            embeddedScenarioJobs: true,
+            liveContainer: $("road-camera-live-slot"),
           });
           window.roadCameraMount = roadMount;
           window.roadApiClient = client;
           roadWorkspaceReady = true;
+          const saved = readRoadViewState();
+          roadViewedCaseId = saved.selectedCaseId;
+          if (saved.sourceId) {
+            roadSourceSnapshot = { source_id: saved.sourceId };
+            try {
+              const recordingResponse = await jsonRequest(
+                `/road/sessions/${encodeURIComponent(saved.sourceId)}/recording`,
+              );
+              const recording = recordingResponse?.recording && typeof recordingResponse.recording === "object"
+                ? recordingResponse.recording
+                : recordingResponse;
+              if (!recording || recording.source_id !== saved.sourceId) {
+                throw Object.assign(new Error("Die gespeicherte Quelle konnte nicht bestätigt werden."), { status: 404 });
+              }
+              roadSourceSnapshot = recording;
+              await roadMount.restoreSource(recording);
+            } catch (error) {
+              if (error?.status === 404 || error?.status === 403 || error?.status === 401) {
+                roadSourceSnapshot = null;
+                roadViewedCaseId = null;
+                window.localStorage.removeItem(ROAD_VIEW_STATE_KEY);
+              }
+              const status = $("road-workspace-status");
+              if (status) status.textContent = error?.message || "Die gespeicherte Quelle konnte nicht geladen werden.";
+            }
+          }
           await refreshRoadViews();
           scheduleRoadRefresh();
         }
       }
-      if (window.RoadGame && !roadGameMount) {
-        roadGameMount = window.RoadGame.mountCartoonGame($("workspace-road"), { roadMount, apiClient: window.roadApiClient });
-      }
     } catch (error) {
-      $("road-camera-root").textContent = error.message || "Die Straßenkamera-Oberfläche konnte nicht geladen werden.";
+      const cameraRoot = $("road-camera-root");
+      if (cameraRoot) cameraRoot.textContent = error.message || "Die Straßenkamera-Oberfläche konnte nicht geladen werden.";
     }
   }
 
