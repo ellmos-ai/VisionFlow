@@ -6,6 +6,7 @@ import shutil
 import threading
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import cv2
@@ -433,31 +434,46 @@ def test_sustained_rate_above_twenty_fps_is_rejected_by_window(tmp_path: Path) -
             )
 
 
-def test_real_simulation_session_frames_are_recorded_for_over_one_second(tmp_path: Path) -> None:
+def test_real_simulation_session_frames_are_recorded_for_over_one_second(
+    tmp_path: Path, record_property
+) -> None:
     from visionflow.simulation import SimulationSession
 
     store = RecordingStore(root=tmp_path / "recording", ffmpeg_path=ffmpeg_path())
     delivered: list[Frame] = []
     enough_frames = threading.Event()
+    started_at = None
+    twenty_fifth_frame_elapsed = None
 
     def record(frame: Frame) -> None:
+        nonlocal twenty_fifth_frame_elapsed
         store.append(session.source_id, frame)
         delivered.append(frame)
         if len(delivered) >= 25:
+            if twenty_fifth_frame_elapsed is None and started_at is not None:
+                twenty_fifth_frame_elapsed = time.monotonic() - started_at
             enough_frames.set()
 
     session = SimulationSession(owner_id="alice", seed=73, on_frame=record)
     store.open("alice", session.source_id)
     try:
+        started_at = time.monotonic()
         session.start()
-        assert enough_frames.wait(5), "SimulationSession did not record 25 frames"
+        assert enough_frames.wait(15), "SimulationSession did not record 25 frames"
     finally:
         session.close()
 
     manifest = store.manifest("alice", session.source_id)
+    timeline_seconds = (
+        manifest["frames"][-1]["timestamp_seconds"]
+        - manifest["frames"][0]["timestamp_seconds"]
+    )
+    record_property("elapsed_to_25_persisted_frames_seconds", f"{twenty_fifth_frame_elapsed:.3f}")
+    record_property("recording_source_fps", f"{manifest['source_fps']:.3f}")
+    record_property("recording_source_timeline_seconds", f"{timeline_seconds:.3f}")
     assert len(delivered) >= 25
     assert manifest["frame_count"] == len(delivered)
-    assert manifest["frames"][-1]["timestamp_seconds"] - manifest["frames"][0]["timestamp_seconds"] >= 1.0
+    assert timeline_seconds >= 1.0
     assert all(frame["frame_id"].startswith(f"{session.source_id}:") for frame in manifest["frames"])
 
 

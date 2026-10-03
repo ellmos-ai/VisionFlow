@@ -27,7 +27,15 @@ class ApiClient:
         self.cookie: str | None = None
         self.csrf: str | None = None
 
-    def request(self, method: str, path: str, payload=None, *, csrf: bool = True):
+    def request(
+        self,
+        method: str,
+        path: str,
+        payload=None,
+        *,
+        csrf: bool = True,
+        timeout: float = 5.0,
+    ):
         headers = {"Origin": self.base_url, "Accept": "application/json"}
         body = None if payload is None else json.dumps(payload, allow_nan=False).encode("utf-8")
         if body is not None:
@@ -38,7 +46,7 @@ class ApiClient:
             headers["X-CSRF-Token"] = self.csrf
         request = urllib.request.Request(self.base_url + path, data=body, headers=headers, method=method)
         try:
-            response = urllib.request.urlopen(request, timeout=5)
+            response = urllib.request.urlopen(request, timeout=timeout)
         except urllib.error.HTTPError as exc:
             response = exc
         raw = response.read()
@@ -109,7 +117,9 @@ def _decode_clip(tmp_path: Path, data: bytes) -> int:
     return count
 
 
-def test_road_source_serves_real_jpeg_and_owner_scoped_h264_clip(road_server, tmp_path):
+def test_road_source_serves_real_jpeg_and_owner_scoped_h264_clip(
+    road_server, tmp_path, record_property
+):
     base_url, _service, _controller, _sessions = road_server
     owner = ApiClient(base_url)
     other = ApiClient(base_url)
@@ -138,7 +148,13 @@ def test_road_source_serves_real_jpeg_and_owner_scoped_h264_clip(road_server, tm
     assert "findings" not in ack and "model_output" not in ack
 
     time.sleep(0.35)
-    status, stopped, _ = owner.request("POST", f"/road/sessions/{source_id}/stop", {})
+    stop_started_at = time.monotonic()
+    status, stopped, _ = owner.request(
+        "POST", f"/road/sessions/{source_id}/stop", {}, timeout=35.0
+    )
+    stop_elapsed = time.monotonic() - stop_started_at
+    record_property("stop_http_seconds", f"{stop_elapsed:.3f}")
+    assert stop_elapsed < 35.0, "stop export exceeded the 30-second FFmpeg bound plus HTTP reserve"
     assert status == 200
     assert stopped["source_id"] == source_id
     assert stopped["clip"]["frame_ids"]
@@ -484,7 +500,14 @@ def test_road_assets_are_allowlisted_and_video_blob_csp_is_enabled(road_server):
     status, page, headers = client.request("GET", "/")
     assert status == 200
     assert "media-src 'self' blob:" in headers["content-security-policy"]
-    assert "road-camera-root" in page.decode("utf-8")
+    assert 'id="workspace-road"' in page.decode("utf-8")
+
+    status, game_module, game_headers = client.request("GET", "/road-game.js")
+    assert status == 200
+    assert game_headers["content-type"].split(";", 1)[0] in {
+        "text/javascript", "application/javascript"
+    }
+    assert 'id: "road-camera-root"' in game_module.decode("utf-8")
 
     for route, supported_types in (
         ("/road-camera.js", {"text/javascript", "application/javascript"}),

@@ -349,6 +349,19 @@ def _parser() -> argparse.ArgumentParser:
     road_inject.add_argument("source_id")
     road_inject.add_argument("event", choices=("wrong_way", "bird", "leaf"))
     _client_options(road_inject)
+    road_scenario = road_commands.add_parser("scenario", help="Ein reales Case-Szenario in die Quellenqueue stellen")
+    road_scenario.add_argument("source_id")
+    road_scenario.add_argument("event", choices=("wrong_way", "bird", "leaf"))
+    road_scenario.add_argument("--mode", choices=("fixture", "gemini_video"), required=True)
+    road_scenario.add_argument("--fixture-profile")
+    _client_options(road_scenario)
+    for name, help_text in (
+        ("jobs", "Szenariojobs einer Quelle anzeigen"),
+        ("cases", "Fallhistorie einer Quelle anzeigen"),
+    ):
+        command = road_commands.add_parser(name, help=help_text)
+        command.add_argument("source_id")
+        _client_options(command)
     for name, help_text in (
         ("reset", "Eine neue Quelle starten und die alte Aufnahme beenden"),
         ("stop", "Quelle beenden und den vollständigen Clip sichern"),
@@ -424,6 +437,7 @@ def _serve(args: argparse.Namespace) -> int:
             approval_store=getattr(runtime.controller, "approval_store", None),
             road_sessions=runtime.road_sessions,
             road_cases=runtime.road_cases,
+            road_scenarios=getattr(runtime, "road_scenarios", None),
             road_unavailable_reason=runtime.road_unavailable_reason,
         )
     except (ConfigError, OSError, ValueError) as exc:
@@ -511,6 +525,16 @@ def _road_command(args: argparse.Namespace) -> int:
     source_id = getattr(args, "source_id", None)
     if args.road_command == "inbox":
         return _call_api(args, "GET", "/road/inbox")
+    if args.road_command == "scenario":
+        path = f"/road/sessions/{urllib.parse.quote(source_id, safe='')}/jobs"
+        payload = {"event": args.event, "mode": args.mode}
+        if args.fixture_profile is not None:
+            payload["fixture_profile"] = args.fixture_profile
+        return _call_api(args, "POST", path, payload)
+    if args.road_command in {"jobs", "cases"}:
+        suffix = "jobs" if args.road_command == "jobs" else "cases"
+        path = f"/road/sessions/{urllib.parse.quote(source_id, safe='')}/{suffix}"
+        return _call_api(args, "GET", path)
     if args.road_command == "case":
         case_id = getattr(args, "case_id", None)
         if args.case_command == "start":

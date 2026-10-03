@@ -29,6 +29,8 @@ from visionflow.contracts import (
 
 MAX_JSON_BYTES = 1024 * 1024
 MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+_EARLY_REJECT_DRAIN_BYTES = 64 * 1024
+_EARLY_REJECT_DRAIN_SECONDS = 0.2
 SESSION_COOKIE = "vf_session"
 SESSION_TTL_SECONDS = 8 * 60 * 60
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -54,6 +56,7 @@ class _ApiState:
         approval_store: Any,
         road_sessions: Any = None,
         road_cases: Any = None,
+        road_scenarios: Any = None,
         road_unavailable_reason: str | None = None,
     ) -> None:
         self.controller = controller
@@ -70,6 +73,7 @@ class _ApiState:
         self.approval_store = approval_store or getattr(controller, "approval_store", None)
         self.road_sessions = road_sessions
         self.road_cases = road_cases
+        self.road_scenarios = road_scenarios
         allowed_reasons = {None, "ffmpeg_required", "h264_encoder_required"}
         if road_unavailable_reason not in allowed_reasons:
             raise ValueError("unsupported road capability reason")
@@ -89,7 +93,11 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
         try:
             super().server_close()
         finally:
-            for service in (self.state.road_cases, self.state.road_sessions):
+            for service in (
+                self.state.road_scenarios,
+                self.state.road_cases,
+                self.state.road_sessions,
+            ):
                 if service is not None:
                     service.close()
 
@@ -104,6 +112,7 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
         approval_store: Any = None,
         road_sessions: Any = None,
         road_cases: Any = None,
+        road_scenarios: Any = None,
         road_unavailable_reason: str | None = None,
     ) -> None:
         host = server_address[0]
@@ -117,6 +126,7 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
             approval_store=approval_store,
             road_sessions=road_sessions,
             road_cases=road_cases,
+            road_scenarios=road_scenarios,
             road_unavailable_reason=road_unavailable_reason,
         )
         super().__init__(server_address, _VisionFlowHandler)
@@ -133,6 +143,7 @@ def create_server(
     approval_store: Any = None,
     road_sessions: Any = None,
     road_cases: Any = None,
+    road_scenarios: Any = None,
     road_unavailable_reason: str | None = None,
 ) -> VisionFlowHTTPServer:
     """Create a local server. It is loopback-only and does not start automatically."""
@@ -145,6 +156,7 @@ def create_server(
         approval_store=approval_store,
         road_sessions=road_sessions,
         road_cases=road_cases,
+        road_scenarios=road_scenarios,
         road_unavailable_reason=road_unavailable_reason,
     )
 
@@ -325,6 +337,47 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             raise _ApiFault(422, "json_object_required", "The request body must be a JSON object.")
         return value
 
+    def _drain_small_early_reject_body(self) -> None:
+        """Discard only an unambiguous, small body before an auth rejection."""
+        self.close_connection = True
+        if self.headers.get_all("Transfer-Encoding"):
+            return
+        lengths = self.headers.get_all("Content-Length", [])
+        if len(lengths) != 1:
+            return
+        raw_length = lengths[0].strip()
+        if not raw_length or any(char < "0" or char > "9" for char in raw_length):
+            return
+        normalized_length = raw_length.lstrip("0") or "0"
+        maximum_text = str(_EARLY_REJECT_DRAIN_BYTES)
+        if len(normalized_length) > len(maximum_text) or (
+            len(normalized_length) == len(maximum_text)
+            and normalized_length > maximum_text
+        ):
+            return
+        length = int(normalized_length, 10)
+
+        deadline = time.monotonic() + _EARLY_REJECT_DRAIN_SECONDS
+        original_timeout = self.connection.gettimeout()
+        remaining_bytes = length
+        try:
+            while remaining_bytes:
+                remaining_time = deadline - time.monotonic()
+                if remaining_time <= 0:
+                    return
+                self.connection.settimeout(remaining_time)
+                chunk = self.rfile.read1(min(remaining_bytes, _EARLY_REJECT_DRAIN_BYTES))
+                if not chunk:
+                    return
+                remaining_bytes -= len(chunk)
+        except OSError:
+            return
+        finally:
+            try:
+                self.connection.settimeout(original_timeout)
+            except OSError:
+                pass
+
     def _session_id(self) -> str | None:
         cookie = SimpleCookie()
         try:
@@ -358,6 +411,10 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         result = self.server.state.controller.status(run_id)
         with self.server.state.lock:
             owner = self.server.state.run_sessions.get(run_id)
+        if owner is None and self.server.state.road_sessions is not None:
+            binding = self.server.state.road_sessions.owner_source_for_run(run_id)
+            if isinstance(binding, tuple) and len(binding) == 2:
+                owner = binding[0]
         if owner is None or not hmac.compare_digest(owner, session_id):
             raise _ApiFault(
                 403,
@@ -450,6 +507,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                 session_id,
                 path,
                 cases=self.server.state.road_cases,
+                scenarios=self.server.state.road_scenarios,
             )
             if response is None:
                 raise _ApiFault(404, "not_found", "Die angeforderte lokale Ressource wurde nicht gefunden.")
@@ -479,6 +537,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                 path,
                 body,
                 cases=self.server.state.road_cases,
+                scenarios=self.server.state.road_scenarios,
             )
             if response is None:
                 raise _ApiFault(404, "not_found", "Die angeforderte lokale Ressource wurde nicht gefunden.")
@@ -511,8 +570,9 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         from visionflow.recording import RecordingError
         from visionflow.road_api import RoadSessionError
         from visionflow.road_cases import RoadCaseError
+        from visionflow.road_scenarios import RoadScenarioError
 
-        if isinstance(exc, (RoadSessionError, RoadCaseError)):
+        if isinstance(exc, (RoadSessionError, RoadCaseError, RoadScenarioError)):
             self._send_error(exc.status, exc.code, str(exc))
         elif isinstance(exc, DecisionError):
             status = 404 if exc.code == "case_not_found" else 409
@@ -676,10 +736,20 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         try:
-            self._check_request(require_origin=True)
+            try:
+                self._check_request(require_origin=True)
+            except _ApiFault as fault:
+                self._drain_small_early_reject_body()
+                self._send_fault(fault)
+                return
             parsed = urlsplit(self.path)
             path = parsed.path
-            session_id = self._require_session()
+            try:
+                session_id = self._require_session()
+            except _ApiFault as fault:
+                self._drain_small_early_reject_body()
+                self._send_fault(fault)
+                return
             if path == "/media":
                 self._upload_media()
                 return

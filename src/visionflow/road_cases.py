@@ -75,6 +75,7 @@ class _Case:
     controller_result: RunResult | None = None
     monitor: threading.Thread | None = None
     finalized: bool = False
+    analysis_complete: bool = False
     stopped_reason: str | None = None
 
 
@@ -437,6 +438,34 @@ class RoadCaseService:
             "model_error": decision_data.get("model_error") if decision_data else model_error,
             "stopped_reason": stopped_reason,
         }
+
+    def list_cases(self, owner_id: str, source_id: str) -> list[dict[str, Any]]:
+        """Return this owner's cases for one source in creation order."""
+        if type(owner_id) is not str or type(source_id) is not str:
+            raise RoadCaseError("case_not_found", status=404)
+        with self._lock:
+            cases = sorted(
+                (
+                    case
+                    for (owner, _), case in self._cases.items()
+                    if owner == owner_id and case.source_id == source_id
+                ),
+                key=lambda case: (case.created_at, case.case_id),
+            )
+            case_ids = [case.case_id for case in cases]
+        return [self.snapshot(owner_id, case_id) for case_id in case_ids]
+
+    def analysis_status(self, owner_id: str, case_id: str) -> dict[str, Any]:
+        """Expose a lightweight finalization gate without copying run traces."""
+        case = self._owned_case(owner_id, case_id)
+        with case.finalize_lock:
+            result = case.controller_result
+            return {
+                "analysis_complete": case.analysis_complete,
+                "phase": case.phase,
+                "controller_status": getattr(result, "status", None),
+                "model_error": case.model_error,
+            }
 
     def exchanges_for_case(self, owner_id: str, case_id: str) -> list[dict[str, Any]]:
         case = self._owned_case(owner_id, case_id)
@@ -827,6 +856,7 @@ class RoadCaseService:
                     return
                 case.phase = "normal" if full_duration and result.status == "completed" else "source_ended"
                 case.stopped_reason = str(stop.get("reason")) if isinstance(stop, dict) else result.status
+                case.analysis_complete = True
                 self._release_if_terminal(case)
             return
 
@@ -864,11 +894,14 @@ class RoadCaseService:
             except DecisionError:
                 case.phase = "human_review"
                 case.model_error = error_code or "decision_unavailable"
+                case.analysis_complete = True
+                self._release_if_terminal(case)
                 return
             case.decision_open = True
             case.decision_snapshot = copy.deepcopy(opened)
             case.phase = opened["phase"]
             case.model_error = error_code
+            case.analysis_complete = True
             self._release_if_terminal(case)
 
     def _on_source_stopped(self, case: _Case, run_id: str, reason: str) -> None:
@@ -877,6 +910,7 @@ class RoadCaseService:
         with case.finalize_lock:
             case.stopped_reason = reason
             case.cancel_event.set()
+            case.analysis_complete = True
             if case.decision_open:
                 try:
                     case.decision_snapshot = self.decisions.cancel(case.owner_id, case.case_id)
@@ -919,7 +953,7 @@ class RoadCaseService:
         return case
 
     def _release_if_terminal(self, case: _Case) -> None:
-        if case.phase not in _TERMINAL_PHASES:
+        if case.phase not in _TERMINAL_PHASES and not case.analysis_complete:
             return
         with self._lock:
             key = (case.owner_id, case.source_id)

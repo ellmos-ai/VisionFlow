@@ -14,6 +14,7 @@ from .decision_policy import DecisionPolicy, DecisionStore
 from .model_exchange import ModelExchangeStore
 from .road_api import RoadSessionService, make_source_override
 from .road_cases import RoadCaseService, RoadModelRouter
+from .road_scenarios import RoadScenarioService
 from .runtime import create_controller
 from .simulated_authority import SimulatedAuthorityInbox
 from .simulation import SimulationStore
@@ -27,8 +28,11 @@ class RoadRuntime:
     road_sessions: RoadSessionService | None
     road_cases: RoadCaseService | None
     road_unavailable_reason: str | None
+    road_scenarios: RoadScenarioService | None = None
 
     def close(self) -> None:
+        if self.road_scenarios is not None:
+            self.road_scenarios.close()
         if self.road_cases is not None:
             self.road_cases.close()
         if self.road_sessions is not None:
@@ -112,7 +116,7 @@ def build_road_runtime(
     ).expanduser().resolve()
 
     if unavailable_reason is not None:
-        return RoadRuntime(controller, None, None, unavailable_reason)
+        return RoadRuntime(controller, None, None, unavailable_reason, None)
 
     from .recording import RecordingStore
 
@@ -120,6 +124,7 @@ def build_road_runtime(
     sessions = SimulationStore()
     road_sessions: RoadSessionService | None = None
     road_cases: RoadCaseService | None = None
+    road_scenarios: RoadScenarioService | None = None
     try:
         road_sessions = RoadSessionService(sessions, recordings, controller)
         service_holder["service"] = road_sessions
@@ -135,7 +140,10 @@ def build_road_runtime(
             ModelExchangeStore(),
             decisions,
         )
+        road_scenarios = RoadScenarioService(road_cases, road_sessions, controller)
     except Exception:
+        if road_scenarios is not None:
+            road_scenarios.close()
         if road_cases is not None:
             road_cases.close()
         if road_sessions is not None:
@@ -144,7 +152,7 @@ def build_road_runtime(
             sessions.close()
         raise
 
-    return RoadRuntime(controller, road_sessions, road_cases, None)
+    return RoadRuntime(controller, road_sessions, road_cases, None, road_scenarios)
 
 
 def _has_h264_encoder(executable: str) -> bool:

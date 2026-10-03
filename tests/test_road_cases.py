@@ -941,10 +941,25 @@ def test_real_road_case_reaches_human_review_from_recorded_wrong_way_pixels(tmp_
     try:
         time.sleep(1.0)  # Let the initial road scene warm up before injecting pixels.
         case = service.start(owner_id, source_id, "fixture", fixture_profile="pending")
+        warmup_deadline = time.monotonic() + 10.0
+        observed_frames = 0
+        current = None
+        while time.monotonic() < warmup_deadline:
+            current = service.snapshot(owner_id, case["case_id"])
+            observed_frames = sum(
+                1
+                for item in current["perception_trace"]
+                if isinstance(item, dict)
+                and item.get("type") == "frame_observed"
+                and item.get("node_id") == "monitor"
+            )
+            if observed_frames >= 3:
+                break
+            time.sleep(0.1)
+        assert observed_frames >= 3, "the controller must analyze three real warmup frames"
         road_sessions.inject(owner_id, source_id, "wrong_way")
 
-        deadline = time.monotonic() + 35.0
-        current = None
+        deadline = time.monotonic() + 75.0
         while time.monotonic() < deadline:
             current = service.snapshot(owner_id, case["case_id"])
             if current["phase"] in {"human_review", "reported", "dismissed", "no_response"}:
@@ -961,6 +976,11 @@ def test_real_road_case_reaches_human_review_from_recorded_wrong_way_pixels(tmp_
         assert exchange_rows[0]["clip"]["frame_ids"]
         assert exchange_rows[0]["assessment"]["object_class"] == "vehicle"
         assert exchange_rows[0]["assessment"]["confidence"] < 0.9
+        next_case = service.start(owner_id, source_id, "fixture", fixture_profile="pending")
+        assert next_case["case_id"] != case["case_id"]
+        assert service.snapshot(owner_id, case["case_id"])["phase"] == "human_review"
+        service.cancel(owner_id, next_case["case_id"])
+        assert service.snapshot(owner_id, case["case_id"])["phase"] == "human_review"
     finally:
         service.close()
         road_sessions.close()

@@ -98,6 +98,7 @@ def test_case_review_routes_follow_real_pixels_and_preserve_owner_decision_flow(
             evidence_root=runtime.controller.evidence_root,
             road_sessions=runtime.road_sessions,
             road_cases=runtime.road_cases,
+            road_scenarios=runtime.road_scenarios,
             road_unavailable_reason=runtime.road_unavailable_reason,
         )
     except TypeError:
@@ -141,36 +142,49 @@ def test_case_review_routes_follow_real_pixels_and_preserve_owner_decision_flow(
         assert status == 422
         assert rejected_native_profile["error"]["code"] == "fixture_profile_not_allowed"
 
-        # Let the road texture stabilize before generating real wrong-way pixels.
-        time.sleep(1.0)
+        # The UI leaves the recorder open while the operator chooses an event;
+        # this also gives a new source its full five-second pre-roll before a
+        # controller observation starts.
+        time.sleep(5.5)
         status, accepted, _ = owner.request(
-            "POST",
-            "/road/cases",
-            {"source_id": source_id, "mode": "fixture", "fixture_profile": "pending"},
+            "POST", f"/road/sessions/{source_id}/jobs",
+            {"event": "wrong_way", "mode": "fixture", "fixture_profile": "pending"},
         )
         assert status == 202
-        case = accepted["case"]
-        assert case["source_id"] == source_id
-        assert case["mode"] == "fixture"
-        assert case["fixture_profile"] == "pending"
-        assert case["run_id"]
+        queued = accepted["job"]
+        assert queued["source_id"] == source_id
+        assert queued["event"] == "wrong_way"
+        assert queued["mode"] == "fixture"
+        assert queued["fixture_profile"] == "pending"
+        assert queued["state"] == "queued"
+        assert queued["case_id"] is None
+        assert queued["run_id"] is None
 
-        status, injected, _ = owner.request(
-            "POST", f"/road/sessions/{source_id}/events", {"event": "wrong_way"}
-        )
-        assert status == 200
-        assert injected["accepted"] is True
+        status, foreign_jobs, _ = other.request("GET", f"/road/sessions/{source_id}/jobs")
+        assert status == 403
+        status, foreign_cases, _ = other.request("GET", f"/road/sessions/{source_id}/cases")
+        assert status == 403
 
-        deadline = time.monotonic() + 45.0
-        current = None
+        deadline = time.monotonic() + 75.0
+        current_job = None
         while time.monotonic() < deadline:
-            status, current, _ = owner.request("GET", f"/road/cases/{case['case_id']}")
+            status, current_jobs, _ = owner.request("GET", f"/road/sessions/{source_id}/jobs")
             assert status == 200
-            if current["phase"] in {"human_review", "reported", "dismissed", "no_response"}:
+            current_job = next(
+                item for item in current_jobs["jobs"] if item["job_id"] == queued["job_id"]
+            )
+            if current_job["state"] in {"completed", "failed", "cancelled"}:
                 break
             time.sleep(0.1)
 
-        assert current is not None
+        assert current_job is not None
+        assert current_job["state"] == "completed", f"scenario job did not complete: {current_job!r}"
+        assert current_job["case_id"]
+        assert current_job["run_id"]
+        case = {"case_id": current_job["case_id"], "run_id": current_job["run_id"]}
+        status, case_list, _ = owner.request("GET", f"/road/sessions/{source_id}/cases")
+        assert status == 200
+        current = next(item for item in case_list["cases"] if item["case_id"] == case["case_id"])
         assert current["phase"] == "human_review"
         assert current["controller_status"] == "completed"
         assert current["clip"]["source_id"] == source_id

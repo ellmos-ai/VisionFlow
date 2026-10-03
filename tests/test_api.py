@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import http.client
 import json
+import socket
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -232,6 +234,185 @@ def test_confirm_without_local_session_is_rejected(api):
     )
     assert status == 403
     assert payload["error"]["code"] == "session_required"
+
+
+def test_early_rejection_with_delayed_small_body_returns_http_response(api):
+    _client, server, controller, evidence_root = api
+    address, port = server.server_address[:2]
+    body = b"{}"
+    request = (
+        f"POST /runs/run-1/confirm HTTP/1.1\r\n"
+        f"Host: {address}:{port}\r\n"
+        f"Origin: http://{address}:{port}\r\n"
+        "Content-Type: application/json\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode("ascii")
+    response = bytearray()
+    with socket.create_connection((address, port), timeout=2) as connection:
+        connection.settimeout(2)
+        connection.sendall(request)
+        time.sleep(0.05)
+        connection.sendall(body)
+        while True:
+            chunk = connection.recv(4096)
+            if not chunk:
+                break
+            response.extend(chunk)
+
+    status_line = bytes(response).split(b"\r\n", 1)[0]
+    assert status_line in {b"HTTP/1.0 403 Forbidden", b"HTTP/1.1 403 Forbidden"}
+    assert b"session_required" in response
+    assert controller.runs == {}
+    assert not evidence_root.exists()
+
+
+def test_early_bad_origin_rejection_with_delayed_small_body_returns_http_response(api):
+    client, server, controller, evidence_root = api
+    client.bootstrap()
+    address, port = server.server_address[:2]
+    body = b"{}"
+    request = (
+        f"POST /runs/run-1/confirm HTTP/1.1\r\n"
+        f"Host: {address}:{port}\r\n"
+        "Origin: http://example.com\r\n"
+        f"Cookie: {client.cookie}\r\n"
+        f"X-CSRF-Token: {client.csrf_token}\r\n"
+        "Content-Type: application/json\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode("ascii")
+    response = bytearray()
+    with socket.create_connection((address, port), timeout=2) as connection:
+        connection.settimeout(2)
+        connection.sendall(request)
+        time.sleep(0.05)
+        connection.sendall(body)
+        while True:
+            chunk = connection.recv(4096)
+            if not chunk:
+                break
+            response.extend(chunk)
+
+    assert bytes(response).startswith(b"HTTP/1.0 403 Forbidden\r\n")
+    assert b"origin_rejected" in response
+    assert controller.runs == {}
+    assert not evidence_root.exists()
+
+
+def test_early_rejection_bounds_wait_for_an_incomplete_small_body(api):
+    _client, server, controller, evidence_root = api
+    address, port = server.server_address[:2]
+    request = (
+        f"POST /runs/run-1/confirm HTTP/1.1\r\n"
+        f"Host: {address}:{port}\r\n"
+        f"Origin: http://{address}:{port}\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: 10\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode("ascii")
+    response = bytearray()
+    started = time.monotonic()
+    with socket.create_connection((address, port), timeout=2) as connection:
+        connection.settimeout(2)
+        connection.sendall(request + b"{}")
+        while True:
+            chunk = connection.recv(4096)
+            if not chunk:
+                break
+            response.extend(chunk)
+
+    elapsed = time.monotonic() - started
+    assert bytes(response).startswith(b"HTTP/1.0 403 Forbidden\r\n")
+    assert b"session_required" in response
+    assert elapsed < 2.0
+    assert controller.runs == {}
+    assert not evidence_root.exists()
+
+
+@pytest.mark.parametrize(
+    "framing_headers",
+    [
+        [],
+        [("Content-Length", "invalid")],
+        [("Content-Length", "2"), ("Content-Length", "3")],
+        [("Transfer-Encoding", "chunked")],
+        [("Content-Length", "65537")],
+        [("Content-Length", "9" * 5000)],
+    ],
+    ids=["missing-length", "invalid-length", "duplicate-length", "transfer-encoding", "oversized", "long-length"],
+)
+def test_early_rejection_skips_ambiguous_unbounded_or_invalid_framing(
+    api, framing_headers, monkeypatch
+):
+    from visionflow.api import _VisionFlowHandler
+
+    _client, server, controller, evidence_root = api
+    address, port = server.server_address[:2]
+
+    original_drain = _VisionFlowHandler._drain_small_early_reject_body
+
+    class NoBodyRead:
+        def __init__(self, reader):
+            self._reader = reader
+
+        def read1(self, *_args, **_kwargs):
+            raise AssertionError("ambiguous framing must not read the request body")
+
+        def __getattr__(self, name):
+            return getattr(self._reader, name)
+
+    class NoTimeoutAccess:
+        def __init__(self, connection):
+            self._connection = connection
+
+        def gettimeout(self):
+            raise AssertionError("ambiguous framing must not inspect the socket timeout")
+
+        def settimeout(self, _timeout):
+            raise AssertionError("ambiguous framing must not change the socket timeout")
+
+        def __getattr__(self, name):
+            return getattr(self._connection, name)
+
+    def guarded_drain(handler):
+        original_reader = handler.rfile
+        original_connection = handler.connection
+        handler.rfile = NoBodyRead(original_reader)
+        handler.connection = NoTimeoutAccess(original_connection)
+        try:
+            return original_drain(handler)
+        finally:
+            handler.rfile = original_reader
+            handler.connection = original_connection
+
+    monkeypatch.setattr(_VisionFlowHandler, "_drain_small_early_reject_body", guarded_drain)
+    headers = [
+        f"POST /runs HTTP/1.1",
+        f"Host: {address}:{port}",
+        f"Origin: http://{address}:{port}",
+        "Content-Type: application/json",
+        "Connection: close",
+        *(f"{name}: {value}" for name, value in framing_headers),
+    ]
+    request = ("\r\n".join(headers) + "\r\n\r\n").encode("ascii")
+    response = bytearray()
+    started = time.monotonic()
+    with socket.create_connection((address, port), timeout=2) as connection:
+        connection.settimeout(2)
+        connection.sendall(request)
+        while True:
+            chunk = connection.recv(4096)
+            if not chunk:
+                break
+            response.extend(chunk)
+
+    elapsed = time.monotonic() - started
+    assert bytes(response).startswith(b"HTTP/1.0 403 Forbidden\r\n")
+    assert b"session_required" in response
+    assert elapsed < 2.0
+    assert controller.runs == {}
+    assert not evidence_root.exists()
 
 
 def test_api_session_mutation_serialization_and_run_scoping(api):

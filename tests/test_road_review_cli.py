@@ -70,3 +70,35 @@ def test_road_case_cli_rejects_fixture_profile_for_native_mode_before_http(monke
     assert result != 0
     assert called is False
     assert output["error"]["code"] == "fixture_profile_not_allowed"
+
+
+def test_road_scenario_and_source_history_cli_map_to_queue_routes(monkeypatch, capsys):
+    from visionflow import cli
+
+    calls = []
+
+    def record(args, method, path, payload=None):
+        calls.append((method, path, payload))
+        print(json.dumps({"ok": True}, ensure_ascii=False))
+        return 0
+
+    monkeypatch.setattr(cli, "_call_api", record)
+    common = ["--server", "http://127.0.0.1:8765", "--session-file", "session.json"]
+
+    commands = [
+        ["road", "scenario", "road-sim-1", "bird", "--mode", "fixture",
+         "--fixture-profile", "pending", *common],
+        ["road", "jobs", "road-sim-1", *common],
+        ["road", "cases", "road-sim-1", *common],
+    ]
+    for command in commands:
+        assert main(command) == 0
+        capsys.readouterr()
+
+    assert calls == [
+        ("POST", "/road/sessions/road-sim-1/jobs", {
+            "event": "bird", "mode": "fixture", "fixture_profile": "pending",
+        }),
+        ("GET", "/road/sessions/road-sim-1/jobs", None),
+        ("GET", "/road/sessions/road-sim-1/cases", None),
+    ]

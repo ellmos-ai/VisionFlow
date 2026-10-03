@@ -229,6 +229,12 @@ class RoadSessionService:
             raise KeyError(source)
         return session
 
+    def source_age_seconds(self, owner_id: str, source_id: str) -> float:
+        """Return the latest actual source timestamp without reading its manifest."""
+        session = self.get(owner_id, source_id)
+        frame = session.latest_frame()
+        return max(0.0, float(frame.timestamp_seconds))
+
     def source_owner(self, source_id: str) -> str | None:
         with self._lock:
             return self._source_owners.get(source_id)
@@ -389,7 +395,21 @@ class RoadSessionService:
             if previous_run is not None:
                 previous = self._bindings.get(previous_run)
                 if previous is not None and not previous.stop_event.is_set():
-                    raise RoadSessionError("source_busy", "Für diese Quelle läuft noch eine Analyse oder Clipprüfung.")
+                    try:
+                        previous_status = self.controller.status(previous_run).status
+                    except UnknownRun:
+                        previous_status = "missing"
+                    # Case runs do not ask this watcher to build a clip: once the
+                    # controller is terminal, finalization owns the clip/model
+                    # work and may already have released its case reservation.
+                    if (
+                        not previous.monitor_clip
+                        and previous_status in _TERMINAL_RUN_STATES | {"missing"}
+                    ):
+                        previous.stop_event.set()
+                        self._active_by_source.pop(key, None)
+                    else:
+                        raise RoadSessionError("source_busy", "Für diese Quelle läuft noch eine Analyse oder Clipprüfung.")
             binding = _RunBinding(
                 owner_id=owner,
                 source_id=source,
@@ -702,6 +722,7 @@ def dispatch_road_get(
     path: str,
     *,
     cases: Any = None,
+    scenarios: Any = None,
 ) -> RoadHttpResponse | None:
     """Dispatch a road GET route after the API has enforced its session cookie."""
     route = path.split("?", 1)[0]
@@ -756,6 +777,14 @@ def dispatch_road_get(
     if len(parts) == 4 and parts[:2] == ["road", "sessions"]:
         source_id = parts[2]
         _owned_source(service, owner_id, source_id)
+        if parts[3] == "jobs":
+            if scenarios is None:
+                raise RoadSessionError("road_scenarios_unavailable", "Die Szenario-Queue ist nicht verfügbar.", 404)
+            return RoadHttpResponse(200, {"jobs": scenarios.jobs(owner_id, source_id)})
+        if parts[3] == "cases":
+            if cases is None:
+                raise RoadSessionError("road_cases_unavailable", "Die Fallprüfung ist nicht verfügbar.", 404)
+            return RoadHttpResponse(200, {"cases": cases.list_cases(owner_id, source_id)})
         if parts[3] == "frame":
             return RoadHttpResponse(200, service.frame(owner_id, source_id))
         if parts[3] == "recording":
@@ -770,6 +799,7 @@ def dispatch_road_post(
     body: Any,
     *,
     cases: Any = None,
+    scenarios: Any = None,
 ) -> RoadHttpResponse | None:
     """Validate and dispatch a road POST after API origin/session/CSRF checks."""
     route = path.split("?", 1)[0]
@@ -842,6 +872,23 @@ def dispatch_road_post(
         return None
     source_id, action = parts[2], parts[3]
     _owned_source(service, owner_id, source_id)
+    if action == "jobs":
+        if scenarios is None:
+            raise RoadSessionError("road_scenarios_unavailable", "Die Szenario-Queue ist nicht verfügbar.", 404)
+        if not isinstance(body, dict) or set(body) - {"event", "mode", "fixture_profile"}:
+            raise RoadSessionError("invalid_request", "Die Szenario-Anfrage enthält ungültige Felder.", 400)
+        if type(body.get("event")) is not str or type(body.get("mode")) is not str:
+            raise RoadSessionError("invalid_request", "Ereignis und Modus müssen angegeben werden.", 422)
+        if "fixture_profile" in body and body["fixture_profile"] is not None and type(body["fixture_profile"]) is not str:
+            raise RoadSessionError("fixture_profile_not_allowed", "Das Fixture-Profil ist ungültig.", 422)
+        job = scenarios.enqueue(
+            owner_id,
+            source_id,
+            body["event"],
+            body["mode"],
+            body.get("fixture_profile"),
+        )
+        return RoadHttpResponse(202, {"job": job})
     if action == "events":
         if not isinstance(body, dict) or set(body) != {"event"} or not isinstance(body.get("event"), str):
             raise RoadSessionError("invalid_request", "Erwartet wird ein Szenarioereignis.", 400)
