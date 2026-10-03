@@ -1,0 +1,6 @@
+# Resolved from the available Python 3.12 browser environment, 2026-10-03.
+# System Microsoft Edge is managed separately and is not installed by Playwright.
+greenlet==3.5.1
+playwright==1.60.0
+pyee==13.0.1
+typing_extensions==4.15.0
