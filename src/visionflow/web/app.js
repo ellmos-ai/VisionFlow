@@ -828,6 +828,13 @@
       }
       if (roadModelMount) roadModelMount.update(viewed?.exchanges || []);
       renderRoadTimeline(viewed?.snapshot || null);
+      const cases = {};
+      for (const [caseId, entry] of loaded) {
+        if (entry && entry.snapshot) cases[caseId] = { snapshot: entry.snapshot, exchanges: entry.exchanges };
+      }
+      $("workspace-road").dispatchEvent(new CustomEvent("road-state", {
+        detail: { activeCaseId: roadActiveCaseId, viewedCaseId: roadViewedCaseId, cases, inbox },
+      }));
       const failure = (viewed && viewed.error) || (active && active.error);
       const status = $("road-workspace-status");
       if (status) {
@@ -892,8 +899,18 @@
           scheduleRoadRefresh();
         }
       }
-      if (window.RoadGame && !roadGameMount) {
-        roadGameMount = window.RoadGame.mountCartoonGame($("workspace-road"), { roadMount, apiClient: window.roadApiClient });
+      if (window.RoadGame && !roadGameMount && roadMount) {
+        roadGameMount = window.RoadGame.mountCartoonGame($("workspace-road"), {
+          roadMount,
+          apiClient: window.roadApiClient,
+          workplace: roadWorkplaceMount,
+          openCase: (caseId) => {
+            if (typeof caseId !== "string" || !caseId) return;
+            roadViewedCaseId = caseId;
+            roadRefreshGeneration += 1;
+            void refreshRoadViews();
+          },
+        });
       }
     } catch (error) {
       $("road-camera-root").textContent = error.message || "Die Straßenkamera-Oberfläche konnte nicht geladen werden.";
