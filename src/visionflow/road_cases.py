@@ -708,6 +708,10 @@ class RoadCaseService:
                     raise VideoModelError("clip_timeout") from None
                 time.sleep(0.05)
             except RecordingError as exc:
+                if exc.code == "export_busy" and time.monotonic() < deadline:
+                    # Another export holds the bounded slots; retry within the clip deadline.
+                    time.sleep(0.05)
+                    continue
                 raise VideoModelError(exc.code if _safe_code(exc.code) else "recording_failed") from None
 
     def _source_has_ended(self, case: _Case) -> bool:

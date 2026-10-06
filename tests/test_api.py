@@ -486,3 +486,51 @@ def test_cancelled_run_cannot_create_a_new_terminal_approval(api):
     assert status == 409
     assert payload["error"]["code"] == "invalid_transition"
     assert store._actions[proposal.action_id].state == "pending"
+
+
+def test_non_ascii_csrf_token_is_rejected_as_forbidden_not_server_error(api):
+    client, server, _controller, _evidence_root = api
+    client.bootstrap()
+
+    connection = http.client.HTTPConnection(*server.server_address[:2], timeout=3)
+    connection.putrequest("POST", "/runs/run-1/cancel")
+    connection.putheader("Origin", client.base_url)
+    connection.putheader("Cookie", client.cookie or "")
+    connection.putheader("X-CSRF-Token", "éééé")  # sent as Latin-1 bytes
+    connection.putheader("Content-Type", "application/json")
+    connection.putheader("Content-Length", "2")
+    connection.endheaders(b"{}")
+    response = connection.getresponse()
+    status = response.status
+    payload = json.loads(response.read().decode("utf-8"))
+    connection.close()
+
+    assert status == 403
+    assert payload["error"]["code"] == "session_required"
+
+
+def test_server_binds_to_ipv6_loopback(tmp_path: Path):
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as probe:
+            probe.bind(("::1", 0))
+    except (OSError, AttributeError):
+        pytest.skip("IPv6 loopback is not available on this host")
+
+    server = create_server(FakeController(), host="::1", port=0, data_dir=tmp_path / "data")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        connection = http.client.HTTPConnection("::1", port, timeout=3)
+        connection.request("GET", "/session", headers={"Host": f"[::1]:{port}"})
+        response = connection.getresponse()
+        payload = json.loads(response.read().decode("utf-8"))
+        connection.close()
+        assert response.status == 200
+        assert payload["csrf_token"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
