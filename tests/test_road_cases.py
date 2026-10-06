@@ -964,3 +964,34 @@ def test_real_road_case_reaches_human_review_from_recorded_wrong_way_pixels(tmp_
     finally:
         service.close()
         road_sessions.close()
+
+
+def test_obtain_clip_retries_when_bounded_exports_are_busy(tmp_path):
+    from types import SimpleNamespace
+
+    from visionflow.recording import RecordingError
+
+    fixture = _fixture(tmp_path)
+    service = fixture["service"]
+    expected = object()
+    calls: list[float] = []
+
+    class BusyThenReady:
+        def event_clip(self, _owner, _source, event_time, **_kwargs):
+            calls.append(event_time)
+            if len(calls) < 3:
+                raise RecordingError("export_busy", "Zu viele Videoexporte laufen gleichzeitig.")
+            return expected
+
+    service.recordings = BusyThenReady()
+    case = SimpleNamespace(
+        owner_id="alice",
+        source_id="road-sim-a",
+        event_time=4.0,
+        latest_clip=None,
+        cancel_event=threading.Event(),
+    )
+    context = SimpleNamespace(cancelled=lambda: False)
+
+    assert service._obtain_clip(case, context) is expected
+    assert calls == [4.0, 4.0, 4.0]

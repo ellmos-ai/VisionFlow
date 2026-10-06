@@ -87,6 +87,16 @@ Der Straßenverkehrs-Demonstrator erweitert VisionFlow um eine interaktive Kamer
 - **Unveränderliche Clips:** Vorlauf (5 s) und Nachlauf (10 s) werden als deterministischer MP4-Clip exportiert (gleicher SHA-256-Hash für Modell und Mensch).
 - **Arbeitsplatz:** Countdown-Timer (20 s), Gefahr bestätigen, verneinen oder automatische Eskalation bei hoher Modellsicherheit (>0,90). Späte Ablehnungen erzeugen eine verknüpfte Entwarnung im simulierten Postfach.
 
+### Emergency-Leitstelle (Spieloberfläche)
+
+Die Weboberfläche öffnet die Straßendemo als Comic-Leitstelle mit vier Räumen. Alle angezeigten Falldaten kommen vom lokalen Server: Fallnummern stehen für echte Fälle, Modellantworten stammen aus den Fall-Snapshots und Modellaustauschen, und die Beweisclips werden über `/road/clips` geladen. Bei jedem Clip wird angezeigt, ob die vom Server gelieferte SHA-256-Prüfsumme zum Fall passt. Die Frist in Raum 4 ist die echte Entscheidungsfrist.
+
+- **Raum 1:** Blendet ein Szenario in die laufende Analyse ein. Ein eingeblendetes Ereignis ist noch kein Befund. Für den nächsten Fall wird hier das Modell gewählt: im Fixture-Modus ein festes Antwortprofil, mit Freigabe auch Gemini. Während ein Fall geprüft wird, sind neue Ereignisse gesperrt. Ein neuer Fall startet erst, wenn der vorige abgeschlossen ist, denn ein Quellwechsel bricht eine offene Prüfung ab.
+- **Raum 2:** Zeigt das eingeblendete Szenario, das Ergebnis der OpenCV-Stufe und die tatsächliche Modellantwort samt Quelle. Fixture-Antworten sind fest vorgegeben und hängen nicht vom Bildinhalt ab. Das Spiel weist ausdrücklich darauf hin.
+- **Raum 3 und 4:** Bestätigen oder Verneinen läuft über denselben gebundenen Entscheidungsweg wie im Arbeitsplatz. Läuft die Frist ohne Entscheidung ab, folgen die automatische Meldung und eine mögliche spätere Entwarnung.
+
+Der Knopf „Technische Fallansicht“ blendet Modellprüfung, Arbeitsplatz und Fallchronik ein.
+
 ### CLI-Befehle für die Straßendemo
 
 ```powershell
@@ -107,7 +117,11 @@ Für den Video-Export wird FFmpeg mit `libx264` vorausgesetzt. Fehlt FFmpeg, ble
 
 ## Grenzen
 
-Der MVP enthält keine echte Modell- oder Provideranbindung, keine AWS-Ausführung und keine Wettbewerbsbewertung. Der Fixture-Modus nutzt festgelegte lokale Entscheidungen und macht keine Netzaufrufe. Die künstlichen Beispiele ersetzen weder einen realen Kamera-/Browser-Hardwaretest noch Datensatz-, Baseline- oder Wettbewerbs-Evaluationen. Die lokale Browser-Abnahme am 2026-10-02 bestand acht Fälle in Headless Edge: separate CLI-Prozesse, Unicode-Uploads und Neuaufnahme, Video-Folgebeobachtung mit Entwurfsfreigabe, Abbruch, defekte Medien, Mehrtabbetrieb und eine 390-Pixel-Ansicht ohne horizontalen Überlauf. Browserkonsole und externe Seitenanfragen blieben leer. Echte Kamera-Hardware und ein Mobilgerät wurden nicht geprüft.
+Standardmäßig nutzt VisionFlow keine echte Modell- oder Provideranbindung. Der Fixture-Modus trifft festgelegte lokale Entscheidungen und macht keine Netzaufrufe. Es gibt außerdem keine AWS-Ausführung und keine Wettbewerbsbewertung.
+
+Ausdrücklich zuschaltbar ist ein Gemini-Videomodus: `serve --allow-gemini-costs` mit gesetztem `GEMINI_API_KEY`. Fälle im Modus `gemini_video` senden den H.264-Clip (Base64) und Belegbilder an `generativelanguage.googleapis.com`. Dabei können Providerkosten entstehen. Der Schlüssel wird nur im Header `X-Goog-Api-Key` übertragen; Weiterleitungen werden abgelehnt. Dieser Pfad ist nur mit lokalen Test-Doubles geprüft, nicht gegen den echten Dienst.
+
+Sicherheitshinweis: Die lokale HTTP-API akzeptiert in Workflows lokale Datei- und Videopfade, damit `visionflow.cli run --server` mit Dateien auf demselben Rechner arbeiten kann. Jeder lokale Prozess, der den Loopback-Port erreicht, kann daher Bilder und Videos lesen, die das Serverkonto lesen darf. Betreibe den Server nicht auf Mehrbenutzerrechnern mit nicht vertrauenswürdigen Konten. Die künstlichen Beispiele ersetzen weder einen realen Kamera-/Browser-Hardwaretest noch Datensatz-, Baseline- oder Wettbewerbs-Evaluationen. Die lokale Browser-Abnahme am 2026-10-02 bestand acht Fälle in Headless Edge: separate CLI-Prozesse, Unicode-Uploads und Neuaufnahme, Video-Folgebeobachtung mit Entwurfsfreigabe, Abbruch, defekte Medien, Mehrtabbetrieb und eine 390-Pixel-Ansicht ohne horizontalen Überlauf. Browserkonsole und externe Seitenanfragen blieben leer. Echte Kamera-Hardware und ein Mobilgerät wurden nicht geprüft.
 
 Weitere Test- und Prüfschritte stehen in [docs/TESTING.md](docs/TESTING.md).
 

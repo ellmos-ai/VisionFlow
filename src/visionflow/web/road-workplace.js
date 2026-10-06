@@ -983,5 +983,32 @@ export function mountRoadWorkplace(container, apiClient) {
     container.replaceChildren();
   }
 
-  return { update, destroy };
+  // Programmatic decision for another view (the mission-control game). It only
+  // acts when exactly this case is bound here and the same button would be
+  // enabled, so a caller can never decide a different case by accident.
+  function decide(caseId, decision) {
+    if (destroyed) return { started: false, reason: "destroyed" };
+    if (!activeFields || activeFields.caseId !== caseId) return { started: false, reason: "case_not_open" };
+    const control = decision === "confirm" ? confirmButton : decision === "reject" ? denyButton : null;
+    if (!control) return { started: false, reason: "invalid_decision" };
+    if (control.disabled || decisionActions.hidden) return { started: false, reason: "not_allowed" };
+    startDecision(decision);
+    return { started: true, reason: null };
+  }
+
+  function getDecisionState(caseId) {
+    if (!activeFields || activeFields.caseId !== caseId) return { open: false, canConfirm: false, canReject: false };
+    const visible = !decisionActions.hidden;
+    const operation = operationForCase(caseId);
+    return {
+      open: true,
+      canConfirm: visible && !confirmButton.disabled,
+      canReject: visible && !denyButton.disabled,
+      rejectLabel: denyButton.textContent,
+      operationState: operation ? operation.state : null,
+      operationMessage: operation ? operation.message : "",
+    };
+  }
+
+  return { update, destroy, decide, getDecisionState };
 }

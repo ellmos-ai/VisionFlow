@@ -349,55 +349,70 @@ class GeminiVideoTransport:
                         "cancelled" if interaction_status == "cancelled" else "incomplete_response"
                     )
 
-        while not completed:
-            self._check(deadline, cancelled)
-            _set_socket_timeout(response, min(0.25, deadline - self._clock()))
-            try:
-                line = response.readline()
-            except (socket.timeout, TimeoutError):
-                continue
-            except Exception:
-                raise VideoTransportError("provider_failed") from None
-            self._check(deadline, cancelled)
-            if not line:
-                if event_data:
-                    process_event("\n".join(event_data))
-                break
-            if type(line) is str:
-                line_text = line.rstrip("\r\n")
-            elif type(line) is bytes:
-                try:
-                    line_text = line.decode("utf-8").rstrip("\r\n")
-                except UnicodeError:
-                    raise VideoTransportError("invalid_response") from None
-            else:
-                raise VideoTransportError("invalid_response")
-            if not line_text:
-                if event_data:
-                    process_event("\n".join(event_data))
-                    event_data.clear()
-                    event_size = 0
-                continue
-            if line_text.startswith(":"):
-                continue
-            if line_text.startswith("data:"):
-                value = line_text[5:]
-                if value.startswith(" "):
-                    value = value[1:]
-                event_size += len(value.encode("utf-8"))
-                if event_size > MAX_RESPONSE_TEXT_BYTES:
-                    raise VideoTransportError("response_too_large")
-                event_data.append(value)
+        # A socket file cannot be read again after a timeout, so each read may
+        # block until the remaining deadline; a watchdog aborts the stream as
+        # soon as the run is cancelled or the deadline passes.
+        stop_watchdog = threading.Event()
 
-        self._check(deadline, cancelled)
-        result_text = "".join(response_text)
-        if not completed or not result_text:
-            raise VideoTransportError("incomplete_response")
-        return VideoTransportResult(
-            raw_text=result_text,
-            usage=usage,
-            request_id=request_id,
-        )
+        def watchdog() -> None:
+            while not stop_watchdog.wait(0.05):
+                if _cancelled(cancelled) or self._clock() >= deadline:
+                    _abort_response(response)
+                    return
+
+        threading.Thread(target=watchdog, name="gemini-video-stream-watchdog", daemon=True).start()
+        try:
+            while not completed:
+                self._check(deadline, cancelled)
+                _set_socket_timeout(response, deadline - self._clock())
+                try:
+                    line = response.readline()
+                except Exception as exc:
+                    self._check(deadline, cancelled)
+                    code = "timeout" if isinstance(exc, (socket.timeout, TimeoutError)) else "provider_failed"
+                    raise VideoTransportError(code) from None
+                self._check(deadline, cancelled)
+                if not line:
+                    if event_data:
+                        process_event("\n".join(event_data))
+                    break
+                if type(line) is str:
+                    line_text = line.rstrip("\r\n")
+                elif type(line) is bytes:
+                    try:
+                        line_text = line.decode("utf-8").rstrip("\r\n")
+                    except UnicodeError:
+                        raise VideoTransportError("invalid_response") from None
+                else:
+                    raise VideoTransportError("invalid_response")
+                if not line_text:
+                    if event_data:
+                        process_event("\n".join(event_data))
+                        event_data.clear()
+                        event_size = 0
+                    continue
+                if line_text.startswith(":"):
+                    continue
+                if line_text.startswith("data:"):
+                    value = line_text[5:]
+                    if value.startswith(" "):
+                        value = value[1:]
+                    event_size += len(value.encode("utf-8"))
+                    if event_size > MAX_RESPONSE_TEXT_BYTES:
+                        raise VideoTransportError("response_too_large")
+                    event_data.append(value)
+
+            self._check(deadline, cancelled)
+            result_text = "".join(response_text)
+            if not completed or not result_text:
+                raise VideoTransportError("incomplete_response")
+            return VideoTransportResult(
+                raw_text=result_text,
+                usage=usage,
+                request_id=request_id,
+            )
+        finally:
+            stop_watchdog.set()
 
     def _check(self, deadline: float, cancelled: Callable[[], bool]) -> None:
         if _cancelled(cancelled):
@@ -537,6 +552,15 @@ def _set_socket_timeout(response: Any, timeout: float) -> None:
         return
 
 
+def _abort_response(response: Any) -> None:
+    """Unblock a pending read from another thread, then close the response."""
+    try:
+        response.fp.raw._sock.shutdown(socket.SHUT_RDWR)
+    except Exception:
+        pass
+    _close_quietly(response)
+
+
 def _close_quietly(response: Any) -> None:
     try:
         response.close()
@@ -544,8 +568,18 @@ def _close_quietly(response: Any) -> None:
         return
 
 
+class _RejectRedirects(urllib.request.HTTPRedirectHandler):
+    """Fail on 3xx instead of re-sending the API key header to another location."""
+
+    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+
+_OPENER = urllib.request.build_opener(_RejectRedirects())
+
+
 def _urlopen(request: urllib.request.Request, *, timeout: float) -> Any:
-    return urllib.request.urlopen(request, timeout=timeout)
+    return _OPENER.open(request, timeout=timeout)
 
 
 __all__ = [

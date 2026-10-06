@@ -26,6 +26,8 @@ from visionflow.simulation import SimulationSession, SimulationStore
 
 ROAD_SOURCE_PREFIX = "road-sim-"
 _TERMINAL_RUN_STATES = frozenset({"completed", "failed", "cancelled"})
+# RecordingStore.finish() reports a session without frames as ClipNotReady.
+_EMPTY_RECORDING_CODES = frozenset({"empty_recording", "clip_not_ready"})
 
 _ROAD_MONITOR_WORKFLOW: dict[str, Any] = {
     "schema_version": 1,
@@ -326,7 +328,7 @@ class RoadSessionService:
         try:
             self.recordings.finish(owner, source_id)
         except RecordingError as exc:
-            if exc.code != "empty_recording":
+            if exc.code not in _EMPTY_RECORDING_CODES:
                 raise self._recording_error(exc) from exc
         with self._lock:
             if self._closed:
@@ -346,7 +348,7 @@ class RoadSessionService:
         try:
             ref = self.recordings.finish(owner, source_id)
         except RecordingError as exc:
-            if exc.code == "empty_recording":
+            if exc.code in _EMPTY_RECORDING_CODES:
                 return {
                     "source_id": source_id,
                     "closed": True,
@@ -527,10 +529,14 @@ class RoadSessionService:
                     )
                 except ClipNotReady:
                     clip_pending = True
-                except RecordingError:
-                    self._notify_stopped(binding, "recording_error")
-                    self._retire_binding(binding)
-                    return
+                except RecordingError as exc:
+                    if exc.code == "export_busy":
+                        # Bounded export slots are transient; retry until the clip deadline.
+                        clip_pending = True
+                    else:
+                        self._notify_stopped(binding, "recording_error")
+                        self._retire_binding(binding)
+                        return
 
             if result.status in _TERMINAL_RUN_STATES:
                 if result.status == "cancelled":
@@ -826,7 +832,8 @@ def dispatch_road_post(
                 type(key) is not str
                 or not key.strip()
                 or len(key) > 512
-                or "\x00" in key
+                # Same rule as DecisionStore._identifier: no control characters.
+                or any(ord(character) < 32 for character in key)
             ):
                 raise RoadSessionError("invalid_idempotency_key", "Der Wiederholungsschlüssel ist ungültig.", 422)
             return RoadHttpResponse(200, cases.decide(

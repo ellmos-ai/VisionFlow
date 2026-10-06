@@ -859,29 +859,74 @@
 }
 
 /* ==========================================================================
-   Clean Mission Control: Hide redundant legacy forms below the cartoon game
+   Clean Mission Control: while the game is mounted it drives the camera, so
+   the duplicate legacy controls are hidden. The real model review, human
+   workplace and case timeline stay reachable via "Technische Fallansicht".
    ========================================================================== */
-.road-camera__heading,
-.road-camera__case-options,
-.road-camera__toolbar,
-.road-camera__status,
-.road-camera__source,
-.road-camera__run,
-.road-camera__secondary,
-.road-camera__player-panel,
-.road-camera__live > h3,
-.road-camera__live > .road-camera__frame-meta,
-.road-workspace-grid {
+.road-workspace--game .road-camera__heading,
+.road-workspace--game .road-camera__case-options,
+.road-workspace--game .road-camera__toolbar,
+.road-workspace--game .road-camera__status,
+.road-workspace--game .road-camera__source,
+.road-workspace--game .road-camera__run,
+.road-workspace--game .road-camera__secondary,
+.road-workspace--game .road-camera__player-panel,
+.road-workspace--game .road-camera__live > h3,
+.road-workspace--game .road-camera__live > .road-camera__frame-meta,
+.road-workspace--game:not(.road-workspace--details) .road-workspace-grid {
   display: none !important;
 }
 
-.road-camera {
+.road-workspace--game .road-camera {
   margin: 0 !important;
   padding: 0 !important;
   border: none !important;
   background: transparent !important;
   min-height: 1px !important;
   min-width: 1px !important;
+}
+
+.road-workspace--game.road-workspace--details .road-workspace-grid {
+  margin-top: 1rem;
+}
+
+.cartoon-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.cartoon-select {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.4rem 0.5rem;
+  border: 3px solid #1e293b;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1e293b;
+  max-width: 100%;
+}
+
+.cartoon-select:disabled,
+.chunky-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.queue-item,
+button.schmidt-ticket-card {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.queue-item.active-ticket {
+  outline: 3px solid #0284c7;
 }
 
 /* ==========================================================================
@@ -1086,4 +1131,38 @@
 .transparency-sub {
   font-size: 0.8rem;
   color: #94a3b8;
+}
+
+/* Room 3 evidence monitor: caption above the server clip */
+#cartoon-review-video-box {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.4rem;
+  padding: 0.5rem;
+}
+
+#cartoon-review-video-box video {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #000000;
+}
+
+#cartoon-review-video-box .review-clip-meta {
+  display: block;
+  margin: 0;
+}
+
+.decision-status {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.cartoon-countdown-caption {
+  margin: 0.3rem 0;
+  font-weight: 700;
+  color: #1e293b;
 }

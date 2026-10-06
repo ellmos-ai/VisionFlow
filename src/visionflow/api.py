@@ -6,6 +6,7 @@ import hmac
 import json
 import mimetypes
 import secrets
+import socket
 import threading
 import time
 from dataclasses import asdict, is_dataclass
@@ -109,6 +110,9 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
         host = server_address[0]
         if host not in _LOOPBACK_HOSTS:
             raise ValueError("VisionFlow server must bind to a loopback address")
+        if ":" in host:
+            # Instance attribute so the IPv4 default stays untouched for other servers.
+            self.address_family = socket.AF_INET6
         self.state = _ApiState(
             controller,
             data_dir=data_dir,
@@ -347,7 +351,15 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             session is None
             or (
                 require_csrf
-                and (not csrf or not hmac.compare_digest(csrf, session[0]))
+                and (
+                    not csrf
+                    # http.server decodes headers as Latin-1; compare bytes so a
+                    # non-ASCII token is a 403 instead of a TypeError (500).
+                    or not hmac.compare_digest(
+                        csrf.encode("utf-8", "surrogateescape"),
+                        session[0].encode("utf-8"),
+                    )
+                )
             )
         ):
             raise _ApiFault(403, "session_required", "A valid local session and CSRF token are required.")

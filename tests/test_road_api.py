@@ -544,3 +544,53 @@ def test_road_capability_reports_encoder_requirement_when_core_server_has_no_roa
         server.shutdown()
         thread.join(timeout=3)
         server.server_close()
+
+
+def test_stop_and_reset_without_recorded_frames_report_empty_recording(road_server, monkeypatch):
+    from visionflow.recording import ClipNotReady
+
+    base_url, service, _controller, _sessions = road_server
+    client = ApiClient(base_url)
+    client.bootstrap()
+
+    def no_frames(_owner, _source_id):
+        raise ClipNotReady("Es wurden noch keine Bilder für einen vollständigen Clip aufgezeichnet.")
+
+    monkeypatch.setattr(service.recordings, "finish", no_frames)
+
+    status, created, _ = client.request("POST", "/road/sessions", {"seed": 5})
+    assert status == 201
+    status, stopped, _ = client.request("POST", f"/road/sessions/{created['source_id']}/stop", {})
+    assert status == 200
+    assert stopped == {"source_id": created["source_id"], "closed": True, "error_code": "recording_empty"}
+
+    status, created, _ = client.request("POST", "/road/sessions", {"seed": 6})
+    assert status == 201
+    status, reset, _ = client.request("POST", f"/road/sessions/{created['source_id']}/reset", {})
+    assert status == 200
+    assert reset["previous_source_id"] == created["source_id"]
+    assert reset["source_id"].startswith("road-sim-")
+    assert reset["source_id"] != created["source_id"]
+
+
+@pytest.mark.parametrize("key", ["retry\n1", "tab\tkey", "bell\x07"])
+def test_decision_idempotency_key_with_control_characters_is_rejected(key):
+    from visionflow.road_api import RoadSessionError, dispatch_road_post
+
+    class Cases:
+        decided = False
+
+        def snapshot(self, _owner, _case_id):
+            return {}
+
+        def decide(self, *_args):
+            Cases.decided = True
+            return {}
+
+    body = {"version": 1, "content_hash": "sha256:abc", "decision": "confirm", "idempotency_key": key}
+    with pytest.raises(RoadSessionError) as raised:
+        dispatch_road_post(None, "owner", "/road/cases/case-1/decision", body, cases=Cases())
+
+    assert raised.value.code == "invalid_idempotency_key"
+    assert raised.value.status == 422
+    assert not Cases.decided

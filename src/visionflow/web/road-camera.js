@@ -767,13 +767,30 @@ export function mountRoadCamera(container, apiClient) {
     });
   }
 
+  function injectBlocker() {
+    if (destroyed) return "destroyed";
+    if (!sourceId || !sourceOpen) return "source_closed";
+    if (locked) return "review_locked";
+    if (!warmedUp) return "warming_up";
+    if (!runActive) return "run_inactive";
+    return null;
+  }
+
+  // Resolves to { injected, reason }. Events are only accepted while the
+  // bound analysis run observes the scene and no case review is open, so
+  // every injected event can still become part of the analysed footage.
   async function injectEvent(forcedEvent) {
     const event = forcedEvent || eventSelect.value;
-    if (!sourceId || !sourceOpen) return;
+    const blocked = injectBlocker();
+    if (blocked) return { injected: false, reason: blocked };
     const source = sourceId;
     const generation = sourceGeneration;
     return enqueue("event", async () => {
-      if (destroyed || source !== sourceId || generation !== sourceGeneration || !sourceOpen) return;
+      if (source !== sourceId || generation !== sourceGeneration) {
+        return { injected: false, reason: "source_changed" };
+      }
+      const blockedNow = injectBlocker();
+      if (blockedNow) return { injected: false, reason: blockedNow };
       await apiClient.post(
         `/road/sessions/${encodeURIComponent(source)}/events`,
         { event },
@@ -782,6 +799,7 @@ export function mountRoadCamera(container, apiClient) {
         const label = { wrong_way: "Falschfahrer", bird: "Vogel", leaf: "Blatt" }[event] || "Szenarioereignis";
         setStatus(`${label} in die Szene eingeblendet. Das ist noch kein Analysebefund.`);
       }
+      return { injected: true, reason: null, sourceId: source, caseId };
     });
   }
 
@@ -1025,5 +1043,39 @@ export function mountRoadCamera(container, apiClient) {
 
   setLocked(false);
   loadRoadCapabilities();
-  return { destroy, getCaseId, getSourceId, setLocked, setCase, injectScenarioEvent: (e) => injectEvent(e), createSource };
+  function getState() {
+    return {
+      sourceId,
+      sourceOpen,
+      caseId,
+      runActive,
+      warmedUp,
+      locked,
+      available: roadAvailable,
+      capabilities,
+      injectBlocker: injectBlocker(),
+    };
+  }
+
+  function configureCase({ mode, fixtureProfile } = {}) {
+    if (mode && [...modeSelect.options].some((option) => option.value === mode)) modeSelect.value = mode;
+    if (fixtureProfile && [...profileSelect.options].some((option) => option.value === fixtureProfile)) {
+      profileSelect.value = fixtureProfile;
+    }
+    updateSourceControls();
+    return { mode: modeSelect.value, fixtureProfile: profileSelect.value };
+  }
+
+  return {
+    destroy,
+    getCaseId,
+    getSourceId,
+    getState,
+    configureCase,
+    setLocked,
+    setCase,
+    injectScenarioEvent: (event) => injectEvent(event),
+    createSource,
+    stopSource,
+  };
 }

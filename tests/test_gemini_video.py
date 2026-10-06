@@ -520,3 +520,163 @@ def test_incomplete_interaction_status_is_not_a_success(native_case):
         transport.generate(request, lambda _delta: None, lambda: False)
 
     assert error.value.code == "incomplete_response"
+
+
+class _PausingSSEServer:
+    """A real chunked SSE endpoint that pauses between events like a slow provider."""
+
+    def __init__(self, events, pause_seconds: float, hold: threading.Event | None = None):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        outer = self
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *_args):
+                return
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                try:
+                    for event in events:
+                        data = b"data: " + json.dumps(event).encode("utf-8") + b"\n\n"
+                        self.wfile.write(b"%x\r\n" % len(data) + data + b"\r\n")
+                        self.wfile.flush()
+                        if outer.hold is not None:
+                            outer.hold.wait(10)
+                        else:
+                            threading.Event().wait(pause_seconds)
+                    self.wfile.write(b"0\r\n\r\n")
+                    self.wfile.flush()
+                except OSError:
+                    return
+
+        self.hold = hold
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def open(self, http_request, timeout):
+        import urllib.request
+
+        local = urllib.request.Request(
+            f"http://127.0.0.1:{self.server.server_port}/",
+            data=http_request.data,
+            headers=dict(http_request.header_items()),
+            method="POST",
+        )
+        return urllib.request.urlopen(local, timeout=timeout)
+
+    def close(self):
+        if self.hold is not None:
+            self.hold.set()
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def test_stream_survives_provider_pauses_longer_than_a_poll_interval(native_case):
+    gemini_video = _require_gemini_transport()
+    _, request = native_case
+    text = '{"object_class":"vehicle","hazard":true,"confidence":0.9}'
+    server = _PausingSSEServer(_successful_events(text), pause_seconds=0.4)
+    try:
+        transport = gemini_video.GeminiVideoTransport(
+            api_key="test-secret",
+            cost_approved=True,
+            evidence_reader=lambda _ref: _png_bytes(),
+            http_open=server.open,
+            timeout_seconds=30.0,
+        )
+        result = transport.generate(request, lambda _delta: None, lambda: False)
+    finally:
+        server.close()
+
+    assert result.raw_text == text
+    assert result.request_id == "native-request-1"
+
+
+def test_cancellation_interrupts_a_blocked_stream_read(native_case):
+    import time
+
+    gemini_video = _require_gemini_transport()
+    _, request = native_case
+    hold = threading.Event()
+    server = _PausingSSEServer(_successful_events("{}"), pause_seconds=0.0, hold=hold)
+    cancel = threading.Event()
+    threading.Timer(0.5, cancel.set).start()
+    try:
+        transport = gemini_video.GeminiVideoTransport(
+            api_key="test-secret",
+            cost_approved=True,
+            evidence_reader=lambda _ref: _png_bytes(),
+            http_open=server.open,
+            timeout_seconds=30.0,
+        )
+        started = time.monotonic()
+        with pytest.raises(gemini_video.VideoTransportError) as error:
+            transport.generate(request, lambda _delta: None, cancel.is_set)
+        elapsed = time.monotonic() - started
+    finally:
+        server.close()
+
+    assert error.value.code == "cancelled"
+    assert elapsed < 5.0
+
+
+def test_default_opener_does_not_follow_redirects_with_the_api_key():
+    import urllib.error
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    gemini_video = _require_gemini_transport()
+    received_keys: list[str | None] = []
+
+    class Target(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            return
+
+        def do_POST(self):
+            received_keys.append(self.headers.get("X-Goog-Api-Key"))
+            self.send_response(200)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        do_GET = do_POST
+
+    target = ThreadingHTTPServer(("127.0.0.1", 0), Target)
+
+    class Redirect(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            return
+
+        def do_POST(self):
+            # urllib follows 302 for POST as a GET and copies the API key header.
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{target.server_port}/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+    redirect = ThreadingHTTPServer(("127.0.0.1", 0), Redirect)
+    for server in (target, redirect):
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{redirect.server_port}/",
+            data=b"{}",
+            headers={"X-Goog-Api-Key": "test-secret", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as error:
+            gemini_video._urlopen(request, timeout=5)
+    finally:
+        for server in (target, redirect):
+            server.shutdown()
+            server.server_close()
+
+    assert error.value.code == 302
+    assert received_keys == []
