@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import sysconfig
 import threading
 import tomllib
 from io import StringIO
@@ -150,10 +151,17 @@ def test_package_exposes_cli_and_includes_web_assets():
     ]
 
 
+def installed_console_script() -> Path:
+    """Return the ``visionflow`` entry point of the interpreter running pytest."""
+    name = "visionflow.exe" if os.name == "nt" else "visionflow"
+    executable = Path(sysconfig.get_path("scripts")) / name
+    assert executable.is_file(), "the project console script must be installed in its venv"
+    return executable
+
+
 def test_installed_console_script_tools_output_is_utf8_without_pythonioencoding():
     project_root = Path(__file__).resolve().parents[1]
-    executable = project_root / ".venv" / "Scripts" / "visionflow.exe"
-    assert executable.is_file(), "the project console script must be installed in its venv"
+    executable = installed_console_script()
     environment = os.environ.copy()
     environment.pop("PYTHONIOENCODING", None)
     environment["PYTHONUTF8"] = "0"
@@ -176,7 +184,7 @@ def test_installed_console_script_tools_output_is_utf8_without_pythonioencoding(
 
 def test_installed_console_script_help_is_utf8_without_pythonioencoding():
     project_root = Path(__file__).resolve().parents[1]
-    executable = project_root / ".venv" / "Scripts" / "visionflow.exe"
+    executable = installed_console_script()
     environment = os.environ.copy()
     environment.pop("PYTHONIOENCODING", None)
     environment["PYTHONUTF8"] = "0"

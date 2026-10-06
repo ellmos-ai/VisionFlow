@@ -13,14 +13,14 @@ from typing import Any
 from urllib.parse import urlparse
 
 
-REPO = Path(__file__).resolve().parents[1]
-EDGE = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
-VENV_PYTHON = REPO / ".venv" / "Scripts" / "python.exe"
+from browser_support import REPO, launch_browser, venv_python
+
+VENV_PYTHON = venv_python()
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run VisionFlow road-camera acceptance in native headless Edge."
+        description="Run VisionFlow road-camera acceptance in a headless Chromium browser."
     )
     parser.add_argument("--phase", choices=("camera", "review"), required=True)
     parser.add_argument(
@@ -83,17 +83,13 @@ def browser_probe(base_url: str, output: Path, phase: str) -> dict[str, Any]:
     report: dict[str, Any] = {
         "phase": phase,
         "base_url": base_url,
-        "browser": "Microsoft Edge",
+        "browser": None,
         "status": "running",
         "checks": {},
     }
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            executable_path=str(EDGE),
-            headless=True,
-            args=["--autoplay-policy=no-user-gesture-required"],
-        )
+        browser, report["browser"] = launch_browser(playwright)
         context = browser.new_context(viewport={"width": 1280, "height": 900})
 
         def guard_external(route: Any) -> None:
@@ -167,8 +163,6 @@ def main() -> int:
     try:
         if not VENV_PYTHON.is_file():
             raise FileNotFoundError("Project virtual-environment Python is missing")
-        if not EDGE.is_file():
-            raise FileNotFoundError("Microsoft Edge executable is missing")
         process = subprocess.Popen(
             [
                 str(VENV_PYTHON),

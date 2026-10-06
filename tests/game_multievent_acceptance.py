@@ -1,6 +1,17 @@
+"""Browser acceptance for the cartoon mission-control game (multi-event flow).
+
+Run manually; this script is not collected by pytest. It starts its own
+loopback VisionFlow server with a fresh data directory, so no server needs to
+be running beforehand:
+
+    python tests/game_multievent_acceptance.py --output .local/acceptance/multievent-01
+"""
+
 from __future__ import annotations
 
+import argparse
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -9,23 +20,16 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
-from playwright.sync_api import sync_playwright
 
-REPO = Path(__file__).resolve().parents[1]
-EDGE = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
-OUT_DIR = REPO / ".local" / "acceptance" / "multievent_verification"
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+from browser_support import REPO, launch_browser, venv_python
+from road_browser_acceptance import evidence_directory, free_port, wait_for_port
 
-def run_verification():
-    base_url = "http://127.0.0.1:8765"
-    errors = []
-    
+
+def run_verification(base_url: str, out_dir: Path) -> None:
+    from playwright.sync_api import sync_playwright
+
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            executable_path=str(EDGE),
-            headless=True,
-            args=["--autoplay-policy=no-user-gesture-required"],
-        )
+        browser, _label = launch_browser(playwright)
         context = browser.new_context(viewport={"width": 1400, "height": 950})
         page = context.new_page()
         page.on("pageerror", lambda err: print(f"PAGEERROR: {err}"))
@@ -91,13 +95,13 @@ def run_verification():
         print("Starting camera in Room 1...")
         page.locator("#btn-toggle-cam").click()
         time.sleep(2)
-        page.screenshot(path=str(OUT_DIR / "01_room1_camera_started.png"))
+        page.screenshot(path=str(out_dir / "01_room1_camera_started.png"))
         
         # 3. Test Multi-Event Triggering: Blatt -> Vogel -> Falschfahrer
         print("Triggering Event 1: BLATT (Leaf)...")
         page.locator("#btn-sim-leaf").click()
         time.sleep(2)
-        page.screenshot(path=str(OUT_DIR / "02_event_leaf_triggered.png"))
+        page.screenshot(path=str(out_dir / "02_event_leaf_triggered.png"))
         
         banner_text = page.locator("#live-anomaly-banner").text_content()
         print(f"Banner after leaf: {banner_text}")
@@ -106,7 +110,7 @@ def run_verification():
         print("Triggering Event 2: VOGEL (Bird)...")
         page.locator("#btn-sim-bird").click()
         time.sleep(2)
-        page.screenshot(path=str(OUT_DIR / "03_event_bird_triggered.png"))
+        page.screenshot(path=str(out_dir / "03_event_bird_triggered.png"))
         
         banner_text = page.locator("#live-anomaly-banner").text_content()
         print(f"Banner after bird: {banner_text}")
@@ -115,7 +119,7 @@ def run_verification():
         print("Triggering Event 3: FALSCHFAHRER (Wrong Way Car)...")
         page.locator("#btn-sim-wrongway").click()
         time.sleep(2)
-        page.screenshot(path=str(OUT_DIR / "04_event_wrong_way_triggered.png"))
+        page.screenshot(path=str(out_dir / "04_event_wrong_way_triggered.png"))
         
         banner_text = page.locator("#live-anomaly-banner").text_content()
         print(f"Banner after wrong way: {banner_text}")
@@ -126,7 +130,7 @@ def run_verification():
         print("Switching to Room 2: Datacenter...")
         page.locator("#nav-node-room-2").click()
         time.sleep(1)
-        page.screenshot(path=str(OUT_DIR / "05_room2_datacenter_transparency.png"))
+        page.screenshot(path=str(out_dir / "05_room2_datacenter_transparency.png"))
         
         transparency_title = page.locator(".transparency-pill").text_content()
         print(f"Transparency badge: {transparency_title}")
@@ -146,14 +150,14 @@ def run_verification():
         
         ticket_count = page.locator(".schmidt-ticket-card").count()
         print(f"Room 3 Ticket count: {ticket_count}")
-        page.screenshot(path=str(OUT_DIR / "06_room3_tickets_overview.png"))
+        page.screenshot(path=str(out_dir / "06_room3_tickets_overview.png"))
         
         # If there are tickets in the inbox, click through them
         if ticket_count > 0:
             print("Clicking first ticket...")
             page.locator(".schmidt-ticket-card").first.click()
             time.sleep(1)
-            page.screenshot(path=str(OUT_DIR / "07_room3_ticket_inspected.png"))
+            page.screenshot(path=str(out_dir / "07_room3_ticket_inspected.png"))
             
             monitor_text = page.locator("#cartoon-review-video-box").text_content()
             print(f"Review monitor text: {monitor_text[:100]}...")
@@ -167,5 +171,42 @@ def run_verification():
         print("All verification steps passed successfully!")
         browser.close()
 
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--output",
+        default=".local/acceptance/multievent-" + time.strftime("%Y%m%dT%H%M%S"),
+        help="A new evidence directory below the repository .local folder.",
+    )
+    args = parser.parse_args()
+    out_dir = evidence_directory(args.output)
+    port = free_port()
+    python = venv_python()
+    if not python.is_file():
+        raise FileNotFoundError("Project virtual-environment Python is missing")
+    with (out_dir / "server.log").open("w", encoding="utf-8", newline="\n") as server_log:
+        process = subprocess.Popen(
+            [
+                str(python), "-m", "visionflow.cli", "serve",
+                "--host", "127.0.0.1", "--port", str(port),
+                "--data-dir", str(out_dir / "server-data"),
+            ],
+            cwd=REPO,
+            stdout=server_log,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            wait_for_port(port, process, 30.0)
+            run_verification("http://127.0.0.1:" + str(port), out_dir)
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+    return 0
+
+
 if __name__ == "__main__":
-    run_verification()
+    raise SystemExit(main())
