@@ -70,21 +70,46 @@ Die Tests für die Straßendemo umfassen Richtungsanalyse, Aufnahme-Journal, MP4
 # Gezielte Road-Suite (API, CLI, Review)
 .\.venv\Scripts\python.exe -m pytest tests/test_road_api.py tests/test_road_cli.py tests/test_road_review_api.py tests/test_road_review_cli.py -q
 
-# Gesamtsuite inklusive aller 502 Tests
+# Gesamtsuite
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Die automatisierte Browser-Abnahme prüft die Weboberfläche in nativem Microsoft Edge Headless (mit Playwright):
+GitHub Actions führt dieselbe Suite und den CLI-Demolauf auf Ubuntu und Windows aus (`.github/workflows/ci.yml`).
+
+### Browserabnahme
+
+Die Browserabnahmen sind eigenständige Skripte und werden von `pytest` nicht gesammelt. Sie starten jeweils einen eigenen Loopback-Server mit frischem Datenordner und schreiben Belege nur unter `.local/`. Voraussetzungen:
+
+- Playwright in der Projektumgebung: `.\.venv\Scripts\python.exe -m pip install playwright`. Es steht nicht in der Lockdatei.
+- Ein Chromium-Browser:
+  - Unter Windows wird Microsoft Edge verwendet.
+  - Auf anderen Systemen ein installiertes Chromium oder das von Playwright.
+  - `VISIONFLOW_BROWSER` wählt ausdrücklich eine Browserdatei.
 
 ```powershell
-# Kamera-Phase (Simulation, Event-Injektion, Controls)
-python tests/road_browser_acceptance.py --phase camera --output .local/acceptance/run-camera-01
+# Kamera-Phase (Steuerelemente, keine Browserfehler, keine externen Anfragen)
+.\.venv\Scripts\python.exe tests\road_browser_acceptance.py --phase camera --output .local/acceptance/run-camera-01
 
-# Review-Phase (Arbeitsplatz, Countdown, Inbox, Entwarnung)
-python tests/road_browser_acceptance.py --phase review --output .local/acceptance/run-review-01
+# Emergency-Leitstelle: drei vollständige echte Fälle über die Spieloberfläche
+.\.venv\Scripts\python.exe tests\game_multievent_acceptance.py --output .local/acceptance/multievent-01
 ```
 
-Der Prüfharness erzeugt JSON-Ergebnisberichte (`acceptance.json`), Konsolenlogs sowie Screenshots (`landing.png`, `road-camera-before-start.png`, `road-camera-ready.png`) im angegebenen Ausgabeordner unter `.local/`.
+`road_browser_acceptance.py` schreibt `acceptance.json`, das Serverlog und Screenshots.
+
+`game_multievent_acceptance.py` spielt drei Fälle durch:
+
+1. **Profil `pending`:**
+   - Falschfahrer und Blatt in die laufende Analyse einblenden.
+   - Die echte Modellantwort `0,80` prüfen.
+   - Prüfen, dass neue Ereignisse während der Prüfung gesperrt sind.
+   - Den Server-Clip mit bestätigter SHA-256-Prüfsumme laden, dann die Gefahr bestätigen.
+2. **Profil `leaf` mit eingeblendetem Vogel:** Die Oberfläche zeigt die Fixture-Antwort „Blatt“, nicht das Szenario.
+3. **Profil `pending` ohne Entscheidung:**
+   - Echte Frist in Raum 4.
+   - Automatische Meldung nach Ablauf.
+   - Späte Verneinung mit Entwarnung.
+
+Ein Lauf dauert etwa drei Minuten. Das Open-Source-Chromium von Playwright enthält keinen H.264-Decoder. Der Clip wird dort geladen und geprüft, aber nicht abgespielt; Edge und Chrome spielen ihn ab.
 
 ## Medienzeit und Browserbelege
 
