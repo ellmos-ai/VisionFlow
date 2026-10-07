@@ -17,7 +17,7 @@ def cloud():
     return module
 
 
-def test_source_package_uses_committed_allowlist_and_rejects_tampering(tmp_path):
+def test_source_package_uses_committed_allowlist_and_rejects_tampering(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
@@ -32,6 +32,16 @@ def test_source_package_uses_committed_allowlist_and_rejects_tampering(tmp_path)
                     "user.email=test@example.invalid", "commit", "-m", "fixture"],
                    check=True, capture_output=True)
     (repo / "README.md").write_text("uncommitted", encoding="utf-8")
+    original = subprocess.check_output
+    def move_head_after_snapshot(command, **kwargs):
+        result = original(command, **kwargs)
+        if command[-2:] == ["rev-parse", "HEAD"]:
+            subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test", "-c",
+                            "user.email=test@example.invalid", "commit", "-m", "new HEAD"],
+                           check=True, capture_output=True)
+        return result
+    monkeypatch.setattr(subprocess, "check_output", move_head_after_snapshot)
     result = cloud().package_source(repo, tmp_path / "bundle")
     unpacked = tmp_path / "unpacked"
     with zipfile.ZipFile(result["archive"]) as archive:

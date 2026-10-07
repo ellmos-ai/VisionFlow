@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
 import subprocess
 import sys
+import tarfile
 import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -41,11 +43,12 @@ def package_source(repo: Path, output: Path) -> dict:
     """Archive only public files from HEAD; dirty/untracked work is not included."""
     repo = repo.resolve(strict=True)
     commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
-    names = subprocess.check_output(["git", "-C", str(repo), "ls-tree", "-r", "--name-only", "-z", "HEAD"])
+    snapshot = subprocess.check_output(["git", "-C", str(repo), "archive", "--format=tar", commit])
     files = {}
-    for name in sorted(n.decode("utf-8") for n in names.split(b"\0") if n):
-        if public_path(name):
-            files[name] = subprocess.check_output(["git", "-C", str(repo), "show", f"HEAD:{name}"])
+    with tarfile.open(fileobj=io.BytesIO(snapshot), mode="r:") as archive:
+        for member in sorted(archive.getmembers(), key=lambda m: m.name):
+            if member.isfile() and public_path(member.name):
+                files[member.name] = archive.extractfile(member).read()
     output.mkdir(parents=True, exist_ok=False)
     manifest = {"schema_version": 1, "source_commit": commit,
                 "files": {name: digest(data) for name, data in files.items()}}
