@@ -1,0 +1,261 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Private one-shot VisionFlow OpenCV workflow acceptance on AWS compute.",
+  "Parameters": {
+    "SourceZipSha256": {
+      "Type": "String",
+      "AllowedPattern": "[a-f0-9]{64}",
+      "Description": "SHA-256 of the exact committed source ZIP"
+    }
+  },
+  "Resources": {
+    "EvidenceBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "IgnorePublicAcls": true,
+          "BlockPublicPolicy": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "ShortRetention",
+              "Status": "Enabled",
+              "ExpirationInDays": 1,
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 1
+              }
+            }
+          ]
+        }
+      }
+    },
+    "EvidenceBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "EvidenceBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "EvidenceBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${EvidenceBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "BuildLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/visionflow/${AWS::StackName}"
+        },
+        "RetentionInDays": 1
+      }
+    },
+    "BuildRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "codebuild.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnEquals": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${AWS::StackName}-acceptance"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "AcceptanceOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetBucketLocation",
+                    "s3:GetBucketAcl"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "EvidenceBucket",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${EvidenceBucket.Arn}/sources/${SourceZipSha256}.zip"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${EvidenceBucket.Arn}/evidence/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "BuildLogs",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "AcceptanceProject": {
+      "Type": "AWS::CodeBuild::Project",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-acceptance"
+        },
+        "Visibility": "PRIVATE",
+        "ServiceRole": {
+          "Fn::GetAtt": [
+            "BuildRole",
+            "Arn"
+          ]
+        },
+        "ConcurrentBuildLimit": 1,
+        "AutoRetryLimit": 0,
+        "TimeoutInMinutes": 20,
+        "QueuedTimeoutInMinutes": 5,
+        "Source": {
+          "Type": "S3",
+          "Location": {
+            "Fn::Sub": "${EvidenceBucket}/sources/${SourceZipSha256}.zip"
+          },
+          "BuildSpec": "cloud/buildspec.yml"
+        },
+        "Environment": {
+          "Type": "LINUX_CONTAINER",
+          "ComputeType": "BUILD_GENERAL1_SMALL",
+          "Image": "aws/codebuild/standard:7.0",
+          "ImagePullCredentialsType": "CODEBUILD",
+          "PrivilegedMode": false,
+          "EnvironmentVariables": [
+            {
+              "Name": "VISIONFLOW_SOURCE_ZIP_SHA256",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "SourceZipSha256"
+              }
+            },
+            {
+              "Name": "PYTHONIOENCODING",
+              "Type": "PLAINTEXT",
+              "Value": "utf-8"
+            }
+          ]
+        },
+        "Artifacts": {
+          "Type": "S3",
+          "Location": {
+            "Ref": "EvidenceBucket"
+          },
+          "Path": "evidence",
+          "Name": "acceptance.zip",
+          "NamespaceType": "BUILD_ID",
+          "Packaging": "ZIP",
+          "EncryptionDisabled": true
+        },
+        "LogsConfig": {
+          "CloudWatchLogs": {
+            "Status": "ENABLED",
+            "GroupName": {
+              "Ref": "BuildLogs"
+            }
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "BucketName": {
+      "Value": {
+        "Ref": "EvidenceBucket"
+      }
+    },
+    "ProjectName": {
+      "Value": {
+        "Ref": "AcceptanceProject"
+      }
+    },
+    "LogGroup": {
+      "Value": {
+        "Ref": "BuildLogs"
+      }
+    }
+  }
+}
