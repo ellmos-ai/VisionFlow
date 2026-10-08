@@ -339,6 +339,41 @@ def test_occlusion_discards_old_tracks_and_reacquisition_uses_new_frame_ids():
     )
 
 
+@pytest.mark.parametrize("gray_value", [0, 127])
+def test_uniform_current_pixels_do_not_create_direction_observations(gray_value):
+    DirectionAnalyzer, _direction_handler = _load_direction_types()
+    params = default_lane_params()
+    source_frames = road_frames("wrong_way", count=8, seed=17)
+    analyzer = DirectionAnalyzer()
+    for frame in source_frames:
+        analyzer.update(frame, params)
+
+    uniform = np.full_like(source_frames[0].image, gray_value)
+    value = analyzer.update(Frame("uniform-occlusion:8", uniform, 1.6), params)
+
+    assert value["tracks"] == []
+
+
+def test_partial_frame_occlusion_rejects_only_the_textureless_lane():
+    DirectionAnalyzer, _direction_handler = _load_direction_types()
+    params = default_lane_params()
+    source_frames = road_frames("wrong_way", count=9, seed=17)
+    analyzer = DirectionAnalyzer()
+    for frame in source_frames[:8]:
+        analyzer.update(frame, params)
+
+    partially_occluded = source_frames[8].image.copy()
+    x, y, width, height = params["lanes"][0]["region"]
+    partially_occluded[y : y + height, x : x + width] = 127
+    value = analyzer.update(
+        Frame("partial-occlusion:8", partially_occluded, 1.6),
+        params,
+    )
+
+    assert not any(track["lane_id"] == "northbound" for track in value["tracks"])
+    assert any(track["lane_id"] == "southbound" for track in value["tracks"])
+
+
 @pytest.mark.parametrize(
     "change",
     [

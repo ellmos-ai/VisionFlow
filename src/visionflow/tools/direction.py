@@ -16,6 +16,8 @@ from visionflow.media import _validate_image_array
 _DEFAULT_MIN_FRAMES = 3
 _DEFAULT_MIN_DISPLACEMENT = 4.0
 _DEFAULT_OPPOSITION_COSINE = -0.75
+_FEATURE_QUALITY_LEVEL = 0.01
+_FEATURE_BLOCK_SIZE = 5
 _MAX_CORNERS = 240
 _MAX_FLOW_DIMENSION = 192
 _FLOW_PYR_SCALE = 0.5
@@ -165,9 +167,9 @@ class DirectionAnalyzer:
             corners = cv2.goodFeaturesToTrack(
                 previous,
                 maxCorners=_MAX_CORNERS,
-                qualityLevel=0.01,
+                qualityLevel=_FEATURE_QUALITY_LEVEL,
                 minDistance=4,
-                blockSize=5,
+                blockSize=_FEATURE_BLOCK_SIZE,
                 useHarrisDetector=False,
             )
             if corners is None or len(corners) < 2:
@@ -267,6 +269,27 @@ class DirectionAnalyzer:
 
         finishes = finish[valid]
         vectors = displacement[valid]
+        corner_strength = cv2.cornerMinEigenVal(
+            current,
+            blockSize=_FEATURE_BLOCK_SIZE,
+            ksize=3,
+        )
+        strongest_current_corner = float(corner_strength.max())
+        if strongest_current_corner <= 0.0:
+            return []
+        endpoint_strength = _sample_scalar_field(corner_strength, finishes)
+        supported = (
+            (endpoint_strength > 0.0)
+            & (
+                endpoint_strength
+                >= strongest_current_corner * _FEATURE_QUALITY_LEVEL
+            )
+        )
+        finishes = finishes[supported]
+        vectors = vectors[supported]
+        if len(finishes) < 2:
+            return []
+
         clusters = _cluster_features(finishes, vectors)
         expected = np.asarray(lane["expected"], dtype=np.float64)
         expected /= np.linalg.norm(expected)
@@ -584,6 +607,25 @@ def _sample_flow(flow: np.ndarray, points: np.ndarray) -> np.ndarray:
         borderValue=0,
     )
     return np.column_stack((sampled_x.reshape(-1), sampled_y.reshape(-1)))
+
+
+def _sample_scalar_field(field: np.ndarray, points: np.ndarray) -> np.ndarray:
+    """Bilinearly sample a scalar pixel field at bounded (x, y) locations."""
+    if points.size == 0:
+        return np.empty((0,), dtype=field.dtype)
+    if not bool(_points_inside_flow_field(points, field).all()):
+        raise ValueError("pixel coordinates must remain inside the lane crop")
+    map_x = points[:, 0].astype(np.float32).reshape(-1, 1)
+    map_y = points[:, 1].astype(np.float32).reshape(-1, 1)
+    sampled = cv2.remap(
+        field,
+        map_x,
+        map_y,
+        cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+    return sampled.reshape(-1)
 
 
 def _flow_resolution(
