@@ -1,0 +1,50 @@
+{
+  "fixture_version": 1,
+  "provenance": {
+    "kind": "unaltered recorded source-camera JPEG frames",
+    "source_revision": "bf593dfe853b7be2d81b17059d39e687d6d5552d",
+    "source_id": "road-sim-e70981c326c24c2689602029f2be1552",
+    "selection": "three consecutive source frames from the preserved Windows acceptance recording",
+    "geometry_method": "independent grayscale template correlation on original pixels; no color or scenario labels",
+    "identity_scope": "geometric continuity only; no semantic vehicle-class claim"
+  },
+  "frames": [
+    {
+      "frame_id": "road-sim-e70981c326c24c2689602029f2be1552:20",
+      "timestamp_seconds": 4.922000000020489,
+      "path": "frame-000020.jpg",
+      "sha256": "1ad628260a7ca3febc606501a7e760870343435dccc4130069b242ecacd3b26b",
+      "size_bytes": 52179
+    },
+    {
+      "frame_id": "road-sim-e70981c326c24c2689602029f2be1552:21",
+      "timestamp_seconds": 5.063000000081956,
+      "path": "frame-000021.jpg",
+      "sha256": "3458191b699590b54d7485f30ef6a1fb36e4643ed92527512b99b271bc2f8584",
+      "size_bytes": 52249
+    },
+    {
+      "frame_id": "road-sim-e70981c326c24c2689602029f2be1552:22",
+      "timestamp_seconds": 5.266000000061467,
+      "path": "frame-000022.jpg",
+      "sha256": "0eaa2a9b214b8c4bedca00dcba85c8adc0ec1bce976d1f238e34da27827a7609",
+      "size_bytes": 52273
+    }
+  ],
+  "grayscale_motion_reference": [
+    {
+      "from_frame_id": "road-sim-e70981c326c24c2689602029f2be1552:20",
+      "to_frame_id": "road-sim-e70981c326c24c2689602029f2be1552:21",
+      "template_roi_xywh": [368, 234, 32, 39],
+      "translation_xy_px": [-3, 12],
+      "normalized_correlation": 0.89207
+    },
+    {
+      "from_frame_id": "road-sim-e70981c326c24c2689602029f2be1552:21",
+      "to_frame_id": "road-sim-e70981c326c24c2689602029f2be1552:22",
+      "template_roi_xywh": [365, 245, 32, 39],
+      "translation_xy_px": [-4, 18],
+      "normalized_correlation": 0.89644
+    }
+  ]
+}

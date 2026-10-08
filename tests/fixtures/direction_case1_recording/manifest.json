@@ -1,0 +1,182 @@
+{
+  "fixture_version": 1,
+  "provenance": {
+    "kind": "unaltered PNG evidence bytes from the saved Windows Case 1 recorded-camera run",
+    "acceptance_run_id": "df3b95648b314fd68bb7d545570e579e",
+    "recording_source_id": "road-sim-ce09f51461954dae80ec8104e0d3350b",
+    "timestamp_source": "frames.jsonl from the preserved recording; each source frame ID also matches the run finding",
+    "selection": "seven original source frames 20, 24, 28, 32, 37, 41, 46, with IDs and timestamps preserved",
+    "geometry_method": "manual review of original pixels; approximate axis-aligned bounds and centers track one visually continuous moving object; geometry only, no semantic vehicle-class or intent ground-truth claim",
+    "identity_scope": "spatial continuity reference only; no scenario metadata or pixel-color labels are passed to DirectionAnalyzer"
+  },
+  "analysis_contract": {
+    "lane_id": "northbound",
+    "lane_region_xywh": [
+      0,
+      90,
+      480,
+      450
+    ],
+    "expected_direction_xy": [
+      0,
+      -1
+    ],
+    "min_frames": 3,
+    "min_displacement_px": 4,
+    "opposition_cosine": -0.75,
+    "max_observed_gap_seconds": 0.75
+  },
+  "vehicle_region_rule": {
+    "region_convention": "candidate regions are [x, y, width, height]; annotated boxes are [left, top, right, bottom) in full-frame crop pixels",
+    "center_tolerance_px": 24,
+    "bbox_expansion_px": 3,
+    "rationale": "24 px is smaller than the half-diagonal of the manually reviewed 30-34 by 40-56 px object bounds; the small expansion permits edge features while excluding distant road texture"
+  },
+  "known_far_false_candidate_reference": {
+    "source_frame_id": "road-sim-ce09f51461954dae80ec8104e0d3350b:37",
+    "from": "separate offline f097134 replay at max_flow_dimension=256 on these same saved frames",
+    "region_xywh": [
+      312,
+      487,
+      5,
+      29
+    ],
+    "observed_source_ids": [
+      28,
+      32,
+      37
+    ],
+    "opposition_count_in_that_replay": 1,
+    "distance_from_annotated_vehicle_center_to_candidate_bbox_px": 115.802,
+    "distance_from_annotated_vehicle_center_to_candidate_center_px": 130.4243,
+    "expected_geometry_match": false
+  },
+  "frames": [
+    {
+      "source_frame_id": "road-sim-ce09f51461954dae80ec8104e0d3350b:20",
+      "timestamp_seconds": 1.7030000000959262,
+      "source_evidence_ref": "df3b95648b314fd68bb7d545570e579e/frame-000008.bin",
+      "path": "frame-000008.png",
+      "sha256": "fd36c3b6909fb3ad716b383f9486d49bc34a6eb9bf5a844b984796296e0256ae",
+      "size_bytes": 73299,
+      "approx_vehicle_center_xy": [
+        383.0,
+        252.0
+      ],
+      "approx_vehicle_bbox_xyxy": [
+        368,
+        232,
+        399,
+        272
+      ]
+    },
+    {
+      "source_frame_id": "road-sim-ce09f51461954dae80ec8104e0d3350b:24",
+      "timestamp_seconds": 2.047000000020489,
+      "source_evidence_ref": "df3b95648b314fd68bb7d545570e579e/frame-000009.bin",
+      "path": "frame-000009.png",
+      "sha256": "e39be31f98ce215ec0da6ab44c415e47b5ad22e1a3dcd114ca16d469a4c6d9ed",
+      "size_bytes": 72763,
+      "approx_vehicle_center_xy": [
+        377.0,
+        279.0
+      ],
+      "approx_vehicle_bbox_xyxy": [
+        362,
+        258,
+        392,
+        300
+      ]
+    },
+    {
+      "source_frame_id": "road-sim-ce09f51461954dae80ec8104e0d3350b:28",
+      "timestamp_seconds": 2.359000000054948,
+      "source_evidence_ref": "df3b95648b314fd68bb7d545570e579e/frame-000010.bin",
+      "path": "frame-000010.png",
+      "sha256": "1ead24172024ebcf8d7aac57a9982c7b98170747cbb7824a3e54f87ed77056c8",
+      "size_bytes": 71167,
+      "approx_vehicle_center_xy": [
+        369.0,
+        305.0
+      ],
+      "approx_vehicle_bbox_xyxy": [
+        354,
+        283,
+        384,
+        327
+      ]
+    },
+    {
+      "source_frame_id": "road-sim-ce09f51461954dae80ec8104e0d3350b:32",
+      "timestamp_seconds": 2.75,
+      "source_evidence_ref": "df3b95648b314fd68bb7d545570e579e/frame-000011.bin",
+      "path": "frame-000011.png",
+      "sha256": "b40ecfb6c687aa017cf5990b03ceff817a09a043ce7a1da8daf9838b37afeab3",
+      "size_bytes": 74344,
+      "approx_vehicle_center_xy": [
+        361.0,
+        337.0
+      ],
+      "approx_vehicle_bbox_xyxy": [
+        345,
+        314,
+        377,
+        360
+      ]
+    },
+    {
+      "source_frame_id": "road-sim-ce09f51461954dae80ec8104e0d3350b:37",
+      "timestamp_seconds": 3.219000000040978,
+      "source_evidence_ref": "df3b95648b314fd68bb7d545570e579e/frame-000012.bin",
+      "path": "frame-000012.png",
+      "sha256": "0626abf661cf4cc7b126abbe52495a6c1c592b6aadf1f348b2a48809ca74dc12",
+      "size_bytes": 75647,
+      "approx_vehicle_center_xy": [
+        350.0,
+        376.0
+      ],
+      "approx_vehicle_bbox_xyxy": [
+        334,
+        350,
+        366,
+        402
+      ]
+    },
+    {
+      "source_frame_id": "road-sim-ce09f51461954dae80ec8104e0d3350b:41",
+      "timestamp_seconds": 3.5,
+      "source_evidence_ref": "df3b95648b314fd68bb7d545570e579e/frame-000013.bin",
+      "path": "frame-000013.png",
+      "sha256": "961bbe8ab1d84894ba535b899ef9bba01c3497aa9fac11c759bc53ceaa362ae3",
+      "size_bytes": 76004,
+      "approx_vehicle_center_xy": [
+        344.0,
+        400.0
+      ],
+      "approx_vehicle_bbox_xyxy": [
+        327,
+        375,
+        361,
+        425
+      ]
+    },
+    {
+      "source_frame_id": "road-sim-ce09f51461954dae80ec8104e0d3350b:46",
+      "timestamp_seconds": 3.859000000054948,
+      "source_evidence_ref": "df3b95648b314fd68bb7d545570e579e/frame-000014.bin",
+      "path": "frame-000014.png",
+      "sha256": "40c1543ff9021527522718bfb03d92e6b7eb8fd701b9b2dddf144e619b9fc679",
+      "size_bytes": 75037,
+      "approx_vehicle_center_xy": [
+        337.0,
+        430.0
+      ],
+      "approx_vehicle_bbox_xyxy": [
+        319,
+        402,
+        355,
+        458
+      ]
+    }
+  ]
+}

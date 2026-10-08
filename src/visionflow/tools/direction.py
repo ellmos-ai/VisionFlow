@@ -1,4 +1,4 @@
-"""Pixel-only traffic direction analysis using bounded OpenCV feature tracking."""
+"""Pixel-only traffic direction analysis using bounded grayscale patch matching."""
 
 from __future__ import annotations
 
@@ -16,7 +16,17 @@ from visionflow.media import _validate_image_array
 _DEFAULT_MIN_FRAMES = 3
 _DEFAULT_MIN_DISPLACEMENT = 4.0
 _DEFAULT_OPPOSITION_COSINE = -0.75
+_FEATURE_QUALITY_LEVEL = 0.01
+_FEATURE_BLOCK_SIZE = 5
 _MAX_CORNERS = 240
+_PATCH_SIZE = 21
+_PATCH_RADIUS = _PATCH_SIZE // 2
+_PATCH_SEARCH_RADIUS = 80
+_PATCH_MIN_SCORE = 0.80
+_PATCH_SECOND_PEAK_DISTANCE = 10.0
+_PATCH_MIN_PEAK_GAP = 0.05
+_MIN_FEATURE_DISPLACEMENT = 1.25
+_MAX_FORWARD_BACKWARD_ERROR = 1.5
 _MAX_TRACK_HISTORY = 12
 _MAX_TRACK_MISSED_FRAMES = 2
 _MAX_TRACK_GAP_SECONDS = 0.75
@@ -26,7 +36,7 @@ _TRACK_GAP_ALIGNMENT_MIN_DISTANCE_PX = 8.0
 
 
 class DirectionAnalyzer:
-    """Measure coherent feature flow against caller-configured lane vectors."""
+    """Measure coherent pixel-patch motion against configured lane vectors."""
 
     def __init__(self) -> None:
         self._previous_gray: np.ndarray | None = None
@@ -158,67 +168,92 @@ class DirectionAnalyzer:
             corners = cv2.goodFeaturesToTrack(
                 previous,
                 maxCorners=_MAX_CORNERS,
-                qualityLevel=0.01,
-                minDistance=4,
-                blockSize=5,
+                qualityLevel=_FEATURE_QUALITY_LEVEL,
+                minDistance=8,
+                blockSize=_FEATURE_BLOCK_SIZE,
                 useHarrisDetector=False,
             )
             if corners is None or len(corners) < 2:
                 return []
-            next_points, forward_status, _ = cv2.calcOpticalFlowPyrLK(
-                previous,
+            start = corners.reshape(-1, 2).astype(np.float32, copy=False)
+            corner_strength = cv2.cornerMinEigenVal(
                 current,
-                corners,
-                None,
-                winSize=(21, 21),
-                maxLevel=3,
-                criteria=(
-                    cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-                    30,
-                    0.01,
-                ),
+                blockSize=_FEATURE_BLOCK_SIZE,
+                ksize=3,
             )
-            if next_points is None or forward_status is None:
+            strongest_current_corner = float(corner_strength.max())
+            if not math.isfinite(strongest_current_corner) or strongest_current_corner <= 0.0:
                 return []
-            back_points, backward_status, _ = cv2.calcOpticalFlowPyrLK(
-                current,
-                previous,
-                next_points,
-                None,
-                winSize=(21, 21),
-                maxLevel=3,
-                criteria=(
-                    cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-                    30,
-                    0.01,
-                ),
-            )
-            if back_points is None or backward_status is None:
-                return []
-        except cv2.error as exc:
-            raise ValueError("OpenCV could not track direction features") from exc
 
-        start = corners.reshape(-1, 2)
-        finish = next_points.reshape(-1, 2)
-        returned = back_points.reshape(-1, 2)
-        forward_ok = forward_status.reshape(-1).astype(bool)
-        backward_ok = backward_status.reshape(-1).astype(bool)
+            displacement = np.full_like(start, np.nan)
+            for index, point in enumerate(start):
+                forward = _match_feature_patch(previous, current, point)
+                if forward is None:
+                    continue
+                finish = np.asarray(forward[0], dtype=np.float32)
+                vector = finish - point
+                magnitude = float(np.linalg.norm(vector))
+                if not math.isfinite(magnitude) or magnitude < _MIN_FEATURE_DISPLACEMENT:
+                    continue
+                displacement[index] = vector
+        except cv2.error as exc:
+            raise ValueError("OpenCV could not match direction feature patches") from exc
+
+        finish = start + displacement
+        forward_magnitude = np.linalg.norm(displacement, axis=1)
+        forward_valid = (
+            np.isfinite(displacement).all(axis=1)
+            & np.isfinite(finish).all(axis=1)
+            & (forward_magnitude >= _MIN_FEATURE_DISPLACEMENT)
+        )
+        if not bool(forward_valid.any()):
+            return []
+
+        forward_indexes = np.flatnonzero(forward_valid)
+        endpoint_strength = _sample_scalar_field(
+            corner_strength,
+            finish[forward_indexes],
+        )
+        supported = (
+            (endpoint_strength > 0.0)
+            & (
+                endpoint_strength
+                >= strongest_current_corner * _FEATURE_QUALITY_LEVEL
+            )
+        )
+        supported_indexes = forward_indexes[supported]
+        if not len(supported_indexes):
+            return []
+        supported_mask = np.zeros(len(start), dtype=bool)
+        supported_mask[supported_indexes] = True
+
+        returned = np.full_like(start, np.nan)
+        try:
+            for index in supported_indexes:
+                backward = _match_feature_patch(current, previous, finish[index])
+                if backward is not None:
+                    returned[index] = np.asarray(backward[0], dtype=np.float32)
+        except cv2.error as exc:
+            raise ValueError("OpenCV could not reverse-match direction feature patches") from exc
+
         forward_backward_error = np.linalg.norm(start - returned, axis=1)
-        displacement = finish - start
         magnitude = np.linalg.norm(displacement, axis=1)
         valid = (
-            forward_ok
-            & backward_ok
-            & (forward_backward_error <= 1.5)
-            & (magnitude >= 1.25)
+            supported_mask
+            & forward_valid
+            & (forward_backward_error <= _MAX_FORWARD_BACKWARD_ERROR)
+            & (magnitude >= _MIN_FEATURE_DISPLACEMENT)
             & np.isfinite(displacement).all(axis=1)
+            & np.isfinite(returned).all(axis=1)
         )
         if not bool(valid.any()):
             return []
 
-        starts = start[valid]
         finishes = finish[valid]
         vectors = displacement[valid]
+        if len(finishes) < 2:
+            return []
+
         clusters = _cluster_features(finishes, vectors)
         expected = np.asarray(lane["expected"], dtype=np.float64)
         expected /= np.linalg.norm(expected)
@@ -511,11 +546,122 @@ def _integer_vector(value: Any, length: int, name: str) -> tuple[int, ...]:
     return tuple(values)
 
 
+def _match_feature_patch(
+    source_gray: np.ndarray,
+    target_gray: np.ndarray,
+    point_xy: np.ndarray,
+) -> tuple[tuple[float, float], float, float] | None:
+    """Find a unique, bounded native-resolution grayscale patch match."""
+    if (
+        source_gray.ndim != 2
+        or target_gray.ndim != 2
+        or source_gray.shape != target_gray.shape
+        or source_gray.size == 0
+    ):
+        return None
+    point = np.asarray(point_xy, dtype=np.float64).reshape(-1)
+    if point.shape != (2,) or not np.isfinite(point).all():
+        return None
+
+    height, width = source_gray.shape
+    center_x = int(np.rint(point[0]))
+    center_y = int(np.rint(point[1]))
+    radius = _PATCH_RADIUS
+    if (
+        center_x < radius
+        or center_y < radius
+        or center_x >= width - radius
+        or center_y >= height - radius
+    ):
+        return None
+
+    template = source_gray[
+        center_y - radius : center_y + radius + 1,
+        center_x - radius : center_x + radius + 1,
+    ]
+    if template.shape != (_PATCH_SIZE, _PATCH_SIZE):
+        return None
+    target_at_source = target_gray[
+        center_y - radius : center_y + radius + 1,
+        center_x - radius : center_x + radius + 1,
+    ]
+    if np.array_equal(template, target_at_source):
+        return None
+    if not float(np.std(template, dtype=np.float64)) > 0.0:
+        return None
+
+    minimum_x = max(radius, center_x - _PATCH_SEARCH_RADIUS)
+    maximum_x = min(width - radius - 1, center_x + _PATCH_SEARCH_RADIUS)
+    minimum_y = max(radius, center_y - _PATCH_SEARCH_RADIUS)
+    maximum_y = min(height - radius - 1, center_y + _PATCH_SEARCH_RADIUS)
+    if minimum_x > maximum_x or minimum_y > maximum_y:
+        return None
+    search = target_gray[
+        minimum_y - radius : maximum_y + radius + 1,
+        minimum_x - radius : maximum_x + radius + 1,
+    ]
+    response = cv2.matchTemplate(search, template, cv2.TM_CCOEFF_NORMED)
+    if response.size == 0 or not bool(np.isfinite(response).all()):
+        return None
+    _, best_score, _, best_location = cv2.minMaxLoc(response)
+    if not math.isfinite(float(best_score)) or float(best_score) < _PATCH_MIN_SCORE:
+        return None
+    best_x = minimum_x + best_location[0]
+    best_y = minimum_y + best_location[1]
+
+    local_maxima = response >= cv2.dilate(response, np.ones((3, 3), dtype=np.uint8))
+    peak_y, peak_x = np.nonzero(local_maxima)
+    if not len(peak_x):
+        return None
+    distinct = (
+        (peak_x + minimum_x - best_x) ** 2
+        + (peak_y + minimum_y - best_y) ** 2
+        > _PATCH_SECOND_PEAK_DISTANCE**2
+    )
+    if not bool(distinct.any()):
+        return None
+    second_score = float(response[peak_y[distinct], peak_x[distinct]].max())
+    peak_gap = float(best_score) - second_score
+    if not math.isfinite(peak_gap) or peak_gap < _PATCH_MIN_PEAK_GAP:
+        return None
+    return (float(best_x), float(best_y)), float(best_score), peak_gap
+
+
+def _sample_scalar_field(field: np.ndarray, points: np.ndarray) -> np.ndarray:
+    """Bilinearly sample a scalar pixel field at bounded (x, y) locations."""
+    if points.size == 0:
+        return np.empty((0,), dtype=field.dtype)
+    if not bool(_points_inside_image(points, field).all()):
+        raise ValueError("pixel coordinates must remain inside the lane crop")
+    map_x = points[:, 0].astype(np.float32).reshape(-1, 1)
+    map_y = points[:, 1].astype(np.float32).reshape(-1, 1)
+    sampled = cv2.remap(
+        field,
+        map_x,
+        map_y,
+        cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+    return sampled.reshape(-1)
+
+
+def _points_inside_image(points: np.ndarray, image: np.ndarray) -> np.ndarray:
+    height, width = image.shape[:2]
+    return (
+        np.isfinite(points).all(axis=1)
+        & (points[:, 0] >= 0.0)
+        & (points[:, 0] <= width - 1)
+        & (points[:, 1] >= 0.0)
+        & (points[:, 1] <= height - 1)
+    )
+
+
 def _cluster_features(
     points: np.ndarray,
     vectors: np.ndarray,
 ) -> list[list[int]]:
-    """Group nearby LK features whose local flows move together."""
+    """Group nearby feature samples whose local flows move together."""
     remaining = set(range(len(points)))
     clusters: list[list[int]] = []
     while remaining:

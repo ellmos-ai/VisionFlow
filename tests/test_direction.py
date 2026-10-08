@@ -339,6 +339,41 @@ def test_occlusion_discards_old_tracks_and_reacquisition_uses_new_frame_ids():
     )
 
 
+@pytest.mark.parametrize("gray_value", [0, 127])
+def test_uniform_current_pixels_do_not_create_direction_observations(gray_value):
+    DirectionAnalyzer, _direction_handler = _load_direction_types()
+    params = default_lane_params()
+    source_frames = road_frames("wrong_way", count=8, seed=17)
+    analyzer = DirectionAnalyzer()
+    for frame in source_frames:
+        analyzer.update(frame, params)
+
+    uniform = np.full_like(source_frames[0].image, gray_value)
+    value = analyzer.update(Frame("uniform-occlusion:8", uniform, 1.6), params)
+
+    assert value["tracks"] == []
+
+
+def test_partial_frame_occlusion_rejects_only_the_textureless_lane():
+    DirectionAnalyzer, _direction_handler = _load_direction_types()
+    params = default_lane_params()
+    source_frames = road_frames("wrong_way", count=9, seed=17)
+    analyzer = DirectionAnalyzer()
+    for frame in source_frames[:8]:
+        analyzer.update(frame, params)
+
+    partially_occluded = source_frames[8].image.copy()
+    x, y, width, height = params["lanes"][0]["region"]
+    partially_occluded[y : y + height, x : x + width] = 127
+    value = analyzer.update(
+        Frame("partial-occlusion:8", partially_occluded, 1.6),
+        params,
+    )
+
+    assert not any(track["lane_id"] == "northbound" for track in value["tracks"])
+    assert any(track["lane_id"] == "southbound" for track in value["tracks"])
+
+
 @pytest.mark.parametrize(
     "change",
     [
@@ -489,3 +524,304 @@ def test_handler_returns_only_the_public_direction_metrics():
         "coordinate_system",
     }
     assert metrics["warmup"] is True
+
+
+def test_recorded_grayscale_motion_is_confirmed_across_three_observed_frames():
+    import hashlib
+    import json
+    from pathlib import Path
+
+    import cv2
+
+    fixture_dir = (
+        Path(__file__).parent
+        / "fixtures"
+        / "direction_flow_recording"
+    )
+    manifest = json.loads(
+        (fixture_dir / "manifest.json").read_text(encoding="utf-8")
+    )
+    records = manifest["frames"]
+    assert len(records) == 3
+
+    frames = []
+    images = []
+    for record in records:
+        image_bytes = (fixture_dir / record["path"]).read_bytes()
+        assert hashlib.sha256(image_bytes).hexdigest() == record["sha256"]
+        image = cv2.imdecode(
+            np.frombuffer(image_bytes, dtype=np.uint8),
+            cv2.IMREAD_COLOR,
+        )
+        assert image is not None
+        images.append(image)
+        frames.append(
+            Frame(
+                record["frame_id"],
+                image,
+                record["timestamp_seconds"],
+            )
+        )
+
+    observed_frame_ids = [frame.frame_id for frame in frames]
+    assert len(set(observed_frame_ids)) == 3
+    assert all(
+        0.0 < right.timestamp_seconds - left.timestamp_seconds <= 0.75
+        for left, right in zip(frames, frames[1:])
+    )
+
+    gray_images = [
+        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        for image in images
+    ]
+    for motion in manifest["grayscale_motion_reference"]:
+        source_index = observed_frame_ids.index(motion["from_frame_id"])
+        target_index = observed_frame_ids.index(motion["to_frame_id"])
+        x, y, width, height = motion["template_roi_xywh"]
+        source_gray = gray_images[source_index]
+        target_gray = gray_images[target_index]
+        template = source_gray[y : y + height, x : x + width]
+        search_left = max(0, x - 15)
+        search_top = max(0, y - 10)
+        search_right = min(target_gray.shape[1], x + 15 + width)
+        search_bottom = min(target_gray.shape[0], y + 35 + height)
+        search_area = target_gray[
+            search_top:search_bottom,
+            search_left:search_right,
+        ]
+        correlation = cv2.matchTemplate(
+            search_area,
+            template,
+            cv2.TM_CCOEFF_NORMED,
+        )
+        _, score, _, location = cv2.minMaxLoc(correlation)
+        observed_shift = (
+            search_left + location[0] - x,
+            search_top + location[1] - y,
+        )
+        expected_shift = tuple(motion["translation_xy_px"])
+        assert score >= 0.80
+        assert all(
+            abs(actual - expected) <= 1
+            for actual, expected in zip(observed_shift, expected_shift)
+        )
+
+    values = _analyze_sequence(frames, default_lane_params())
+    last_motion = manifest["grayscale_motion_reference"][-1]
+    x, y, width, height = last_motion["template_roi_xywh"]
+    dx, dy = last_motion["translation_xy_px"]
+    expected_center = (x + dx + width / 2, y + dy + height / 2)
+    confirmed = [
+        track
+        for track in _opposing_tracks(values[-1:])
+        if track["lane_id"] == "northbound"
+        and track["frame_ids"] == observed_frame_ids
+        and abs(track["region"][0] + track["region"][2] / 2 - expected_center[0]) <= 18
+        and abs(track["region"][1] + track["region"][3] / 2 - expected_center[1]) <= 18
+        and track["dy_px"] >= 4
+    ]
+    assert values[-1]["opposition_count"] >= 1
+    assert confirmed
+
+
+def test_native_patch_match_reports_bounded_xy_motion():
+    from visionflow.tools.direction import _match_feature_patch
+
+    rng = np.random.default_rng(9182)
+    source = rng.integers(0, 256, size=(220, 240), dtype=np.uint8)
+    target = np.zeros_like(source)
+    target[:, 80:] = source[:, :-80]
+    point = np.asarray([100.25, 110.75], dtype=np.float32)
+
+    match = _match_feature_patch(source, target, point)
+
+    assert match is not None
+    center, score, peak_gap = match
+    assert center == (180.0, 111.0)
+    assert score == pytest.approx(1.0)
+    assert peak_gap >= 0.05
+
+
+def test_native_patch_match_rejects_ambiguous_constant_and_out_of_bounds_inputs():
+    from visionflow.tools.direction import _match_feature_patch
+
+    rng = np.random.default_rng(712)
+    patch = rng.integers(0, 256, size=(21, 21), dtype=np.uint8)
+    source = np.zeros((160, 160), dtype=np.uint8)
+    source[40:61, 40:61] = patch
+    repeated = np.zeros_like(source)
+    repeated[45:66, 50:71] = patch
+    repeated[95:116, 80:101] = patch
+    assert _match_feature_patch(source, repeated, np.asarray([50.0, 50.0])) is None
+
+    constant = np.full((80, 80), 127, dtype=np.uint8)
+    assert _match_feature_patch(constant, constant, np.asarray([40.0, 40.0])) is None
+    textured = rng.integers(0, 256, size=(80, 80), dtype=np.uint8)
+    assert _match_feature_patch(textured, textured, np.asarray([40.0, 40.0])) is None
+    assert _match_feature_patch(textured, textured, np.asarray([5.0, 30.0])) is None
+    assert _match_feature_patch(
+        textured[:18, :24],
+        textured[:18, :24],
+        np.asarray([12.0, 9.0]),
+    ) is None
+    assert _match_feature_patch(
+        textured,
+        textured,
+        np.asarray([float("nan"), 30.0]),
+    ) is None
+
+
+def test_native_patch_match_does_not_search_beyond_eighty_pixels():
+    from visionflow.tools.direction import _match_feature_patch
+
+    rng = np.random.default_rng(821)
+    source = rng.integers(0, 256, size=(220, 240), dtype=np.uint8)
+    target = np.zeros_like(source)
+    target[:, 81:] = source[:, :-81]
+
+    match = _match_feature_patch(
+        source,
+        target,
+        np.asarray([100.0, 110.0], dtype=np.float32),
+    )
+
+    assert match is None
+
+
+def test_recorded_case1_confirms_only_at_the_visually_tracked_object_region():
+    import hashlib
+    import json
+    import math
+    from pathlib import Path
+
+    import cv2
+
+    fixture_dir = Path(__file__).parent / "fixtures" / "direction_case1_recording"
+    manifest = json.loads(
+        (fixture_dir / "manifest.json").read_text(encoding="utf-8")
+    )
+    records = manifest["frames"]
+    assert [
+        (record["source_frame_id"], record["timestamp_seconds"])
+        for record in records
+    ] == [
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:20", 1.7030000000959262),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:24", 2.047000000020489),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:28", 2.359000000054948),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:32", 2.75),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:37", 3.219000000040978),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:41", 3.5),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:46", 3.859000000054948),
+    ]
+
+    frames = []
+    for record in records:
+        image_bytes = (fixture_dir / record["path"]).read_bytes()
+        assert hashlib.sha256(image_bytes).hexdigest() == record["sha256"]
+        image = cv2.imdecode(
+            np.frombuffer(image_bytes, dtype=np.uint8),
+            cv2.IMREAD_COLOR,
+        )
+        assert image is not None
+        frames.append(
+            Frame(
+                record["source_frame_id"],
+                image,
+                record["timestamp_seconds"],
+            )
+        )
+
+    observed_ids = [frame.frame_id for frame in frames]
+    assert len(set(observed_ids)) == 7
+    intervals = [
+        right.timestamp_seconds - left.timestamp_seconds
+        for left, right in zip(frames, frames[1:])
+    ]
+    assert all(
+        0.0 < interval
+        <= manifest["analysis_contract"]["max_observed_gap_seconds"]
+        for interval in intervals
+    )
+
+    def matches_annotated_geometry(region, record):
+        x, y, width, height = region
+        center_x, center_y = record["approx_vehicle_center_xy"]
+        center_distance = math.hypot(
+            x + width / 2.0 - center_x,
+            y + height / 2.0 - center_y,
+        )
+        left, top, right, bottom = record["approx_vehicle_bbox_xyxy"]
+        margin = manifest["vehicle_region_rule"]["bbox_expansion_px"]
+        overlaps = (
+            x < right + margin
+            and x + width > left - margin
+            and y < bottom + margin
+            and y + height > top - margin
+        )
+        return (
+            center_distance <= manifest["vehicle_region_rule"]["center_tolerance_px"]
+            and overlaps
+        )
+
+    far_reference = manifest["known_far_false_candidate_reference"]
+    far_record = next(
+        record for record in records
+        if record["source_frame_id"] == far_reference["source_frame_id"]
+    )
+    source_prefix = records[0]["source_frame_id"].rsplit(":", 1)[0]
+    far_source_ids = [
+        f"{source_prefix}:{source_number}"
+        for source_number in far_reference["observed_source_ids"]
+    ]
+    timestamp_by_source = {
+        record["source_frame_id"]: record["timestamp_seconds"]
+        for record in records
+    }
+    far_timestamps = [timestamp_by_source[source_id] for source_id in far_source_ids]
+    assert far_reference["opposition_count_in_that_replay"] >= 1
+    assert len(set(far_source_ids)) >= manifest["analysis_contract"]["min_frames"]
+    assert all(
+        0.0 < right - left
+        <= manifest["analysis_contract"]["max_observed_gap_seconds"]
+        for left, right in zip(far_timestamps, far_timestamps[1:])
+    )
+    assert not matches_annotated_geometry(far_reference["region_xywh"], far_record)
+
+    DirectionAnalyzer, _direction_handler = _load_direction_types()
+    analyzer = DirectionAnalyzer()
+    values = [analyzer.update(frame, default_lane_params()) for frame in frames]
+    record_by_id = {record["source_frame_id"]: record for record in records}
+    timestamp_by_id = {
+        record["source_frame_id"]: record["timestamp_seconds"]
+        for record in records
+    }
+
+    qualifying = []
+    for frame, value in zip(frames, values):
+        if value["opposition_count"] < 1:
+            continue
+        current_record = record_by_id[frame.frame_id]
+        for track in value["tracks"]:
+            if track["lane_id"] != manifest["analysis_contract"]["lane_id"]:
+                continue
+            if not track["opposition"] or track["frame_ids"][-1] != frame.frame_id:
+                continue
+            source_ids = list(dict.fromkeys(track["frame_ids"]))
+            if len(source_ids) < manifest["analysis_contract"]["min_frames"]:
+                continue
+            if not set(source_ids) <= set(observed_ids):
+                continue
+            ordered_ids = sorted(source_ids, key=timestamp_by_id.__getitem__)
+            if any(
+                timestamp_by_id[right] - timestamp_by_id[left]
+                > manifest["analysis_contract"]["max_observed_gap_seconds"]
+                for left, right in zip(ordered_ids, ordered_ids[1:])
+            ):
+                continue
+            if matches_annotated_geometry(track["region"], current_record):
+                qualifying.append((frame.frame_id, track["frame_ids"], track["region"]))
+
+    assert qualifying, (
+        "no confirmed opposing track is currently localized to the manually reviewed "
+        "object geometry across at least three distinct recorded source frames"
+    )
