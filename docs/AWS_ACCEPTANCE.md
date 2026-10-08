@@ -82,7 +82,8 @@ $versions = aws s3api list-object-versions --bucket $bucket --region $region --o
 $objects = @(@($versions.Versions) + @($versions.DeleteMarkers) | Where-Object { $_ } | ForEach-Object { @{Key=$_.Key; VersionId=$_.VersionId} })
 if ($objects.Count -gt 1000) { throw 'Unerwartet viele Versionen; Cleanup prüfen, nicht pauschal löschen' }
 if ($objects.Count) {
-    @{Objects=$objects; Quiet=$true} | ConvertTo-Json -Depth 5 | Set-Content .local/aws-bundle-01/delete-own-versions.json -Encoding utf8
+    $deleteJson = @{Objects=$objects; Quiet=$true} | ConvertTo-Json -Depth 5
+    [IO.File]::WriteAllText((Join-Path (Get-Location) '.local/aws-bundle-01/delete-own-versions.json'), $deleteJson, [Text.UTF8Encoding]::new($false))
     aws s3api delete-objects --bucket $bucket --delete file://.local/aws-bundle-01/delete-own-versions.json --region $region
 }
 aws s3api list-object-versions --bucket $bucket --region $region
