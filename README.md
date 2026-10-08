@@ -4,7 +4,7 @@ VisionFlow führt lokale, begrenzte Bild- und Video-Workflows mit OpenCV aus. De
 
 ## Technische Operatorprüfung vom 8. Oktober 2026
 
-Der integrierte Produktstand `ac3ca552` besteht 541 Tests in der isolierten Mac-Umgebung mit OpenCV 5.0.0. Cloud-Nachweisprüfung und die Korrektur der Richtungszuordnung wurden unabhängig geprüft und gemergt. GitHub Actions startet für dieses private Repository wegen einer Abrechnungssperre keine Jobs; ein Hosted-CI-PASS wird daraus nicht abgeleitet. Die letzte Windows-Browserprobe erreichte die menschliche Prüfung nicht innerhalb ihrer bestehenden Grenze und wird separat diagnostiziert.
+Der integrierte und geprüfte Produktstand `e65ef914` besteht 549 Tests in der isolierten Mac-Umgebung mit Python 3.14.7 und OpenCV 5.0.0. Die echten Browserläufe auf Windows/Edge und Mac/Chromium bestehen jeweils drei vollständige Fälle und elf Checks ohne Browserfehler oder externe Requests. Die ursprünglichen Windows-Fehler bleiben dokumentiert; die neue pixelbasierte Richtungskorrektur und ihre Originalbild-Regressionen wurden unabhängig geprüft. GitHub Actions startet wegen einer Abrechnungssperre keine Jobs; ein Hosted-CI-PASS wird daraus nicht abgeleitet.
 
 Die [Juryanleitung](docs/JURY_INSTRUCTIONS.md), [Architektur](docs/ARCHITECTURE.md) und der [technische Bericht](docs/TECHNICAL_REPORT.md) unterscheiden lokale Prüfungen, synthetische Evaluation und noch offene Ausführungsnachweise. Ein 2:45-Minuten-Video der tatsächlichen lokalen Oberfläche ist fertig; es zeigt synthetischen Verkehr, feste Offline-Modellantworten und simulierte Empfänger. Echte Gemini- und AWS-Ausführung, Video-Upload, Juryzugang und die persönliche GUI-Nutzungsabnahme bleiben getrennte Schritte.
 
