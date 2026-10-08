@@ -526,7 +526,7 @@ def test_handler_returns_only_the_public_direction_metrics():
     assert metrics["warmup"] is True
 
 
-def test_recorded_grayscale_flow_is_confirmed_across_three_observed_frames(monkeypatch):
+def test_recorded_grayscale_motion_is_confirmed_across_three_observed_frames():
     import hashlib
     import json
     from pathlib import Path
@@ -562,15 +562,6 @@ def test_recorded_grayscale_flow_is_confirmed_across_three_observed_frames(monke
                 record["timestamp_seconds"],
             )
         )
-
-    flow_shapes = []
-    calc_flow = cv2.calcOpticalFlowFarneback
-
-    def record_flow_shape(previous, current, initial, *options):
-        flow_shapes.append(previous.shape)
-        return calc_flow(previous, current, initial, *options)
-
-    monkeypatch.setattr(cv2, "calcOpticalFlowFarneback", record_flow_shape)
 
     observed_frame_ids = [frame.frame_id for frame in frames]
     assert len(set(observed_frame_ids)) == 3
@@ -631,118 +622,70 @@ def test_recorded_grayscale_flow_is_confirmed_across_three_observed_frames(monke
     ]
     assert values[-1]["opposition_count"] >= 1
     assert confirmed
-    assert flow_shapes
-    assert set(flow_shapes) == {(180, 192)}
 
 
-def test_flow_grid_uses_rounded_aspect_scales_and_resize_pixel_centers():
-    from visionflow.tools.direction import (
-        _flow_resolution,
-        _flow_vectors_to_source,
-        _points_inside_flow_field,
-        _source_to_flow_coordinates,
+def test_native_patch_match_reports_bounded_xy_motion():
+    from visionflow.tools.direction import _match_feature_patch
+
+    rng = np.random.default_rng(9182)
+    source = rng.integers(0, 256, size=(220, 240), dtype=np.uint8)
+    target = np.zeros_like(source)
+    target[:, 80:] = source[:, :-80]
+    point = np.asarray([100.25, 110.75], dtype=np.float32)
+
+    match = _match_feature_patch(source, target, point)
+
+    assert match is not None
+    center, score, peak_gap = match
+    assert center == (180.0, 111.0)
+    assert score == pytest.approx(1.0)
+    assert peak_gap >= 0.05
+
+
+def test_native_patch_match_rejects_ambiguous_constant_and_out_of_bounds_inputs():
+    from visionflow.tools.direction import _match_feature_patch
+
+    rng = np.random.default_rng(712)
+    patch = rng.integers(0, 256, size=(21, 21), dtype=np.uint8)
+    source = np.zeros((160, 160), dtype=np.uint8)
+    source[40:61, 40:61] = patch
+    repeated = np.zeros_like(source)
+    repeated[45:66, 50:71] = patch
+    repeated[95:116, 80:101] = patch
+    assert _match_feature_patch(source, repeated, np.asarray([50.0, 50.0])) is None
+
+    constant = np.full((80, 80), 127, dtype=np.uint8)
+    assert _match_feature_patch(constant, constant, np.asarray([40.0, 40.0])) is None
+    textured = rng.integers(0, 256, size=(80, 80), dtype=np.uint8)
+    assert _match_feature_patch(textured, textured, np.asarray([40.0, 40.0])) is None
+    assert _match_feature_patch(textured, textured, np.asarray([5.0, 30.0])) is None
+    assert _match_feature_patch(
+        textured[:18, :24],
+        textured[:18, :24],
+        np.asarray([12.0, 9.0]),
+    ) is None
+    assert _match_feature_patch(
+        textured,
+        textured,
+        np.asarray([float("nan"), 30.0]),
+    ) is None
+
+
+def test_native_patch_match_does_not_search_beyond_eighty_pixels():
+    from visionflow.tools.direction import _match_feature_patch
+
+    rng = np.random.default_rng(821)
+    source = rng.integers(0, 256, size=(220, 240), dtype=np.uint8)
+    target = np.zeros_like(source)
+    target[:, 81:] = source[:, :-81]
+
+    match = _match_feature_patch(
+        source,
+        target,
+        np.asarray([100.0, 110.0], dtype=np.float32),
     )
 
-    assert _flow_resolution(160, 120) == (160, 120, 1.0, 1.0)
-    small_points = np.asarray([[0.0, 0.0], [159.0, 119.0]], dtype=np.float32)
-    assert _source_to_flow_coordinates(small_points, 1.0, 1.0) == pytest.approx(
-        small_points
-    )
-    width, height, scale_x, scale_y = _flow_resolution(480, 450)
-    assert (width, height) == (192, 180)
-    assert (scale_x, scale_y) == pytest.approx((0.4, 0.4))
-
-    width, height, scale_x, scale_y = _flow_resolution(480, 451)
-    assert (width, height) == (192, 180)
-    assert scale_x == pytest.approx(192 / 480)
-    assert scale_y == pytest.approx(180 / 451)
-    assert scale_x != scale_y
-
-    width, height, scale_x, scale_y = _flow_resolution(721, 540)
-    assert (width, height) == (192, 144)
-    assert scale_x == pytest.approx(192 / 721)
-    assert scale_y == pytest.approx(144 / 540)
-    assert scale_x != scale_y
-
-    points = np.asarray([[10.0, 20.0], [0.0, 0.0]], dtype=np.float32)
-    transformed = _source_to_flow_coordinates(points, scale_x, scale_y)
-    assert transformed[0] == pytest.approx(
-        [(10.0 + 0.5) * scale_x - 0.5, (20.0 + 0.5) * scale_y - 0.5]
-    )
-    assert transformed[1] == pytest.approx(
-        [0.5 * scale_x - 0.5, 0.5 * scale_y - 0.5]
-    )
-    edge_flow = np.zeros((height, width, 2), dtype=np.float32)
-    edge = _source_to_flow_coordinates(
-        np.asarray([[0.0, 0.0]], dtype=np.float32),
-        scale_x,
-        scale_y,
-    )
-    assert not _points_inside_flow_field(edge, edge_flow).item()
-    last_support_overrun = np.asarray(
-        [[width - 1 + 0.001, height - 1]],
-        dtype=np.float32,
-    )
-    assert not _points_inside_flow_field(last_support_overrun, edge_flow).item()
-
-    vectors = np.asarray([[3.0, 4.0]], dtype=np.float32)
-    restored = _flow_vectors_to_source(vectors, scale_x, scale_y)
-    assert restored[0] == pytest.approx([3.0 / scale_x, 4.0 / scale_y])
-
-
-def test_dense_flow_sampling_interpolates_xy_and_handles_empty_or_invalid_points():
-    from visionflow.tools.direction import _points_inside_flow_field, _sample_flow
-
-    y_grid, x_grid = np.mgrid[0:4, 0:5].astype(np.float32)
-    flow = np.empty((4, 5, 2), dtype=np.float32)
-    flow[:, :, 0] = 2 * x_grid + 3 * y_grid
-    flow[:, :, 1] = x_grid - 2 * y_grid
-
-    point = np.asarray([[2.25, 1.5]], dtype=np.float32)
-    sampled = _sample_flow(flow, point)
-    assert sampled.shape == (1, 2)
-    assert sampled[0, 0] == pytest.approx(9.0)
-    assert sampled[0, 1] == pytest.approx(-0.75)
-
-    empty = np.empty((0, 2), dtype=np.float32)
-    assert _sample_flow(flow, empty).shape == (0, 2)
-
-    outside = np.asarray([[4.01, 1.0]], dtype=np.float32)
-    subpixel_past_edge = np.asarray([[4.0001, 1.0]], dtype=np.float32)
-    nonfinite = np.asarray([[np.nan, 1.0]], dtype=np.float32)
-    assert not _points_inside_flow_field(outside, flow).item()
-    assert not _points_inside_flow_field(subpixel_past_edge, flow).item()
-    assert not _points_inside_flow_field(nonfinite, flow).item()
-    with pytest.raises(ValueError, match="inside the lane crop"):
-        _sample_flow(flow, outside)
-    with pytest.raises(ValueError, match="inside the lane crop"):
-        _sample_flow(flow, subpixel_past_edge)
-    with pytest.raises(ValueError, match="inside the lane crop"):
-        _sample_flow(flow, nonfinite)
-
-
-@pytest.mark.parametrize("invalid_flow", ["outside", "nonfinite"])
-def test_direction_ignores_flow_with_no_valid_in_crop_endpoints(monkeypatch, invalid_flow):
-    import cv2
-
-    DirectionAnalyzer, _direction_handler = _load_direction_types()
-    frames = road_frames(None, count=2, seed=113)
-    params = default_lane_params()
-    analyzer = DirectionAnalyzer()
-    analyzer.update(frames[0], params)
-
-    def invalid_endpoint_flow(previous, current, _initial, *_args):
-        flow = np.zeros((*previous.shape, 2), dtype=np.float32)
-        if invalid_flow == "outside":
-            flow[:, :, 0] = previous.shape[1] + 1
-        else:
-            flow[:] = np.nan
-        return flow
-
-    monkeypatch.setattr(cv2, "calcOpticalFlowFarneback", invalid_endpoint_flow)
-    result = analyzer.update(frames[1], params)
-    assert result["opposition_count"] == 0
-    assert result["tracks"] == []
+    assert match is None
 
 
 def test_recorded_case1_confirms_only_at_the_visually_tracked_object_region():

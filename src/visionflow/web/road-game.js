@@ -1135,7 +1135,7 @@
         h("div", { className: "pipeline-flow-banner" }, [
           h("div", { id: "stage-chip-1", className: "pipeline-stage-chip" }, [
             h("span", { className: "stage-badge", textContent: "STUFE 1 (OpenCV)" }),
-            h("span", { textContent: "📹 Bewegung (Differenzbild) + Richtung (Lucas-Kanade) auf echten Frames" })
+            h("span", { textContent: "📹 Bewegung (Differenzbild) + Richtung (Graustufen-Patchabgleich) auf echten Frames" })
           ]),
           h("span", { className: "pipeline-arrow", textContent: "➔" }),
           h("div", { id: "stage-chip-2", className: "pipeline-stage-chip" }, [

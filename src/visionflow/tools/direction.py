@@ -1,4 +1,4 @@
-"""Pixel-only traffic direction analysis using bounded feature-sampled optical flow."""
+"""Pixel-only traffic direction analysis using bounded grayscale patch matching."""
 
 from __future__ import annotations
 
@@ -19,13 +19,14 @@ _DEFAULT_OPPOSITION_COSINE = -0.75
 _FEATURE_QUALITY_LEVEL = 0.01
 _FEATURE_BLOCK_SIZE = 5
 _MAX_CORNERS = 240
-_MAX_FLOW_DIMENSION = 192
-_FLOW_PYR_SCALE = 0.5
-_FLOW_LEVELS = 3
-_FLOW_WINDOW_SIZE = 9
-_FLOW_ITERATIONS = 3
-_FLOW_POLY_N = 5
-_FLOW_POLY_SIGMA = 1.2
+_PATCH_SIZE = 21
+_PATCH_RADIUS = _PATCH_SIZE // 2
+_PATCH_SEARCH_RADIUS = 80
+_PATCH_MIN_SCORE = 0.80
+_PATCH_SECOND_PEAK_DISTANCE = 10.0
+_PATCH_MIN_PEAK_GAP = 0.05
+_MIN_FEATURE_DISPLACEMENT = 1.25
+_MAX_FORWARD_BACKWARD_ERROR = 1.5
 _MAX_TRACK_HISTORY = 12
 _MAX_TRACK_MISSED_FRAMES = 2
 _MAX_TRACK_GAP_SECONDS = 0.75
@@ -35,7 +36,7 @@ _TRACK_GAP_ALIGNMENT_MIN_DISTANCE_PX = 8.0
 
 
 class DirectionAnalyzer:
-    """Measure coherent feature flow against caller-configured lane vectors."""
+    """Measure coherent pixel-patch motion against configured lane vectors."""
 
     def __init__(self) -> None:
         self._previous_gray: np.ndarray | None = None
@@ -174,93 +175,74 @@ class DirectionAnalyzer:
             )
             if corners is None or len(corners) < 2:
                 return []
-            flow_width, flow_height, scale_x, scale_y = _flow_resolution(width, height)
-            if scale_x == 1.0 and scale_y == 1.0:
-                previous_flow_input = previous
-                current_flow_input = current
-            else:
-                previous_flow_input = cv2.resize(
-                    previous,
-                    (flow_width, flow_height),
-                    interpolation=cv2.INTER_AREA,
-                )
-                current_flow_input = cv2.resize(
-                    current,
-                    (flow_width, flow_height),
-                    interpolation=cv2.INTER_AREA,
-                )
-            forward_flow = cv2.calcOpticalFlowFarneback(
-                previous_flow_input,
-                current_flow_input,
-                None,
-                _FLOW_PYR_SCALE,
-                _FLOW_LEVELS,
-                _FLOW_WINDOW_SIZE,
-                _FLOW_ITERATIONS,
-                _FLOW_POLY_N,
-                _FLOW_POLY_SIGMA,
-                0,
+            start = corners.reshape(-1, 2).astype(np.float32, copy=False)
+            corner_strength = cv2.cornerMinEigenVal(
+                current,
+                blockSize=_FEATURE_BLOCK_SIZE,
+                ksize=3,
             )
-            start = corners.reshape(-1, 2)
-            start_flow = _source_to_flow_coordinates(start, scale_x, scale_y)
-            start_in_bounds = (
-                _points_inside_flow_field(start, previous)
-                & _points_inside_flow_field(start_flow, forward_flow)
-            )
-            displacement = np.full_like(start, np.nan)
-            displacement_flow = np.full_like(start, np.nan)
-            displacement_flow[start_in_bounds] = _sample_flow(
-                forward_flow,
-                start_flow[start_in_bounds],
-            )
-            displacement[start_in_bounds] = _flow_vectors_to_source(
-                displacement_flow[start_in_bounds],
-                scale_x,
-                scale_y,
-            )
-            finish = start + displacement
-            del forward_flow
+            strongest_current_corner = float(corner_strength.max())
+            if not math.isfinite(strongest_current_corner) or strongest_current_corner <= 0.0:
+                return []
 
-            backward_flow = cv2.calcOpticalFlowFarneback(
-                current_flow_input,
-                previous_flow_input,
-                None,
-                _FLOW_PYR_SCALE,
-                _FLOW_LEVELS,
-                _FLOW_WINDOW_SIZE,
-                _FLOW_ITERATIONS,
-                _FLOW_POLY_N,
-                _FLOW_POLY_SIGMA,
-                0,
-            )
-            finish_flow = _source_to_flow_coordinates(finish, scale_x, scale_y)
-            finish_in_bounds = (
-                _points_inside_flow_field(finish, current)
-                & _points_inside_flow_field(finish_flow, backward_flow)
-            )
-            valid_endpoints = start_in_bounds & finish_in_bounds
-            backward_displacement_flow = np.full_like(start, np.nan)
-            backward_displacement_flow[valid_endpoints] = _sample_flow(
-                backward_flow,
-                finish_flow[valid_endpoints],
-            )
-            backward_displacement = np.full_like(start, np.nan)
-            backward_displacement[valid_endpoints] = _flow_vectors_to_source(
-                backward_displacement_flow[valid_endpoints],
-                scale_x,
-                scale_y,
-            )
-            returned = finish + backward_displacement
-            del backward_flow
+            displacement = np.full_like(start, np.nan)
+            for index, point in enumerate(start):
+                forward = _match_feature_patch(previous, current, point)
+                if forward is None:
+                    continue
+                finish = np.asarray(forward[0], dtype=np.float32)
+                vector = finish - point
+                magnitude = float(np.linalg.norm(vector))
+                if not math.isfinite(magnitude) or magnitude < _MIN_FEATURE_DISPLACEMENT:
+                    continue
+                displacement[index] = vector
         except cv2.error as exc:
-            raise ValueError("OpenCV could not track direction features") from exc
+            raise ValueError("OpenCV could not match direction feature patches") from exc
+
+        finish = start + displacement
+        forward_magnitude = np.linalg.norm(displacement, axis=1)
+        forward_valid = (
+            np.isfinite(displacement).all(axis=1)
+            & np.isfinite(finish).all(axis=1)
+            & (forward_magnitude >= _MIN_FEATURE_DISPLACEMENT)
+        )
+        if not bool(forward_valid.any()):
+            return []
+
+        forward_indexes = np.flatnonzero(forward_valid)
+        endpoint_strength = _sample_scalar_field(
+            corner_strength,
+            finish[forward_indexes],
+        )
+        supported = (
+            (endpoint_strength > 0.0)
+            & (
+                endpoint_strength
+                >= strongest_current_corner * _FEATURE_QUALITY_LEVEL
+            )
+        )
+        supported_indexes = forward_indexes[supported]
+        if not len(supported_indexes):
+            return []
+        supported_mask = np.zeros(len(start), dtype=bool)
+        supported_mask[supported_indexes] = True
+
+        returned = np.full_like(start, np.nan)
+        try:
+            for index in supported_indexes:
+                backward = _match_feature_patch(current, previous, finish[index])
+                if backward is not None:
+                    returned[index] = np.asarray(backward[0], dtype=np.float32)
+        except cv2.error as exc:
+            raise ValueError("OpenCV could not reverse-match direction feature patches") from exc
 
         forward_backward_error = np.linalg.norm(start - returned, axis=1)
         magnitude = np.linalg.norm(displacement, axis=1)
         valid = (
-            valid_endpoints
-            & (forward_backward_error <= 1.5)
-            & (magnitude >= 1.25)
+            supported_mask
+            & forward_valid
+            & (forward_backward_error <= _MAX_FORWARD_BACKWARD_ERROR)
+            & (magnitude >= _MIN_FEATURE_DISPLACEMENT)
             & np.isfinite(displacement).all(axis=1)
             & np.isfinite(returned).all(axis=1)
         )
@@ -269,24 +251,6 @@ class DirectionAnalyzer:
 
         finishes = finish[valid]
         vectors = displacement[valid]
-        corner_strength = cv2.cornerMinEigenVal(
-            current,
-            blockSize=_FEATURE_BLOCK_SIZE,
-            ksize=3,
-        )
-        strongest_current_corner = float(corner_strength.max())
-        if strongest_current_corner <= 0.0:
-            return []
-        endpoint_strength = _sample_scalar_field(corner_strength, finishes)
-        supported = (
-            (endpoint_strength > 0.0)
-            & (
-                endpoint_strength
-                >= strongest_current_corner * _FEATURE_QUALITY_LEVEL
-            )
-        )
-        finishes = finishes[supported]
-        vectors = vectors[supported]
         if len(finishes) < 2:
             return []
 
@@ -582,38 +546,95 @@ def _integer_vector(value: Any, length: int, name: str) -> tuple[int, ...]:
     return tuple(values)
 
 
-def _sample_flow(flow: np.ndarray, points: np.ndarray) -> np.ndarray:
-    """Bilinearly sample the flow field at bounded (x, y) feature locations."""
-    if points.size == 0:
-        return np.empty((0, 2), dtype=flow.dtype)
-    if not bool(_points_inside_flow_field(points, flow).all()):
-        raise ValueError("dense flow coordinates must remain inside the lane crop")
-    map_x = points[:, 0].astype(np.float32).reshape(-1, 1)
-    map_y = points[:, 1].astype(np.float32).reshape(-1, 1)
-    sampled_x = cv2.remap(
-        flow[:, :, 0],
-        map_x,
-        map_y,
-        cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=0,
+def _match_feature_patch(
+    source_gray: np.ndarray,
+    target_gray: np.ndarray,
+    point_xy: np.ndarray,
+) -> tuple[tuple[float, float], float, float] | None:
+    """Find a unique, bounded native-resolution grayscale patch match."""
+    if (
+        source_gray.ndim != 2
+        or target_gray.ndim != 2
+        or source_gray.shape != target_gray.shape
+        or source_gray.size == 0
+    ):
+        return None
+    point = np.asarray(point_xy, dtype=np.float64).reshape(-1)
+    if point.shape != (2,) or not np.isfinite(point).all():
+        return None
+
+    height, width = source_gray.shape
+    center_x = int(np.rint(point[0]))
+    center_y = int(np.rint(point[1]))
+    radius = _PATCH_RADIUS
+    if (
+        center_x < radius
+        or center_y < radius
+        or center_x >= width - radius
+        or center_y >= height - radius
+    ):
+        return None
+
+    template = source_gray[
+        center_y - radius : center_y + radius + 1,
+        center_x - radius : center_x + radius + 1,
+    ]
+    if template.shape != (_PATCH_SIZE, _PATCH_SIZE):
+        return None
+    target_at_source = target_gray[
+        center_y - radius : center_y + radius + 1,
+        center_x - radius : center_x + radius + 1,
+    ]
+    if np.array_equal(template, target_at_source):
+        return None
+    if not float(np.std(template, dtype=np.float64)) > 0.0:
+        return None
+
+    minimum_x = max(radius, center_x - _PATCH_SEARCH_RADIUS)
+    maximum_x = min(width - radius - 1, center_x + _PATCH_SEARCH_RADIUS)
+    minimum_y = max(radius, center_y - _PATCH_SEARCH_RADIUS)
+    maximum_y = min(height - radius - 1, center_y + _PATCH_SEARCH_RADIUS)
+    if minimum_x > maximum_x or minimum_y > maximum_y:
+        return None
+    search = target_gray[
+        minimum_y - radius : maximum_y + radius + 1,
+        minimum_x - radius : maximum_x + radius + 1,
+    ]
+    response = cv2.matchTemplate(search, template, cv2.TM_CCOEFF_NORMED)
+    if response.size == 0 or not bool(np.isfinite(response).all()):
+        return None
+    _, best_score, _, best_location = cv2.minMaxLoc(response)
+    best_x = minimum_x + best_location[0]
+    best_y = minimum_y + best_location[1]
+
+    local_maxima = response >= cv2.dilate(response, np.ones((3, 3), dtype=np.uint8))
+    peak_y, peak_x = np.nonzero(local_maxima)
+    if not len(peak_x):
+        return None
+    distinct = (
+        (peak_x + minimum_x - best_x) ** 2
+        + (peak_y + minimum_y - best_y) ** 2
+        > _PATCH_SECOND_PEAK_DISTANCE**2
     )
-    sampled_y = cv2.remap(
-        flow[:, :, 1],
-        map_x,
-        map_y,
-        cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=0,
-    )
-    return np.column_stack((sampled_x.reshape(-1), sampled_y.reshape(-1)))
+    if not bool(distinct.any()):
+        return None
+    second_score = float(response[peak_y[distinct], peak_x[distinct]].max())
+    peak_gap = float(best_score) - second_score
+    if (
+        not math.isfinite(float(best_score))
+        or not math.isfinite(peak_gap)
+        or float(best_score) < _PATCH_MIN_SCORE
+        or peak_gap < _PATCH_MIN_PEAK_GAP
+    ):
+        return None
+    return (float(best_x), float(best_y)), float(best_score), peak_gap
 
 
 def _sample_scalar_field(field: np.ndarray, points: np.ndarray) -> np.ndarray:
     """Bilinearly sample a scalar pixel field at bounded (x, y) locations."""
     if points.size == 0:
         return np.empty((0,), dtype=field.dtype)
-    if not bool(_points_inside_flow_field(points, field).all()):
+    if not bool(_points_inside_image(points, field).all()):
         raise ValueError("pixel coordinates must remain inside the lane crop")
     map_x = points[:, 0].astype(np.float32).reshape(-1, 1)
     map_y = points[:, 1].astype(np.float32).reshape(-1, 1)
@@ -628,43 +649,8 @@ def _sample_scalar_field(field: np.ndarray, points: np.ndarray) -> np.ndarray:
     return sampled.reshape(-1)
 
 
-def _flow_resolution(
-    width: int,
-    height: int,
-) -> tuple[int, int, float, float]:
-    scale = min(1.0, _MAX_FLOW_DIMENSION / max(width, height))
-    flow_width = max(1, int(round(width * scale)))
-    flow_height = max(1, int(round(height * scale)))
-    return (
-        flow_width,
-        flow_height,
-        flow_width / width,
-        flow_height / height,
-    )
-
-
-def _source_to_flow_coordinates(
-    points: np.ndarray,
-    scale_x: float,
-    scale_y: float,
-) -> np.ndarray:
-    """Map source pixel centers through the exact rounded resize scales."""
-    scales = np.asarray([scale_x, scale_y], dtype=np.float32)
-    return (points.astype(np.float32, copy=False) + 0.5) * scales - 0.5
-
-
-def _flow_vectors_to_source(
-    vectors: np.ndarray,
-    scale_x: float,
-    scale_y: float,
-) -> np.ndarray:
-    """Convert dense-flow displacement units back to source-crop pixels."""
-    inverse_scales = np.asarray([1.0 / scale_x, 1.0 / scale_y], dtype=np.float32)
-    return vectors * inverse_scales
-
-
-def _points_inside_flow_field(points: np.ndarray, flow: np.ndarray) -> np.ndarray:
-    height, width = flow.shape[:2]
+def _points_inside_image(points: np.ndarray, image: np.ndarray) -> np.ndarray:
+    height, width = image.shape[:2]
     return (
         np.isfinite(points).all(axis=1)
         & (points[:, 0] >= 0.0)
