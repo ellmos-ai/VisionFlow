@@ -604,6 +604,8 @@ def _match_feature_patch(
     if response.size == 0 or not bool(np.isfinite(response).all()):
         return None
     _, best_score, _, best_location = cv2.minMaxLoc(response)
+    if not math.isfinite(float(best_score)) or float(best_score) < _PATCH_MIN_SCORE:
+        return None
     best_x = minimum_x + best_location[0]
     best_y = minimum_y + best_location[1]
 
@@ -620,12 +622,7 @@ def _match_feature_patch(
         return None
     second_score = float(response[peak_y[distinct], peak_x[distinct]].max())
     peak_gap = float(best_score) - second_score
-    if (
-        not math.isfinite(float(best_score))
-        or not math.isfinite(peak_gap)
-        or float(best_score) < _PATCH_MIN_SCORE
-        or peak_gap < _PATCH_MIN_PEAK_GAP
-    ):
+    if not math.isfinite(peak_gap) or peak_gap < _PATCH_MIN_PEAK_GAP:
         return None
     return (float(best_x), float(best_y)), float(best_score), peak_gap
 
