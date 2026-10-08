@@ -47,7 +47,8 @@
       37
     ],
     "opposition_count_in_that_replay": 1,
-    "distance_from_annotated_vehicle_center_px": 115.8,
+    "distance_from_annotated_vehicle_center_to_candidate_bbox_px": 115.802,
+    "distance_from_annotated_vehicle_center_to_candidate_center_px": 130.4243,
     "expected_geometry_match": false
   },
   "frames": [
