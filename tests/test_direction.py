@@ -743,3 +743,142 @@ def test_direction_ignores_flow_with_no_valid_in_crop_endpoints(monkeypatch, inv
     result = analyzer.update(frames[1], params)
     assert result["opposition_count"] == 0
     assert result["tracks"] == []
+
+
+def test_recorded_case1_confirms_only_at_the_visually_tracked_object_region():
+    import hashlib
+    import json
+    import math
+    from pathlib import Path
+
+    import cv2
+
+    fixture_dir = Path(__file__).parent / "fixtures" / "direction_case1_recording"
+    manifest = json.loads(
+        (fixture_dir / "manifest.json").read_text(encoding="utf-8")
+    )
+    records = manifest["frames"]
+    assert [
+        (record["source_frame_id"], record["timestamp_seconds"])
+        for record in records
+    ] == [
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:20", 1.7030000000959262),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:24", 2.047000000020489),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:28", 2.359000000054948),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:32", 2.75),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:37", 3.219000000040978),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:41", 3.5),
+        ("road-sim-ce09f51461954dae80ec8104e0d3350b:46", 3.859000000054948),
+    ]
+
+    frames = []
+    for record in records:
+        image_bytes = (fixture_dir / record["path"]).read_bytes()
+        assert hashlib.sha256(image_bytes).hexdigest() == record["sha256"]
+        image = cv2.imdecode(
+            np.frombuffer(image_bytes, dtype=np.uint8),
+            cv2.IMREAD_COLOR,
+        )
+        assert image is not None
+        frames.append(
+            Frame(
+                record["source_frame_id"],
+                image,
+                record["timestamp_seconds"],
+            )
+        )
+
+    observed_ids = [frame.frame_id for frame in frames]
+    assert len(set(observed_ids)) == 7
+    intervals = [
+        right.timestamp_seconds - left.timestamp_seconds
+        for left, right in zip(frames, frames[1:])
+    ]
+    assert all(
+        0.0 < interval
+        <= manifest["analysis_contract"]["max_observed_gap_seconds"]
+        for interval in intervals
+    )
+
+    def matches_annotated_geometry(region, record):
+        x, y, width, height = region
+        center_x, center_y = record["approx_vehicle_center_xy"]
+        center_distance = math.hypot(
+            x + width / 2.0 - center_x,
+            y + height / 2.0 - center_y,
+        )
+        left, top, right, bottom = record["approx_vehicle_bbox_xyxy"]
+        margin = manifest["vehicle_region_rule"]["bbox_expansion_px"]
+        overlaps = (
+            x < right + margin
+            and x + width > left - margin
+            and y < bottom + margin
+            and y + height > top - margin
+        )
+        return (
+            center_distance <= manifest["vehicle_region_rule"]["center_tolerance_px"]
+            and overlaps
+        )
+
+    far_reference = manifest["known_far_false_candidate_reference"]
+    far_record = next(
+        record for record in records
+        if record["source_frame_id"] == far_reference["source_frame_id"]
+    )
+    source_prefix = records[0]["source_frame_id"].rsplit(":", 1)[0]
+    far_source_ids = [
+        f"{source_prefix}:{source_number}"
+        for source_number in far_reference["observed_source_ids"]
+    ]
+    timestamp_by_source = {
+        record["source_frame_id"]: record["timestamp_seconds"]
+        for record in records
+    }
+    far_timestamps = [timestamp_by_source[source_id] for source_id in far_source_ids]
+    assert far_reference["opposition_count_in_that_replay"] >= 1
+    assert len(set(far_source_ids)) >= manifest["analysis_contract"]["min_frames"]
+    assert all(
+        0.0 < right - left
+        <= manifest["analysis_contract"]["max_observed_gap_seconds"]
+        for left, right in zip(far_timestamps, far_timestamps[1:])
+    )
+    assert not matches_annotated_geometry(far_reference["region_xywh"], far_record)
+
+    DirectionAnalyzer, _direction_handler = _load_direction_types()
+    analyzer = DirectionAnalyzer()
+    values = [analyzer.update(frame, default_lane_params()) for frame in frames]
+    record_by_id = {record["source_frame_id"]: record for record in records}
+    timestamp_by_id = {
+        record["source_frame_id"]: record["timestamp_seconds"]
+        for record in records
+    }
+
+    qualifying = []
+    for frame, value in zip(frames, values):
+        if value["opposition_count"] < 1:
+            continue
+        current_record = record_by_id[frame.frame_id]
+        for track in value["tracks"]:
+            if track["lane_id"] != manifest["analysis_contract"]["lane_id"]:
+                continue
+            if not track["opposition"] or track["frame_ids"][-1] != frame.frame_id:
+                continue
+            source_ids = list(dict.fromkeys(track["frame_ids"]))
+            if len(source_ids) < manifest["analysis_contract"]["min_frames"]:
+                continue
+            if not set(source_ids) <= set(observed_ids):
+                continue
+            ordered_ids = sorted(source_ids, key=timestamp_by_id.__getitem__)
+            if any(
+                timestamp_by_id[right] - timestamp_by_id[left]
+                > manifest["analysis_contract"]["max_observed_gap_seconds"]
+                for left, right in zip(ordered_ids, ordered_ids[1:])
+            ):
+                continue
+            if matches_annotated_geometry(track["region"], current_record):
+                qualifying.append((frame.frame_id, track["frame_ids"], track["region"]))
+
+    assert qualifying, (
+        "no confirmed opposing track is currently localized to the manually reviewed "
+        "object geometry across at least three distinct recorded source frames"
+    )
