@@ -169,7 +169,7 @@ class DirectionAnalyzer:
                 previous,
                 maxCorners=_MAX_CORNERS,
                 qualityLevel=_FEATURE_QUALITY_LEVEL,
-                minDistance=4,
+                minDistance=8,
                 blockSize=_FEATURE_BLOCK_SIZE,
                 useHarrisDetector=False,
             )
