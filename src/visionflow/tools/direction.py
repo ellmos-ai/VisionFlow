@@ -1,4 +1,4 @@
-"""Pixel-only traffic direction analysis using bounded OpenCV feature tracking."""
+"""Pixel-only traffic direction analysis using bounded feature-sampled optical flow."""
 
 from __future__ import annotations
 
@@ -17,6 +17,12 @@ _DEFAULT_MIN_FRAMES = 3
 _DEFAULT_MIN_DISPLACEMENT = 4.0
 _DEFAULT_OPPOSITION_COSINE = -0.75
 _MAX_CORNERS = 240
+_FLOW_PYR_SCALE = 0.5
+_FLOW_LEVELS = 3
+_FLOW_WINDOW_SIZE = 9
+_FLOW_ITERATIONS = 3
+_FLOW_POLY_N = 5
+_FLOW_POLY_SIGMA = 1.2
 _MAX_TRACK_HISTORY = 12
 _MAX_TRACK_MISSED_FRAMES = 2
 _MAX_TRACK_GAP_SECONDS = 0.75
@@ -165,58 +171,64 @@ class DirectionAnalyzer:
             )
             if corners is None or len(corners) < 2:
                 return []
-            next_points, forward_status, _ = cv2.calcOpticalFlowPyrLK(
+            forward_flow = cv2.calcOpticalFlowFarneback(
                 previous,
                 current,
-                corners,
                 None,
-                winSize=(21, 21),
-                maxLevel=3,
-                criteria=(
-                    cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-                    30,
-                    0.01,
-                ),
+                _FLOW_PYR_SCALE,
+                _FLOW_LEVELS,
+                _FLOW_WINDOW_SIZE,
+                _FLOW_ITERATIONS,
+                _FLOW_POLY_N,
+                _FLOW_POLY_SIGMA,
+                0,
             )
-            if next_points is None or forward_status is None:
-                return []
-            back_points, backward_status, _ = cv2.calcOpticalFlowPyrLK(
+            start = corners.reshape(-1, 2)
+            start_in_bounds = _points_inside_flow_field(start, forward_flow)
+            displacement = np.full_like(start, np.nan)
+            displacement[start_in_bounds] = _sample_flow(
+                forward_flow,
+                start[start_in_bounds],
+            )
+            finish = start + displacement
+            del forward_flow
+
+            backward_flow = cv2.calcOpticalFlowFarneback(
                 current,
                 previous,
-                next_points,
                 None,
-                winSize=(21, 21),
-                maxLevel=3,
-                criteria=(
-                    cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-                    30,
-                    0.01,
-                ),
+                _FLOW_PYR_SCALE,
+                _FLOW_LEVELS,
+                _FLOW_WINDOW_SIZE,
+                _FLOW_ITERATIONS,
+                _FLOW_POLY_N,
+                _FLOW_POLY_SIGMA,
+                0,
             )
-            if back_points is None or backward_status is None:
-                return []
+            finish_in_bounds = _points_inside_flow_field(finish, backward_flow)
+            valid_endpoints = start_in_bounds & finish_in_bounds
+            backward_displacement = np.full_like(start, np.nan)
+            backward_displacement[valid_endpoints] = _sample_flow(
+                backward_flow,
+                finish[valid_endpoints],
+            )
+            returned = finish + backward_displacement
+            del backward_flow
         except cv2.error as exc:
             raise ValueError("OpenCV could not track direction features") from exc
 
-        start = corners.reshape(-1, 2)
-        finish = next_points.reshape(-1, 2)
-        returned = back_points.reshape(-1, 2)
-        forward_ok = forward_status.reshape(-1).astype(bool)
-        backward_ok = backward_status.reshape(-1).astype(bool)
         forward_backward_error = np.linalg.norm(start - returned, axis=1)
-        displacement = finish - start
         magnitude = np.linalg.norm(displacement, axis=1)
         valid = (
-            forward_ok
-            & backward_ok
+            valid_endpoints
             & (forward_backward_error <= 1.5)
             & (magnitude >= 1.25)
             & np.isfinite(displacement).all(axis=1)
+            & np.isfinite(returned).all(axis=1)
         )
         if not bool(valid.any()):
             return []
 
-        starts = start[valid]
         finishes = finish[valid]
         vectors = displacement[valid]
         clusters = _cluster_features(finishes, vectors)
@@ -511,11 +523,49 @@ def _integer_vector(value: Any, length: int, name: str) -> tuple[int, ...]:
     return tuple(values)
 
 
+def _sample_flow(flow: np.ndarray, points: np.ndarray) -> np.ndarray:
+    """Bilinearly sample the flow field at bounded (x, y) feature locations."""
+    if points.size == 0:
+        return np.empty((0, 2), dtype=flow.dtype)
+    if not bool(_points_inside_flow_field(points, flow).all()):
+        raise ValueError("dense flow coordinates must remain inside the lane crop")
+    map_x = points[:, 0].astype(np.float32).reshape(-1, 1)
+    map_y = points[:, 1].astype(np.float32).reshape(-1, 1)
+    sampled_x = cv2.remap(
+        flow[:, :, 0],
+        map_x,
+        map_y,
+        cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+    sampled_y = cv2.remap(
+        flow[:, :, 1],
+        map_x,
+        map_y,
+        cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+    return np.column_stack((sampled_x.reshape(-1), sampled_y.reshape(-1)))
+
+
+def _points_inside_flow_field(points: np.ndarray, flow: np.ndarray) -> np.ndarray:
+    height, width = flow.shape[:2]
+    return (
+        np.isfinite(points).all(axis=1)
+        & (points[:, 0] >= 0.0)
+        & (points[:, 0] <= width - 1)
+        & (points[:, 1] >= 0.0)
+        & (points[:, 1] <= height - 1)
+    )
+
+
 def _cluster_features(
     points: np.ndarray,
     vectors: np.ndarray,
 ) -> list[list[int]]:
-    """Group nearby LK features whose local flows move together."""
+    """Group nearby feature samples whose local flows move together."""
     remaining = set(range(len(points)))
     clusters: list[list[int]] = []
     while remaining:

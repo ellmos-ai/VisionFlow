@@ -489,3 +489,151 @@ def test_handler_returns_only_the_public_direction_metrics():
         "coordinate_system",
     }
     assert metrics["warmup"] is True
+
+def test_recorded_grayscale_flow_is_confirmed_across_three_observed_frames():
+    import hashlib
+    import json
+    from pathlib import Path
+
+    import cv2
+
+    fixture_dir = (
+        Path(__file__).parent
+        / "fixtures"
+        / "direction_flow_recording"
+    )
+    manifest = json.loads(
+        (fixture_dir / "manifest.json").read_text(encoding="utf-8")
+    )
+    records = manifest["frames"]
+    assert len(records) == 3
+
+    frames = []
+    images = []
+    for record in records:
+        image_bytes = (fixture_dir / record["path"]).read_bytes()
+        assert hashlib.sha256(image_bytes).hexdigest() == record["sha256"]
+        image = cv2.imdecode(
+            np.frombuffer(image_bytes, dtype=np.uint8),
+            cv2.IMREAD_COLOR,
+        )
+        assert image is not None
+        images.append(image)
+        frames.append(
+            Frame(
+                record["frame_id"],
+                image,
+                record["timestamp_seconds"],
+            )
+        )
+
+    observed_frame_ids = [frame.frame_id for frame in frames]
+    assert len(set(observed_frame_ids)) == 3
+    assert all(
+        0.0 < right.timestamp_seconds - left.timestamp_seconds <= 0.75
+        for left, right in zip(frames, frames[1:])
+    )
+
+    gray_images = [
+        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        for image in images
+    ]
+    for motion in manifest["grayscale_motion_reference"]:
+        source_index = observed_frame_ids.index(motion["from_frame_id"])
+        target_index = observed_frame_ids.index(motion["to_frame_id"])
+        x, y, width, height = motion["template_roi_xywh"]
+        source_gray = gray_images[source_index]
+        target_gray = gray_images[target_index]
+        template = source_gray[y : y + height, x : x + width]
+        search_left = max(0, x - 15)
+        search_top = max(0, y - 10)
+        search_right = min(target_gray.shape[1], x + 15 + width)
+        search_bottom = min(target_gray.shape[0], y + 35 + height)
+        search_area = target_gray[
+            search_top:search_bottom,
+            search_left:search_right,
+        ]
+        correlation = cv2.matchTemplate(
+            search_area,
+            template,
+            cv2.TM_CCOEFF_NORMED,
+        )
+        _, score, _, location = cv2.minMaxLoc(correlation)
+        observed_shift = (
+            search_left + location[0] - x,
+            search_top + location[1] - y,
+        )
+        expected_shift = tuple(motion["translation_xy_px"])
+        assert score >= 0.80
+        assert all(
+            abs(actual - expected) <= 1
+            for actual, expected in zip(observed_shift, expected_shift)
+        )
+
+    values = _analyze_sequence(frames, default_lane_params())
+    last_motion = manifest["grayscale_motion_reference"][-1]
+    x, y, width, height = last_motion["template_roi_xywh"]
+    dx, dy = last_motion["translation_xy_px"]
+    expected_center = (x + dx + width / 2, y + dy + height / 2)
+    confirmed = [
+        track
+        for track in _opposing_tracks(values[-1:])
+        if track["lane_id"] == "northbound"
+        and track["frame_ids"] == observed_frame_ids
+        and abs(track["region"][0] + track["region"][2] / 2 - expected_center[0]) <= 18
+        and abs(track["region"][1] + track["region"][3] / 2 - expected_center[1]) <= 18
+        and track["dy_px"] >= 4
+    ]
+    assert values[-1]["opposition_count"] >= 1
+    assert confirmed
+
+
+def test_dense_flow_sampling_interpolates_xy_and_handles_empty_or_invalid_points():
+    from visionflow.tools.direction import _points_inside_flow_field, _sample_flow
+
+    y_grid, x_grid = np.mgrid[0:4, 0:5].astype(np.float32)
+    flow = np.empty((4, 5, 2), dtype=np.float32)
+    flow[:, :, 0] = 2 * x_grid + 3 * y_grid
+    flow[:, :, 1] = x_grid - 2 * y_grid
+
+    point = np.asarray([[2.25, 1.5]], dtype=np.float32)
+    sampled = _sample_flow(flow, point)
+    assert sampled.shape == (1, 2)
+    assert sampled[0, 0] == pytest.approx(9.0)
+    assert sampled[0, 1] == pytest.approx(-0.75)
+
+    empty = np.empty((0, 2), dtype=np.float32)
+    assert _sample_flow(flow, empty).shape == (0, 2)
+
+    outside = np.asarray([[4.01, 1.0]], dtype=np.float32)
+    nonfinite = np.asarray([[np.nan, 1.0]], dtype=np.float32)
+    assert not _points_inside_flow_field(outside, flow).item()
+    assert not _points_inside_flow_field(nonfinite, flow).item()
+    with pytest.raises(ValueError, match="inside the lane crop"):
+        _sample_flow(flow, outside)
+    with pytest.raises(ValueError, match="inside the lane crop"):
+        _sample_flow(flow, nonfinite)
+
+
+@pytest.mark.parametrize("invalid_flow", ["outside", "nonfinite"])
+def test_direction_ignores_flow_with_no_valid_in_crop_endpoints(monkeypatch, invalid_flow):
+    import cv2
+
+    DirectionAnalyzer, _direction_handler = _load_direction_types()
+    frames = road_frames(None, count=2, seed=113)
+    params = default_lane_params()
+    analyzer = DirectionAnalyzer()
+    analyzer.update(frames[0], params)
+
+    def invalid_endpoint_flow(previous, current, _initial, *_args):
+        flow = np.zeros((*previous.shape, 2), dtype=np.float32)
+        if invalid_flow == "outside":
+            flow[:, :, 0] = previous.shape[1] + 1
+        else:
+            flow[:] = np.nan
+        return flow
+
+    monkeypatch.setattr(cv2, "calcOpticalFlowFarneback", invalid_endpoint_flow)
+    result = analyzer.update(frames[1], params)
+    assert result["opposition_count"] == 0
+    assert result["tracks"] == []
