@@ -74,7 +74,7 @@ Die Tests für die Straßendemo umfassen Richtungsanalyse, Aufnahme-Journal, MP4
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-GitHub Actions führt dieselbe Suite und den CLI-Demolauf auf Ubuntu und Windows aus (`.github/workflows/ci.yml`).
+GitHub Actions ist für dieselbe Suite und den CLI-Demolauf auf Ubuntu und Windows konfiguriert (`.github/workflows/ci.yml`); die aktuellen Jobs starten wegen einer Abrechnungssperre nicht. Ein Hosted-CI-PASS wird daraus nicht abgeleitet.
 
 ### Browserabnahme
 
@@ -122,3 +122,7 @@ Die unabhängige lokale Headless-Edge-Prüfung am 2026-10-02 bestand acht CLI-/B
 Zusammenlaufende gewählte Workflowzweige werden in topologischer Reihenfolge zusammengeführt; jeder Knoten läuft genau einmal. Mehrere Bildwerkzeuge verwenden dasselbe geladene Bild, wobei jeder Analyse-Knoten weiterhin das Frame-Verarbeitungsbudget belastet. Eine reine Texteingabe bewahrt Mediencursor und Werkzeugzustand; eine ausdrücklich gewählte Ersatzquelle startet einen neuen Analysezustand. Quellen bleiben während einer Eingabepause offen und werden bei Abschluss oder Abbruch geschlossen.
 
 Bei Datei-Videos begrenzt die native Framerate die tatsächliche Abtastung; die konfigurierte `sample_fps` ist eine Obergrenze. Die Vorprüfung des Framebudgets bleibt konservativ anhand der angeforderten Rate. ROI-Findings bewahren die Region in Originalpixeln; `metrics.coordinate_system` kennzeichnet die Pixelkoordinaten des Bildausschnitts und der darin gemessenen Bewegungsregionen. Berichte und Nachrichtenentwürfe übernehmen nur die Metadaten früherer gerenderter Ausgaben, keine verschachtelten Berichtsinhalte.
+
+## Prüfstand vom 8. Oktober 2026
+
+Produktrevision `e65ef914`: vollständige Mac-Suite mit 549 bestandenen Tests in 101,46 Sekunden; tatsächliche Windows/Edge- und Mac/Chromium-Browserläufe mit jeweils drei vollständigen Fällen und elf erfolgreichen Checks. Die unveränderten 90-Sekunden-Grenzen und Assertions bleiben erhalten. Kein Browserfehler und keine externe Anfrage. Frühere Fehlläufe bleiben dokumentiert. Persönliche GUI- und Geräteabnahme durch Lukas sowie echte Provider-/AWS-Ausführung sind getrennte offene Gates.
