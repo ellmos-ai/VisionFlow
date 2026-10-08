@@ -20,7 +20,9 @@ Road review: synthetic traffic events feed OpenCV direction analysis, recording,
 
 The prepared CodeBuild recipe uploads an allowlisted ZIP from one committed revision to private S3, installs the pinned dependencies, executes the full test suite and runs the document and motion workflows. AWS compute therefore executes the full OpenCV workflow, including real synthetic media decoding and trace/evidence generation. This is the intended meaningful AWS component; storage alone is not presented as the contribution.
 
-An exact source ZIP SHA-256, per-file source hashes, source commit, test log/JUnit, dependency versions, demo traces, evidence-frame hashes and a run receipt make the run reproducible. Cloud acceptance also requires an independently queried successful AWS build with matching ID, ARN, environment hash and source image. Hashes establish artifact integrity, not provider authenticity by themselves. See [AWS acceptance procedure](AWS_ACCEPTANCE.md).
+An exact source ZIP SHA-256, per-file source hashes, source commit, test log/JUnit, dependency versions, demo traces, evidence-frame hashes and a run receipt make the run reproducible. The source is pinned to an S3 object version with an independently returned full-object SHA-256 checksum. Cloud acceptance requires the original evidence ZIP, matching AWS artifact SHA-256 and a byte-exact extracted file set including its manifest. Independently saved stack/start/upload/head responses and the terminal build readback must agree on account, region, project, source location, source version, buildspec and artifact destination. Hashes establish artifact integrity, not provider authenticity by themselves. See [AWS acceptance procedure](AWS_ACCEPTANCE.md).
+
+The evidence checker validates both completed scenarios, the document input replacement and its measured sharpness gain, the motion observe/report ordering and forward frame cursor. Referenced PNG bytes are decoded and compared with the referenced source image or video frames. Core evidence uses `.bin` filenames; file extensions are not accepted as proof of image contents.
 
 ## Evaluation status and limitations
 

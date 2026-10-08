@@ -42,9 +42,15 @@
               "ExpirationInDays": 1,
               "AbortIncompleteMultipartUpload": {
                 "DaysAfterInitiation": 1
+              },
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 1
               }
             }
           ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
         }
       }
     },
@@ -140,7 +146,8 @@
                 {
                   "Effect": "Allow",
                   "Action": [
-                    "s3:GetObject"
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
                   ],
                   "Resource": {
                     "Fn::Sub": "${EvidenceBucket.Arn}/sources/${SourceZipSha256}.zip"
@@ -226,9 +233,10 @@
           },
           "Path": "evidence",
           "Name": "acceptance.zip",
-          "NamespaceType": "BUILD_ID",
+          "NamespaceType": "NONE",
           "Packaging": "ZIP",
-          "EncryptionDisabled": true
+          "EncryptionDisabled": true,
+          "OverrideArtifactName": false
         },
         "LogsConfig": {
           "CloudWatchLogs": {
