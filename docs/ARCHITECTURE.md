@@ -3,7 +3,8 @@
 ```mermaid
 flowchart LR
     UI[Local browser] --> API[Loopback HTTP API]
-    CLI[CLI] --> API
+    CLI[CLI server commands] --> API
+    LOCAL[CLI offline demo and validation] --> CORE
     PY[Python API] --> CORE[Bounded workflow controller]
     API --> CORE
     CORE --> CV[OpenCV 5 tool registry]

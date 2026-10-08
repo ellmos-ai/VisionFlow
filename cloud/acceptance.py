@@ -20,7 +20,8 @@ from pathlib import Path, PurePosixPath
 
 PUBLIC_ROOT = {"README.md", "LICENSE", "pyproject.toml", "requirements.lock"}
 PUBLIC_DOCS = {"docs/TESTING.md", "docs/AWS_ACCEPTANCE.md", "docs/TECHNICAL_REPORT.md",
-               "docs/ARCHITECTURE.md"}
+               "docs/ARCHITECTURE.md", "docs/JURY_INSTRUCTIONS.md",
+               "docs/SYNTHETIC_EVALUATION.md"}
 
 
 def digest(data: bytes) -> str:
