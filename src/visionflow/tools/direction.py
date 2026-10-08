@@ -18,6 +18,11 @@ _DEFAULT_MIN_DISPLACEMENT = 4.0
 _DEFAULT_OPPOSITION_COSINE = -0.75
 _MAX_CORNERS = 240
 _MAX_TRACK_HISTORY = 12
+_MAX_TRACK_MISSED_FRAMES = 2
+_MAX_TRACK_GAP_SECONDS = 0.75
+_MAX_TRACK_GAP_DISTANCE_PX = 80.0
+_TRACK_GAP_ALIGNMENT_COSINE = 0.5
+_TRACK_GAP_ALIGNMENT_MIN_DISTANCE_PX = 8.0
 
 
 class DirectionAnalyzer:
@@ -97,11 +102,15 @@ class DirectionAnalyzer:
             candidates,
             frame.frame_id,
             min_frames=min_frames,
+            timestamp_seconds=float(frame.timestamp_seconds),
         )
         self._previous_gray = gray
         self._previous_frame_id = frame.frame_id
         self._previous_timestamp = float(frame.timestamp_seconds)
 
+        observed_tracks = [
+            track for track in self._active if track.get("_missed_frames", 0) == 0
+        ]
         tracks = [
             {
                 "track_id": track["track_id"],
@@ -112,11 +121,11 @@ class DirectionAnalyzer:
                 "opposition": bool(track["opposition"]),
                 "frame_ids": list(track["frame_ids"]),
             }
-            for track in self._active
+            for track in observed_tracks
         ]
         opposition_count = sum(
             track["opposition"] and len(track["frame_ids"]) >= min_frames
-            for track in self._active
+            for track in observed_tracks
         )
         return {
             "opposition_count": int(opposition_count),
@@ -254,6 +263,7 @@ class DirectionAnalyzer:
         frame_id: str,
         *,
         min_frames: int,
+        timestamp_seconds: float,
     ) -> list[dict[str, Any]]:
         unmatched = set(range(len(self._active)))
         next_active: list[dict[str, Any]] = []
@@ -269,7 +279,30 @@ class DirectionAnalyzer:
                     continue
                 ox, oy = old["center"]
                 distance = math.hypot(cx - ox, cy - oy)
+                missed_frames = old.get("_missed_frames", 0)
+                elapsed = timestamp_seconds - old["_last_seen_timestamp"]
+                if (
+                    elapsed > _MAX_TRACK_GAP_SECONDS
+                    or distance > _MAX_TRACK_GAP_DISTANCE_PX
+                    or missed_frames > _MAX_TRACK_MISSED_FRAMES
+                ):
+                    continue
                 threshold = max(38.0, candidate["motion_norm"] * 2.8)
+                if missed_frames:
+                    threshold = min(
+                        threshold * (missed_frames + 1),
+                        _MAX_TRACK_GAP_DISTANCE_PX,
+                    )
+                    if distance >= _TRACK_GAP_ALIGNMENT_MIN_DISTANCE_PX:
+                        old_motion = math.hypot(old["dx_px"], old["dy_px"])
+                        alignment = (
+                            ((cx - ox) * old["dx_px"] + (cy - oy) * old["dy_px"])
+                            / (distance * old_motion)
+                            if old_motion > 0
+                            else -1.0
+                        )
+                        if alignment < _TRACK_GAP_ALIGNMENT_COSINE:
+                            continue
                 if distance <= threshold:
                     possible.append((distance, index))
             if possible:
@@ -277,7 +310,10 @@ class DirectionAnalyzer:
                 unmatched.remove(matched_index)
                 previous = self._active[matched_index]
                 frame_ids = list(previous["frame_ids"])
-                if not frame_ids or frame_ids[-1] != frame_id:
+                previous_frame_id = self._previous_frame_id
+                if previous_frame_id is not None and previous_frame_id not in frame_ids:
+                    frame_ids.append(previous_frame_id)
+                if frame_id not in frame_ids:
                     frame_ids.append(frame_id)
                 if len(frame_ids) > max(min_frames, _MAX_TRACK_HISTORY):
                     frame_ids = frame_ids[-max(min_frames, _MAX_TRACK_HISTORY) :]
@@ -286,6 +322,8 @@ class DirectionAnalyzer:
                         **candidate,
                         "track_id": previous["track_id"],
                         "frame_ids": frame_ids,
+                        "_missed_frames": 0,
+                        "_last_seen_timestamp": timestamp_seconds,
                     }
                 )
             else:
@@ -302,6 +340,22 @@ class DirectionAnalyzer:
                         **candidate,
                         "track_id": track_id,
                         "frame_ids": frame_ids,
+                        "_missed_frames": 0,
+                        "_last_seen_timestamp": timestamp_seconds,
+                    }
+                )
+        for index in sorted(unmatched):
+            previous = self._active[index]
+            missed_frames = previous.get("_missed_frames", 0) + 1
+            elapsed = timestamp_seconds - previous["_last_seen_timestamp"]
+            if (
+                missed_frames <= _MAX_TRACK_MISSED_FRAMES
+                and elapsed <= _MAX_TRACK_GAP_SECONDS
+            ):
+                next_active.append(
+                    {
+                        **previous,
+                        "_missed_frames": missed_frames,
                     }
                 )
         return next_active

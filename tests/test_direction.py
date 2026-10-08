@@ -40,6 +40,18 @@ def _analyze_sequence(frames, params=None):
     return [analyzer.update(frame, selected_params) for frame in frames]
 
 
+def _opposing_flow_candidate(center=(250.0, 220.0)):
+    return {
+        "lane_id": "northbound",
+        "center": center,
+        "region": (250, 220, 32, 28),
+        "dx_px": 0.0,
+        "dy_px": 5.0,
+        "opposition": True,
+        "motion_norm": 5.0,
+    }
+
+
 def test_direction_is_derived_from_pixels_in_both_lanes_and_recolored_video():
     params = default_lane_params()
     for normal_frames in (
@@ -74,6 +86,154 @@ def test_wrong_way_detection_covers_both_normal_lane_directions(seed, expected_l
         track["lane_id"] == expected_lane and len(track["frame_ids"]) >= 3
         for track in _opposing_tracks(values)
     )
+
+
+def test_wrong_way_track_survives_irregular_camera_sampling():
+    from visionflow.road_scene import RoadWorld
+
+    def sampled_frames(inject_wrong_way):
+        world = RoadWorld(seed=42)
+        for source_tick in range(1, 9):
+            world.render(source_tick / 8.4)
+        if inject_wrong_way:
+            world.inject("wrong_way")
+
+        frames = []
+        next_observation_time = 1.0
+        for source_tick in range(9, 51):
+            timestamp = source_tick / 8.4
+            pixels = world.render(timestamp)
+            if timestamp + 1e-9 < next_observation_time:
+                continue
+            frames.append(
+                Frame(
+                    frame_id=f"irregular-road:{source_tick}",
+                    image=pixels,
+                    timestamp_seconds=timestamp,
+                )
+            )
+            next_observation_time += 0.2
+        return frames
+
+    frames = sampled_frames(inject_wrong_way=True)
+    intervals = [
+        right.timestamp_seconds - left.timestamp_seconds
+        for left, right in zip(frames, frames[1:])
+    ]
+    assert min(intervals) < 0.13
+    assert max(intervals) > 0.23
+
+    params = default_lane_params()
+    normal_values = _analyze_sequence(sampled_frames(inject_wrong_way=False), params)
+    assert all(value["opposition_count"] == 0 for value in normal_values)
+
+    values = _analyze_sequence(frames, params)
+
+    assert any(
+        track["lane_id"] == "northbound" and len(track["frame_ids"]) >= 3
+        for track in _opposing_tracks(values)
+    )
+    observed_frame_ids = {frame.frame_id for frame in frames}
+    assert all(
+        set(track["frame_ids"]) <= observed_frame_ids
+        for track in _opposing_tracks(values)
+    )
+
+
+def test_confirmed_opposition_is_not_reported_without_a_current_candidate(monkeypatch):
+    DirectionAnalyzer, _direction_handler = _load_direction_types()
+    params = default_lane_params()
+    params["lanes"] = params["lanes"][:1]
+    initial = road_frames(None, count=1, seed=43)[0]
+    analyzer = DirectionAnalyzer()
+    candidates = iter(
+        [
+            [_opposing_flow_candidate()],
+            [_opposing_flow_candidate((251.0, 225.0))],
+            [],
+            [],
+        ]
+    )
+    monkeypatch.setattr(
+        analyzer,
+        "_lane_candidates",
+        lambda *_args, **_kwargs: next(candidates),
+    )
+    frames = [
+        Frame(f"coasting:{index}", initial.image, index / 5.0)
+        for index in range(5)
+    ]
+
+    values = [analyzer.update(frame, params) for frame in frames]
+
+    assert values[2]["opposition_count"] == 1
+    assert values[3]["opposition_count"] == 0
+    assert values[4]["opposition_count"] == 0
+    assert values[3]["tracks"] == []
+    assert values[4]["tracks"] == []
+
+
+def test_long_camera_pause_expires_track_evidence(monkeypatch):
+    DirectionAnalyzer, _direction_handler = _load_direction_types()
+    params = default_lane_params()
+    params["lanes"] = params["lanes"][:1]
+    initial = road_frames(None, count=1, seed=47)[0]
+    analyzer = DirectionAnalyzer()
+    candidates = iter(
+        [
+            [_opposing_flow_candidate()],
+            [_opposing_flow_candidate((251.0, 225.0))],
+            [_opposing_flow_candidate((252.0, 230.0))],
+        ]
+    )
+    monkeypatch.setattr(
+        analyzer,
+        "_lane_candidates",
+        lambda *_args, **_kwargs: next(candidates),
+    )
+
+    analyzer.update(Frame("long-pause:0", initial.image, 0.0), params)
+    analyzer.update(Frame("long-pause:1", initial.image, 0.2), params)
+    confirmed = analyzer.update(Frame("long-pause:2", initial.image, 0.4), params)
+    resumed = analyzer.update(Frame("long-pause:3", initial.image, 10.0), params)
+
+    old_track_id = confirmed["tracks"][0]["track_id"]
+    resumed_track = resumed["tracks"][0]
+    assert confirmed["opposition_count"] == 1
+    assert resumed["opposition_count"] == 0
+    assert resumed_track["track_id"] != old_track_id
+    assert resumed_track["frame_ids"] == ["long-pause:2", "long-pause:3"]
+
+
+def test_distant_candidate_after_gap_does_not_reuse_old_evidence(monkeypatch):
+    DirectionAnalyzer, _direction_handler = _load_direction_types()
+    params = default_lane_params()
+    params["lanes"] = params["lanes"][:1]
+    initial = road_frames(None, count=1, seed=53)[0]
+    analyzer = DirectionAnalyzer()
+    candidates = iter(
+        [
+            [_opposing_flow_candidate()],
+            [],
+            [_opposing_flow_candidate((400.0, 220.0))],
+        ]
+    )
+    monkeypatch.setattr(
+        analyzer,
+        "_lane_candidates",
+        lambda *_args, **_kwargs: next(candidates),
+    )
+
+    analyzer.update(Frame("far-gap:0", initial.image, 0.0), params)
+    original = analyzer.update(Frame("far-gap:1", initial.image, 0.2), params)
+    analyzer.update(Frame("far-gap:2", initial.image, 0.4), params)
+    distant = analyzer.update(Frame("far-gap:3", initial.image, 0.6), params)
+
+    old_track_id = original["tracks"][0]["track_id"]
+    assert len(distant["tracks"]) == 1
+    assert distant["tracks"][0]["track_id"] != old_track_id
+    assert distant["tracks"][0]["frame_ids"] == ["far-gap:2", "far-gap:3"]
+    assert distant["opposition_count"] == 0
 
 
 def test_reversing_saved_pixels_changes_the_detected_directions():
