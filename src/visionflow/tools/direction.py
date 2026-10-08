@@ -17,6 +17,7 @@ _DEFAULT_MIN_FRAMES = 3
 _DEFAULT_MIN_DISPLACEMENT = 4.0
 _DEFAULT_OPPOSITION_COSINE = -0.75
 _MAX_CORNERS = 240
+_MAX_FLOW_DIMENSION = 192
 _FLOW_PYR_SCALE = 0.5
 _FLOW_LEVELS = 3
 _FLOW_WINDOW_SIZE = 9
@@ -171,9 +172,24 @@ class DirectionAnalyzer:
             )
             if corners is None or len(corners) < 2:
                 return []
+            flow_width, flow_height, scale_x, scale_y = _flow_resolution(width, height)
+            if scale_x == 1.0 and scale_y == 1.0:
+                previous_flow_input = previous
+                current_flow_input = current
+            else:
+                previous_flow_input = cv2.resize(
+                    previous,
+                    (flow_width, flow_height),
+                    interpolation=cv2.INTER_AREA,
+                )
+                current_flow_input = cv2.resize(
+                    current,
+                    (flow_width, flow_height),
+                    interpolation=cv2.INTER_AREA,
+                )
             forward_flow = cv2.calcOpticalFlowFarneback(
-                previous,
-                current,
+                previous_flow_input,
+                current_flow_input,
                 None,
                 _FLOW_PYR_SCALE,
                 _FLOW_LEVELS,
@@ -184,18 +200,28 @@ class DirectionAnalyzer:
                 0,
             )
             start = corners.reshape(-1, 2)
-            start_in_bounds = _points_inside_flow_field(start, forward_flow)
+            start_flow = _source_to_flow_coordinates(start, scale_x, scale_y)
+            start_in_bounds = (
+                _points_inside_flow_field(start, previous)
+                & _points_inside_flow_field(start_flow, forward_flow)
+            )
             displacement = np.full_like(start, np.nan)
-            displacement[start_in_bounds] = _sample_flow(
+            displacement_flow = np.full_like(start, np.nan)
+            displacement_flow[start_in_bounds] = _sample_flow(
                 forward_flow,
-                start[start_in_bounds],
+                start_flow[start_in_bounds],
+            )
+            displacement[start_in_bounds] = _flow_vectors_to_source(
+                displacement_flow[start_in_bounds],
+                scale_x,
+                scale_y,
             )
             finish = start + displacement
             del forward_flow
 
             backward_flow = cv2.calcOpticalFlowFarneback(
-                current,
-                previous,
+                current_flow_input,
+                previous_flow_input,
                 None,
                 _FLOW_PYR_SCALE,
                 _FLOW_LEVELS,
@@ -205,12 +231,22 @@ class DirectionAnalyzer:
                 _FLOW_POLY_SIGMA,
                 0,
             )
-            finish_in_bounds = _points_inside_flow_field(finish, backward_flow)
+            finish_flow = _source_to_flow_coordinates(finish, scale_x, scale_y)
+            finish_in_bounds = (
+                _points_inside_flow_field(finish, current)
+                & _points_inside_flow_field(finish_flow, backward_flow)
+            )
             valid_endpoints = start_in_bounds & finish_in_bounds
-            backward_displacement = np.full_like(start, np.nan)
-            backward_displacement[valid_endpoints] = _sample_flow(
+            backward_displacement_flow = np.full_like(start, np.nan)
+            backward_displacement_flow[valid_endpoints] = _sample_flow(
                 backward_flow,
-                finish[valid_endpoints],
+                finish_flow[valid_endpoints],
+            )
+            backward_displacement = np.full_like(start, np.nan)
+            backward_displacement[valid_endpoints] = _flow_vectors_to_source(
+                backward_displacement_flow[valid_endpoints],
+                scale_x,
+                scale_y,
             )
             returned = finish + backward_displacement
             del backward_flow
@@ -548,6 +584,41 @@ def _sample_flow(flow: np.ndarray, points: np.ndarray) -> np.ndarray:
         borderValue=0,
     )
     return np.column_stack((sampled_x.reshape(-1), sampled_y.reshape(-1)))
+
+
+def _flow_resolution(
+    width: int,
+    height: int,
+) -> tuple[int, int, float, float]:
+    scale = min(1.0, _MAX_FLOW_DIMENSION / max(width, height))
+    flow_width = max(1, int(round(width * scale)))
+    flow_height = max(1, int(round(height * scale)))
+    return (
+        flow_width,
+        flow_height,
+        flow_width / width,
+        flow_height / height,
+    )
+
+
+def _source_to_flow_coordinates(
+    points: np.ndarray,
+    scale_x: float,
+    scale_y: float,
+) -> np.ndarray:
+    """Map source pixel centers through the exact rounded resize scales."""
+    scales = np.asarray([scale_x, scale_y], dtype=np.float32)
+    return (points.astype(np.float32, copy=False) + 0.5) * scales - 0.5
+
+
+def _flow_vectors_to_source(
+    vectors: np.ndarray,
+    scale_x: float,
+    scale_y: float,
+) -> np.ndarray:
+    """Convert dense-flow displacement units back to source-crop pixels."""
+    inverse_scales = np.asarray([1.0 / scale_x, 1.0 / scale_y], dtype=np.float32)
+    return vectors * inverse_scales
 
 
 def _points_inside_flow_field(points: np.ndarray, flow: np.ndarray) -> np.ndarray:

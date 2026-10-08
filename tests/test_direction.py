@@ -490,7 +490,8 @@ def test_handler_returns_only_the_public_direction_metrics():
     }
     assert metrics["warmup"] is True
 
-def test_recorded_grayscale_flow_is_confirmed_across_three_observed_frames():
+
+def test_recorded_grayscale_flow_is_confirmed_across_three_observed_frames(monkeypatch):
     import hashlib
     import json
     from pathlib import Path
@@ -526,6 +527,15 @@ def test_recorded_grayscale_flow_is_confirmed_across_three_observed_frames():
                 record["timestamp_seconds"],
             )
         )
+
+    flow_shapes = []
+    calc_flow = cv2.calcOpticalFlowFarneback
+
+    def record_flow_shape(previous, current, initial, *options):
+        flow_shapes.append(previous.shape)
+        return calc_flow(previous, current, initial, *options)
+
+    monkeypatch.setattr(cv2, "calcOpticalFlowFarneback", record_flow_shape)
 
     observed_frame_ids = [frame.frame_id for frame in frames]
     assert len(set(observed_frame_ids)) == 3
@@ -586,6 +596,63 @@ def test_recorded_grayscale_flow_is_confirmed_across_three_observed_frames():
     ]
     assert values[-1]["opposition_count"] >= 1
     assert confirmed
+    assert flow_shapes
+    assert set(flow_shapes) == {(180, 192)}
+
+
+def test_flow_grid_uses_rounded_aspect_scales_and_resize_pixel_centers():
+    from visionflow.tools.direction import (
+        _flow_resolution,
+        _flow_vectors_to_source,
+        _points_inside_flow_field,
+        _source_to_flow_coordinates,
+    )
+
+    assert _flow_resolution(160, 120) == (160, 120, 1.0, 1.0)
+    small_points = np.asarray([[0.0, 0.0], [159.0, 119.0]], dtype=np.float32)
+    assert _source_to_flow_coordinates(small_points, 1.0, 1.0) == pytest.approx(
+        small_points
+    )
+    width, height, scale_x, scale_y = _flow_resolution(480, 450)
+    assert (width, height) == (192, 180)
+    assert (scale_x, scale_y) == pytest.approx((0.4, 0.4))
+
+    width, height, scale_x, scale_y = _flow_resolution(480, 451)
+    assert (width, height) == (192, 180)
+    assert scale_x == pytest.approx(192 / 480)
+    assert scale_y == pytest.approx(180 / 451)
+    assert scale_x != scale_y
+
+    width, height, scale_x, scale_y = _flow_resolution(721, 540)
+    assert (width, height) == (192, 144)
+    assert scale_x == pytest.approx(192 / 721)
+    assert scale_y == pytest.approx(144 / 540)
+    assert scale_x != scale_y
+
+    points = np.asarray([[10.0, 20.0], [0.0, 0.0]], dtype=np.float32)
+    transformed = _source_to_flow_coordinates(points, scale_x, scale_y)
+    assert transformed[0] == pytest.approx(
+        [(10.0 + 0.5) * scale_x - 0.5, (20.0 + 0.5) * scale_y - 0.5]
+    )
+    assert transformed[1] == pytest.approx(
+        [0.5 * scale_x - 0.5, 0.5 * scale_y - 0.5]
+    )
+    edge_flow = np.zeros((height, width, 2), dtype=np.float32)
+    edge = _source_to_flow_coordinates(
+        np.asarray([[0.0, 0.0]], dtype=np.float32),
+        scale_x,
+        scale_y,
+    )
+    assert not _points_inside_flow_field(edge, edge_flow).item()
+    last_support_overrun = np.asarray(
+        [[width - 1 + 0.001, height - 1]],
+        dtype=np.float32,
+    )
+    assert not _points_inside_flow_field(last_support_overrun, edge_flow).item()
+
+    vectors = np.asarray([[3.0, 4.0]], dtype=np.float32)
+    restored = _flow_vectors_to_source(vectors, scale_x, scale_y)
+    assert restored[0] == pytest.approx([3.0 / scale_x, 4.0 / scale_y])
 
 
 def test_dense_flow_sampling_interpolates_xy_and_handles_empty_or_invalid_points():
@@ -606,11 +673,15 @@ def test_dense_flow_sampling_interpolates_xy_and_handles_empty_or_invalid_points
     assert _sample_flow(flow, empty).shape == (0, 2)
 
     outside = np.asarray([[4.01, 1.0]], dtype=np.float32)
+    subpixel_past_edge = np.asarray([[4.0001, 1.0]], dtype=np.float32)
     nonfinite = np.asarray([[np.nan, 1.0]], dtype=np.float32)
     assert not _points_inside_flow_field(outside, flow).item()
+    assert not _points_inside_flow_field(subpixel_past_edge, flow).item()
     assert not _points_inside_flow_field(nonfinite, flow).item()
     with pytest.raises(ValueError, match="inside the lane crop"):
         _sample_flow(flow, outside)
+    with pytest.raises(ValueError, match="inside the lane crop"):
+        _sample_flow(flow, subpixel_past_edge)
     with pytest.raises(ValueError, match="inside the lane crop"):
         _sample_flow(flow, nonfinite)
 
