@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-PUBLIC_ROOT = {"README.md", "LICENSE", "pyproject.toml", "requirements.lock"}
+PUBLIC_ROOT = {"README.md", "README_de.md", "LICENSE", "pyproject.toml", "requirements.lock"}
 PUBLIC_DOCS = {"docs/TESTING.md", "docs/AWS_ACCEPTANCE.md", "docs/TECHNICAL_REPORT.md",
                "docs/ARCHITECTURE.md", "docs/JURY_INSTRUCTIONS.md",
                "docs/SYNTHETIC_EVALUATION.md"}
@@ -40,7 +40,7 @@ def public_path(name: str) -> bool:
         return False
     if Path(name).suffix.lower() in {".pem", ".key", ".pfx", ".db", ".log", ".pyc"}:
         return False
-    return name in PUBLIC_ROOT | PUBLIC_DOCS or name.startswith(("src/", "tests/", "examples/", "cloud/", "evaluation/"))
+    return name in PUBLIC_ROOT | PUBLIC_DOCS or name.startswith(("src/", "tests/", "examples/", "cloud/", "evaluation/", "docs/media/"))
 
 
 def package_source(repo: Path, output: Path) -> dict:

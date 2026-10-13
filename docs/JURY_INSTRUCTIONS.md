@@ -1,37 +1,58 @@
-# VisionFlow jury reproduction
+# VisionFlow – instructions for judges
 
-Product revision checked on 2026-10-08: `e65ef914b4a27727481ad604ee3384ee13f5b27c`. The repository is private. The submission's uploaded source archive provides the allowlisted source for local inspection; a repository URL alone does not grant access.
+## 1. Live demo (no installation)
 
-## Install and run the offline demonstration
+<!-- LIVE_DEMO_URL -->
 
-Use Python 3.12 or newer. FFmpeg with the `libx264` encoder is required for road evidence clips. Git must be on PATH to run the complete testsuite, including source-packaging tests. Extract `source.zip` from the jury bundle into a new directory and run these commands from that extracted source directory.
+1. Open the URL in a desktop browser. The top section explains the loop; below it is the
+   **wrong-way driver warning** control room.
+2. In room 1, choose a fixed offline answer under *Fixed offline test answer (profile)*, then
+   press **Inject wrong-way driver** (or bird / leaf). Injecting is not a detection: the server
+   analyses the rendered frames with OpenCV and opens a case only if it finds opposing motion.
+3. Follow the cable to room 2 (OpenCV stage, clip and model answer), room 3 (human review of the
+   hash-verified clip: confirm or deny) and room 4 (the real deadline if nobody decides).
+4. The **Reusable workflows** tab runs the same controller on a document photo: use *Sample
+   document (blurred)*, start the run, upload a sharper image when asked.
 
-```powershell
+The public demo uses synthetic traffic, fixed offline model answers and a simulated authority
+inbox. Each camera session ends after two minutes; at most four sessions run at once (“All demo
+cameras are busy” means: try again a minute later).
+
+## 2. Run it locally
+
+Python 3.12+ and FFmpeg with `libx264` (for road clips). From the source archive or repository:
+
+```bash
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.lock
-.\.venv\Scripts\python.exe -m pip install --no-deps -e .
-.\.venv\Scripts\python.exe -m pip check
-.\.venv\Scripts\python.exe -m visionflow.cli demo run --output-dir .local/jury-demo-01
+.venv/bin/python -m pip install -r requirements.lock      # Windows: .venv\Scripts\python.exe
+.venv/bin/python -m pip install --no-deps -e .
+.venv/bin/python -m visionflow.cli serve --port 8765      # open http://127.0.0.1:8765/
 ```
 
-On macOS/Linux, use `.venv/bin/python` instead of `.venv\Scripts\python.exe`. Installation downloads the declared dependencies; the demonstrated document and motion workflows run offline. Choose a new output directory for every run. Expected JSON includes `status: "passed"`, `model_mode: "fixture"`, `network_used: false`, measured sharpness values, actual frame IDs and paths to trace and evidence files. Evidence files with `.bin` extensions contain decodable PNG bytes.
+Offline end-to-end demo without a server: `.venv/bin/python -m visionflow.cli demo run
+--output-dir ./demo-out-01`. Expected JSON: `status: passed`, `model_mode: fixture`,
+`network_used: false`, measured sharpness values, real frame IDs and trace/evidence paths.
 
-## Open the local interface
+Optional live model review: set `GEMINI_API_KEY`, start `serve --allow-gemini-costs` and choose
+the Gemini model in room 1 (provider costs may apply; at most two requests per case).
 
-```powershell
-.\.venv\Scripts\python.exe -m visionflow.cli serve --host 127.0.0.1 --port 8765 --data-dir .local/jury-server-data
+## 3. Verify
+
+```bash
+.venv/bin/python -m pytest -q
+.venv/bin/python evaluation/roadworld_eval.py
 ```
 
-Open `http://127.0.0.1:8765/`. The road tab shows synthetic traffic and explicitly selected offline model profiles. Inject a wrong-way event into a running case, inspect its immutable server clip and hash, and follow the human confirmation or rejection flow. Notifications and later corrections reach a simulated local inbox. They do not contact an authority. Stop the server with Ctrl+C.
+The evaluation prints the RoadWorld counts (normal 0/4, wrong-way 4/4, bird 4/4, leaf 4/4) and
+the first candidate frame per sequence. Browser acceptance scripts are described in
+[TESTING.md](TESTING.md).
 
-The movie demonstrates the actual local interface at recorded revision `096c085`, with synthetic traffic, offline fixtures and simulated recipients. It is not a live Gemini or AWS recording. The later native-patch direction fix and corner-spacing change have separate source, original-image regression and actual browser evidence; the movie does not demonstrate that later algorithm. Personal GUI acceptance remains reserved for the project owner.
+## 4. Where to look
 
-## Verification and remaining gates
+* [Technical report](TECHNICAL_REPORT.md) – problem, users, architecture, OpenCV 5, AWS,
+  evaluation, limitations, responsible use.
+* [Architecture](ARCHITECTURE.md) – components, agent workflow, AWS deployment.
+* [Synthetic evaluation](SYNTHETIC_EVALUATION.md) – protocol and failure cases.
+* [AWS acceptance](AWS_ACCEPTANCE.md) and `cloud/demo/` – reproducible cloud runs.
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-```
-
-The isolated Mac regression passed 549 checks on the tested product revision above. Actual Windows/Microsoft Edge and Mac/Playwright Chromium runs each passed all three complete road cases and eleven checks, with unchanged waits, no browser errors and no external requests. Earlier failed runs remain documented. The direction matcher identifies geometric motion; all bird and leaf sequences in the frozen evaluation also trigger it, so it does not classify vehicles. See [the technical report](TECHNICAL_REPORT.md), [synthetic evaluation](SYNTHETIC_EVALUATION.md), [testing instructions](TESTING.md) and [architecture](ARCHITECTURE.md) for scope and limitations.
-
-The [AWS recipe](AWS_ACCEPTANCE.md) requires separate approval for a one-attempt CodeBuild execution with exact source/evidence verification and cleanup. No completed AWS or live-provider run is claimed in this bundle. A public jury endpoint or an agreed screenshare demonstration remains a separate access requirement; local reproduction instructions do not prove that arrangement. The entry remains a draft until the outstanding execution, access and submission gates are resolved.
+Contact for a live screen-share walkthrough: through the Devpost project page.

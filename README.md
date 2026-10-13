@@ -159,7 +159,7 @@ can be rerun with [`evaluation/roadworld_eval.py`](evaluation/roadworld_eval.py)
   wrong-way-vehicle detector it gives TP 4, FP 8, TN 4, FN 0. Telling the bird and the leaf apart
   from a car is exactly the job of the model and human stages behind it.
 
-<!-- GEMINI_RESULTS -->
+Live model test (13 October 2026): five real Gemini video requests. The provider answered HTTP 503 ("high demand") or exceeded the 30-second client bound, and in every case the policy fell back to human review and the deadline, as designed. No model accuracy is claimed.
 
 Limits: all traffic is synthetic, the parameters were tuned on known sequences (no blinded
 holdout), and nothing here is a claim about real-road safety. Notifications are simulated.
@@ -170,7 +170,7 @@ holdout), and nothing here is a claim about real-road safety. Notifications are 
 .venv/bin/python -m pytest -q
 ```
 
-<!-- TEST_RESULTS -->
+On Windows 11 with Python 3.12.10, OpenCV 5.0.0 and NumPy 2.5.3 the suite reports **560 passed, 1 skipped** (the directory-symlink test needs a Windows privilege), 0 failed (2026-10-13, commit bde0e67).
 
 Browser acceptance scripts (Playwright with Edge or Chromium) live in `tests/` and are described
 in [docs/TESTING.md](docs/TESTING.md).
