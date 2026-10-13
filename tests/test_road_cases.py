@@ -947,6 +947,19 @@ def test_real_road_case_reaches_human_review_from_recorded_wrong_way_pixels(tmp_
     try:
         time.sleep(1.0)  # Let the initial road scene warm up before injecting pixels.
         case = service.start(owner_id, source_id, "fixture", fixture_profile="pending")
+        # Match the UI's readiness gate: three actual analysed frames, rather
+        # than assuming the detector is ready when the source has warmed up.
+        warmup_deadline = time.monotonic() + 30.0
+        analysed = []
+        while time.monotonic() < warmup_deadline:
+            ready = service.snapshot(owner_id, case["case_id"])
+            analysed = [row for row in ready["perception_trace"] if row.get("type") in {
+                "frame_analyzed", "frame_observed", "observation_frame",
+            }]
+            if len(analysed) >= 3:
+                break
+            time.sleep(0.1)
+        assert len(analysed) >= 3, "detector did not reach the UI readiness gate"
         road_sessions.inject(owner_id, source_id, "wrong_way")
 
         # Real pixel matching and FFmpeg export share the host with other work;
