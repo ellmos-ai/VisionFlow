@@ -802,6 +802,13 @@ class RoadCaseService:
             if case.finalized or case.cancel_event.is_set():
                 return
             case.finalized = True
+        # The run (observation, clip export, model exchange) is over and the evidence
+        # clip is sealed, so the camera can already feed the next case while this one
+        # waits for its decision.
+        with self._lock:
+            source_key = (case.owner_id, case.source_id)
+            if self._active_by_source.get(source_key) == case.case_id:
+                self._active_by_source.pop(source_key, None)
         findings = getattr(result, "findings", [])
         manifest = None
         try:

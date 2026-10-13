@@ -995,3 +995,20 @@ def test_obtain_clip_retries_when_bounded_exports_are_busy(tmp_path):
 
     assert service._obtain_clip(case, context) is expected
     assert calls == [4.0, 4.0, 4.0]
+
+
+def test_source_is_free_for_a_new_case_once_the_first_is_in_review(tmp_path):
+    fixture = _fixture(tmp_path)
+    service = fixture["service"]
+    case = service.start("alice", "road-sim-a", "fixture", fixture_profile="pending")
+    adapter, findings = _adapter_for(fixture, case)
+    adapter.ask("Review the direction candidate", findings)
+    fixture["controller"].complete(case["run_id"], findings=findings)
+    _wait_for_phase(service, "alice", case["case_id"], {"human_review"})
+
+    # The evidence clip is sealed; the camera can feed the next case meanwhile.
+    second = service.start("alice", "road-sim-a", "fixture", fixture_profile="bird")
+    assert second["case_id"] != case["case_id"]
+    assert service.snapshot("alice", case["case_id"])["phase"] == "human_review"
+    service.cancel("alice", second["case_id"])
+    service.close()
