@@ -85,7 +85,7 @@ A workflow is a small DAG of `analyze`, `observe`, `branch`, `ask_model`, `reque
 
 | Workflow | Input | What the pixels change |
 |---|---|---|
-| `document-quality.json` | image | The sharpness measurement leads to a request for a new photo; the replacement is measured again |
+| `document-quality.json` | image | Measures sharpness, requests a replacement photo (a fixed step of this template) and measures the replacement again |
 | `motion-observation.json` | video | Measured motion goes to the model, which may request a bounded follow-up observation from the same video cursor, then a report |
 | `road-monitor.json` | camera | Opposing motion stops the observation and selects the candidate branch |
 | `road-review.json` | camera | Opposing motion opens an evidence case with model review, human decision and simulated escalation |
