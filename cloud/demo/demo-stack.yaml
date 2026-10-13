@@ -1,0 +1,242 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  VisionFlow public jury demo. One AWS Graviton (arm64) instance runs the
+  unchanged loopback-only VisionFlow server in --public-demo mode behind nginx;
+  CloudFront provides HTTPS. Port 80 accepts only CloudFront origin traffic that
+  carries the stack's secret header. No SSH; administration through SSM.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t4g.small
+    AllowedValues: [t4g.micro, t4g.small, t4g.medium]
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id
+  CloudFrontPrefixListId:
+    Type: String
+    Description: Managed prefix list com.amazonaws.global.cloudfront.origin-facing in this region.
+  OriginSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    AllowedPattern: "[A-Za-z0-9]+"
+    Description: Random value CloudFront sends as X-Origin-Verify; nginx rejects requests without it.
+  SourceKey:
+    Type: String
+    Default: source/visionflow-source.zip
+
+Resources:
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+
+  SourceBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SourceBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt SourceBucket.Arn
+              - !Sub "${SourceBucket.Arn}/*"
+            Condition: {Bool: {"aws:SecureTransport": "false"}}
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: read-demo-source
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "${SourceBucket.Arn}/${SourceKey}"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  DemoSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: VisionFlow demo - HTTP from CloudFront origin-facing ranges only
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourcePrefixListId: !Ref CloudFrontPrefixListId
+
+  DemoInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds: [!GetAtt DemoSecurityGroup.GroupId]
+      MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled}
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs: {VolumeSize: 16, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true}
+      Tags:
+        - {Key: Name, Value: visionflow-jury-demo}
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          exec > /var/log/visionflow-bootstrap.log 2>&1
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -q
+          apt-get install -y -q python3.12-venv ffmpeg nginx unzip libgl1 libglib2.0-0t64
+          snap install aws-cli --classic
+          useradd --system --home-dir /opt/visionflow --shell /usr/sbin/nologin visionflow || true
+          install -d -o root -g root /opt/visionflow
+          for attempt in $(seq 1 180); do
+            if /snap/bin/aws s3 cp "s3://${SourceBucket}/${SourceKey}" /opt/visionflow/source.zip --region "${AWS::Region}"; then break; fi
+            sleep 10
+          done
+          test -s /opt/visionflow/source.zip
+          sha256sum /opt/visionflow/source.zip
+          rm -rf /opt/visionflow/app && install -d /opt/visionflow/app
+          unzip -q /opt/visionflow/source.zip -d /opt/visionflow/app
+          python3.12 -m venv /opt/visionflow/venv
+          /opt/visionflow/venv/bin/python -m pip install --no-cache-dir -r /opt/visionflow/app/requirements.lock
+          /opt/visionflow/venv/bin/python -m pip install --no-cache-dir --no-deps /opt/visionflow/app
+          /opt/visionflow/venv/bin/python -m pip check
+          /opt/visionflow/venv/bin/python -c "import cv2, numpy, platform; print(platform.machine(), cv2.__version__, numpy.__version__)"
+          install -d -o visionflow -g visionflow /var/lib/visionflow
+
+          cat > /etc/systemd/system/visionflow.service <<'UNIT'
+          [Unit]
+          Description=VisionFlow public jury demo (loopback, behind nginx)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          User=visionflow
+          Group=visionflow
+          Environment=PYTHONIOENCODING=utf-8
+          ExecStartPre=/bin/rm -rf /var/lib/visionflow/data
+          ExecStart=/opt/visionflow/venv/bin/python -m visionflow.cli serve --public-demo --max-live-sessions 4 --host 127.0.0.1 --port 8765 --data-dir /var/lib/visionflow/data
+          Restart=always
+          RestartSec=3
+          RuntimeMaxSec=86400
+          MemoryMax=1400M
+          NoNewPrivileges=true
+          ProtectSystem=strict
+          ProtectHome=true
+          PrivateTmp=true
+          ReadWritePaths=/var/lib/visionflow
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          cat > /etc/nginx/sites-available/visionflow <<'NGINX'
+          # The VisionFlow server only trusts its own loopback Host/Origin; nginx maps
+          # the public CloudFront origin onto it after CloudFront proved itself.
+          map $http_origin $vf_origin {
+              "" "";
+              "~^https://[a-z0-9]+\.cloudfront\.net$" "http://127.0.0.1:8765";
+              default "https://rejected.invalid";
+          }
+          # CloudFront appends the viewer address as the last X-Forwarded-For entry.
+          map $http_x_forwarded_for $vf_client {
+              "~(?<last>[^,\s]+)\s*$" $last;
+              default $remote_addr;
+          }
+          limit_req_zone $vf_client zone=vf_create:10m rate=10r/m;
+          server {
+              listen 80 default_server;
+              server_name _;
+              client_max_body_size 64m;
+              if ($http_x_origin_verify != "${OriginSecret}") { return 403; }
+              proxy_http_version 1.1;
+              proxy_set_header Host 127.0.0.1:8765;
+              proxy_set_header Origin $vf_origin;
+              proxy_set_header Connection "";
+              proxy_read_timeout 60s;
+              location ~ ^/(road/sessions|media)$ {
+                  limit_req zone=vf_create burst=5 nodelay;
+                  limit_req_status 429;
+                  proxy_pass http://127.0.0.1:8765;
+              }
+              location / {
+                  proxy_pass http://127.0.0.1:8765;
+              }
+          }
+          NGINX
+          ln -sf /etc/nginx/sites-available/visionflow /etc/nginx/sites-enabled/visionflow
+          rm -f /etc/nginx/sites-enabled/default
+          nginx -t
+          systemctl daemon-reload
+          systemctl enable --now visionflow
+          systemctl restart nginx
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8765/ -o /dev/null; then break; fi
+            sleep 2
+          done
+          echo VISIONFLOW_BOOTSTRAP_DONE
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: VisionFlow public jury demo
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: demo-instance
+            DomainName: !GetAtt DemoInstance.PublicDnsName
+            CustomOriginConfig:
+              HTTPPort: 80
+              OriginProtocolPolicy: http-only
+              OriginReadTimeout: 60
+            OriginCustomHeaders:
+              - HeaderName: X-Origin-Verify
+                HeaderValue: !Ref OriginSecret
+        DefaultCacheBehavior:
+          TargetOriginId: demo-instance
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Managed CachingDisabled and AllViewerExceptHostHeader policies.
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+
+Outputs:
+  DemoUrl:
+    Value: !Sub "https://${Distribution.DomainName}/"
+  SourceBucketName:
+    Value: !Ref SourceBucket
+  SourceKey:
+    Value: !Ref SourceKey
+  InstanceId:
+    Value: !Ref DemoInstance

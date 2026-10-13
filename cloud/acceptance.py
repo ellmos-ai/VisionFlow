@@ -40,7 +40,7 @@ def public_path(name: str) -> bool:
         return False
     if Path(name).suffix.lower() in {".pem", ".key", ".pfx", ".db", ".log", ".pyc"}:
         return False
-    return name in PUBLIC_ROOT | PUBLIC_DOCS or name.startswith(("src/", "tests/", "examples/", "cloud/"))
+    return name in PUBLIC_ROOT | PUBLIC_DOCS or name.startswith(("src/", "tests/", "examples/", "cloud/", "evaluation/"))
 
 
 def package_source(repo: Path, output: Path) -> dict:
