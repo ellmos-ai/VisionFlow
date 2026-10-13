@@ -297,6 +297,8 @@ class RoadWorld:
             self._draw_car(image, x, y, depth, car.color, direction)
 
     def _draw_events(self, image: np.ndarray, source_time: float) -> None:
+        # Event speeds were tuned at 540 px height; keep them resolution-independent.
+        speed = self.height / 540.0
         for event in self._events:
             elapsed = source_time - event.start_time
             if elapsed < 0:
@@ -305,22 +307,22 @@ class RoadWorld:
                 lane = 2 if event.lane is None else event.lane
                 if lane < 2:
                     direction = 1
-                    y = self.height * 0.43 + elapsed * 82.0
+                    y = self.height * 0.43 + elapsed * 82.0 * speed
                 else:
                     direction = -1
-                    y = self.height * 0.73 - elapsed * 82.0
+                    y = self.height * 0.73 - elapsed * 82.0 * speed
                 if -self.height * 0.15 <= y <= self.height * 1.1:
                     depth = self._depth(y)
                     x = self._lane_center(lane, y)
                     self._draw_car(image, x, y, depth, event.color, direction)
             elif event.kind == "bird":
-                y = self.height * 0.65 - elapsed * 105.0
+                y = self.height * 0.65 - elapsed * 105.0 * speed
                 if -self.height * 0.1 <= y <= self.height * 1.1:
                     depth = self._depth(y)
                     x = self._lane_center(3, y)
                     self._draw_bird(image, x, y, depth, elapsed, event.color)
             else:
-                y = self._horizon + self.height * 0.025 + elapsed * 90.0
+                y = self._horizon + self.height * 0.025 + elapsed * 90.0 * speed
                 if -self.height * 0.1 <= y <= self.height * 1.1:
                     depth = self._depth(y)
                     wind = math.sin(elapsed * 2.7) * self.width * 0.01
