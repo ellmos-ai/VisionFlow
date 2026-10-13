@@ -28,7 +28,7 @@ flowchart TD
     CLIP --> ASK[Model request with the same clip<br/>max 2 calls per case]
     ASK -->|hazard = false| DIS[Dismissed]
     ASK -->|vehicle, hazard, confidence ≥ 0.90,<br/>OpenCV confirmed, clip valid| REP[First report]
-    ASK -->|unsure, error, timeout| HUM[Human review, 20 s deadline]
+    ASK -->|unsure, error, timeout| HUM[Human review, 60 s deadline]
     HUM -->|confirm| REP
     HUM -->|reject| DIS
     HUM -->|deadline expires| REP

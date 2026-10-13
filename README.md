@@ -41,7 +41,7 @@ flowchart LR
     CASE --> MODEL[Model review<br/>offline profile or Gemini video]
     MODEL -->|not a hazard| DISMISS[Dismissed as false alarm]
     MODEL -->|vehicle, hazard, confidence ≥ 0.90<br/>and OpenCV confirmed| REPORT[Report sent<br/>to simulated authority]
-    MODEL -->|uncertain or model error| HUMAN[Human review<br/>20 s deadline]
+    MODEL -->|uncertain or model error| HUMAN[Human review<br/>60 s deadline]
     HUMAN -->|confirm| REPORT
     HUMAN -->|reject| DISMISS
     HUMAN -->|no decision| REPORT

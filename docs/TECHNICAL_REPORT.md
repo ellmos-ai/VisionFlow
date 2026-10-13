@@ -70,7 +70,7 @@ diagrams. In short:
    Its typed answer (`object_class`, `hazard`, `confidence`) is validated.
 4. The decision policy acts on it: `hazard = false` dismisses the case; a vehicle hazard with
    confidence ≥ 0.90, OpenCV confirmation and a valid clip is reported at once; everything else,
-   including model errors and timeouts, goes to a human with a 20-second server deadline. No
+   including model errors and timeouts, goes to a human with a 60-second server deadline. No
    decision means an automatic report; a later rejection sends a linked all-clear.
 5. Every transition is in the trace and the case journal; the browser shows the same server
    state in four rooms.

@@ -15,105 +15,6 @@
   "use strict";
   const L = (de, en) => window.VisionFlowI18n ? window.VisionFlowI18n.L(de, en) : en;
 
-  // --- Cartoon SVG Assets (Clean inline SVG Blobs) ---
-  const SVGS = {
-    technicianAlex: `<svg viewBox="0 0 100 100" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="46" fill="#fef08a" stroke="#1e293b" stroke-width="4"/>
-      <!-- Cap -->
-      <path d="M 22 40 Q 50 18 78 40 L 86 44 Q 50 36 14 44 Z" fill="#0284c7" stroke="#1e293b" stroke-width="3"/>
-      <!-- Face -->
-      <circle cx="50" cy="52" r="26" fill="#fed7aa" stroke="#1e293b" stroke-width="3"/>
-      <!-- Eyes & Smile -->
-      <circle cx="42" cy="48" r="3.5" fill="#1e293b"/>
-      <circle cx="58" cy="48" r="3.5" fill="#1e293b"/>
-      <path d="M 44 58 Q 50 64 56 58" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/>
-      <!-- Headset -->
-      <path d="M 28 48 Q 28 32 50 30 Q 72 32 72 48" fill="none" stroke="#334155" stroke-width="4"/>
-      <circle cx="28" cy="48" r="5" fill="#0284c7" stroke="#1e293b" stroke-width="2"/>
-      <path d="M 28 48 Q 38 66 46 62" fill="none" stroke="#334155" stroke-width="3"/>
-      <circle cx="46" cy="62" r="3" fill="#f87171"/>
-      <!-- Safety Vest -->
-      <path d="M 28 78 L 72 78 L 68 96 L 32 96 Z" fill="#eab308" stroke="#1e293b" stroke-width="3"/>
-      <line x1="42" y1="78" x2="40" y2="96" stroke="#ffffff" stroke-width="3"/>
-      <line x1="58" y1="78" x2="60" y2="96" stroke="#ffffff" stroke-width="3"/>
-    </svg>`,
-
-    drKira: `<svg viewBox="0 0 100 100" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="46" fill="#e0f2fe" stroke="#1e293b" stroke-width="4"/>
-      <!-- Hair Bun -->
-      <circle cx="50" cy="24" r="14" fill="#78350f" stroke="#1e293b" stroke-width="3"/>
-      <!-- Hair Base -->
-      <path d="M 24 50 Q 50 24 76 50 Q 80 68 76 74 Q 50 64 24 74 Z" fill="#92400e" stroke="#1e293b" stroke-width="3"/>
-      <!-- Face -->
-      <circle cx="50" cy="52" r="25" fill="#ffedd5" stroke="#1e293b" stroke-width="3"/>
-      <!-- Glasses -->
-      <rect x="34" y="44" width="13" height="10" rx="3" fill="none" stroke="#0284c7" stroke-width="3"/>
-      <rect x="53" y="44" width="13" height="10" rx="3" fill="none" stroke="#0284c7" stroke-width="3"/>
-      <line x1="47" y1="49" x2="53" y2="49" stroke="#0284c7" stroke-width="3"/>
-      <circle cx="40" cy="49" r="2.5" fill="#1e293b"/>
-      <circle cx="60" cy="49" r="2.5" fill="#1e293b"/>
-      <!-- Smile -->
-      <path d="M 45 60 Q 50 65 55 60" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/>
-      <!-- Lab Coat -->
-      <path d="M 28 77 L 72 77 L 68 96 L 32 96 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
-      <path d="M 44 77 L 50 86 L 56 77" fill="#0284c7"/>
-    </svg>`,
-
-    officerSchmidt: `<svg viewBox="0 0 100 100" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="46" fill="#dbeafe" stroke="#1e293b" stroke-width="4"/>
-      <!-- Police Cap -->
-      <path d="M 20 40 Q 50 16 80 40 L 86 46 Q 50 36 14 46 Z" fill="#1e3a8a" stroke="#1e293b" stroke-width="3"/>
-      <polygon points="50,28 54,34 46,34" fill="#fbbf24" stroke="#b45309" stroke-width="1"/>
-      <!-- Face -->
-      <circle cx="50" cy="54" r="26" fill="#fed7aa" stroke="#1e293b" stroke-width="3"/>
-      <!-- Eyes & Friendly Mustache -->
-      <circle cx="42" cy="50" r="3.5" fill="#1e293b"/>
-      <circle cx="58" cy="50" r="3.5" fill="#1e293b"/>
-      <path d="M 38 60 Q 45 56 50 61 Q 55 56 62 60 Q 50 66 38 60 Z" fill="#78350f" stroke="#1e293b" stroke-width="2"/>
-      <!-- Uniform Shirt & Tie -->
-      <path d="M 26 78 L 74 78 L 70 96 L 30 96 Z" fill="#3b82f6" stroke="#1e293b" stroke-width="3"/>
-      <polygon points="50,78 54,92 50,96 46,92" fill="#1e293b"/>
-      <circle cx="36" cy="85" r="3" fill="#fbbf24"/>
-    </svg>`,
-
-    officerWeberEmpty: `<svg viewBox="0 0 100 100" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="46" fill="#fee2e2" stroke="#1e293b" stroke-width="4"/>
-      <!-- Empty Office Chair Backrest -->
-      <rect x="30" y="24" width="40" height="42" rx="8" fill="#475569" stroke="#1e293b" stroke-width="3"/>
-      <line x1="38" y1="36" x2="62" y2="36" stroke="#64748b" stroke-width="2"/>
-      <line x1="38" y1="46" x2="62" y2="46" stroke="#64748b" stroke-width="2"/>
-      <line x1="38" y1="56" x2="62" y2="56" stroke="#64748b" stroke-width="2"/>
-      <!-- Coffee Mug on desk -->
-      <rect x="42" y="70" width="16" height="18" rx="2" fill="#ef4444" stroke="#1e293b" stroke-width="2"/>
-      <path d="M 58 74 Q 65 78 58 84" fill="none" stroke="#1e293b" stroke-width="2"/>
-      <!-- Steam -->
-      <path d="M 46 66 Q 44 60 48 56" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
-      <path d="M 54 66 Q 56 60 52 56" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
-    </svg>`,
-
-    patrolCar: `<svg viewBox="0 0 160 80" width="140" height="70" xmlns="http://www.w3.org/2000/svg">
-      <!-- Car Body -->
-      <path d="M 15 55 L 25 35 L 55 24 L 115 24 L 138 38 L 155 45 L 155 60 L 15 60 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
-      <!-- Police Blue Stripe -->
-      <path d="M 15 48 L 155 48 L 155 58 L 15 58 Z" fill="#0284c7"/>
-      <text x="85" y="56" fill="#ffffff" font-family="system-ui, sans-serif" font-weight="900" font-size="9" text-anchor="middle" letter-spacing="1">${L("POLIZEI", "POLICE")}</text>
-      <!-- Windows -->
-      <polygon points="56,27 82,27 82,42 42,42" fill="#bae6fd" stroke="#1e293b" stroke-width="2"/>
-      <polygon points="88,27 114,27 132,42 88,42" fill="#bae6fd" stroke="#1e293b" stroke-width="2"/>
-      <!-- Siren on Roof -->
-      <rect x="80" y="16" width="12" height="8" rx="2" fill="#ef4444" stroke="#1e293b" stroke-width="2" class="patrol-car-siren-light"/>
-      <line x1="86" y1="12" x2="86" y2="16" stroke="#fbbf24" stroke-width="2"/>
-      <!-- Wheels -->
-      <circle cx="42" cy="62" r="14" fill="#334155" stroke="#1e293b" stroke-width="3"/>
-      <circle cx="42" cy="62" r="6" fill="#cbd5e1" stroke="#1e293b" stroke-width="2"/>
-      <circle cx="128" cy="62" r="14" fill="#334155" stroke="#1e293b" stroke-width="3"/>
-      <circle cx="128" cy="62" r="6" fill="#cbd5e1" stroke="#1e293b" stroke-width="2"/>
-      <!-- Headlights -->
-      <polygon points="152,47 156,47 156,53 152,53" fill="#fde047" stroke="#1e293b" stroke-width="1.5"/>
-    </svg>`
-  };
-
-
   // --- Labels -----------------------------------------------------------------
   // Every ticket, verdict, hash, clip and deadline shown by the game comes from
   // the local backend (case snapshots, model exchanges, clip bytes). The game
@@ -190,55 +91,55 @@
   // Translation table (static labels; live case data is shown as delivered)
   const I18N = {
     de: {
-      title: "VisionFlow – Emergency Einsatzleitstelle",
-      subtitle: "Video-Analyse-Demonstrator · alle Falldaten live vom VisionFlow-Server",
+      title: "VisionFlow · Verkehrsleitstelle",
+      subtitle: "Folge einem Ticket von der Kamera bis zur Entscheidung.",
       soundOn: "🔊 Ton: An",
       soundOff: "🔇 Ton: Aus",
       langToggle: "🌐 EN",
       detailsShow: "🔍 Technische Fallansicht",
       detailsHide: "🔍 Fallansicht ausblenden",
-      room1: "🚦 1. Verkehrsraum",
-      room2: "🏢 2. Rechenzentrum",
-      room3: "🚓 3. Leitstelle Alpha",
-      room4: "🚨 4. Leitstelle Beta (Frist)",
+      room1: "1. Kamera",
+      room2: "2. Einordnung",
+      room3: "3. Entscheidung",
+      room4: "4. Frist & Meldung",
       followCableTo2: "Dem Datenkabel ins Rechenzentrum folgen ➔",
       followCableTo3: "Dem Alarmkabel zur Leitstelle folgen ➔",
       followCableTo4: "Dem Kabel zu Tisch 2 folgen ➔",
-      alexIntro: "Hallo! Ich bin Techniker Alex an B4 Nord. Die Kamera zeigt eine synthetische Verkehrsszene. OpenCV analysiert die echten gerenderten Frames auf Bewegung und Gegenverkehr. Blende mit den Knöpfen ein Ereignis ein – ob daraus ein Befund wird, entscheidet allein die Analyse.",
-      kiraIntro: "Willkommen im Rechenzentrum! Löst die Bildanalyse einen Befund aus, schneidet der Server einen Clip (5 s Vorlauf, 10 s Nachlauf), hasht ihn mit SHA-256 und legt ihn dem Modell vor. Hier siehst du, was das Modell tatsächlich geantwortet hat.",
-      schmidtIntro: "Leitstelle Alpha, Officer Schmidt. Ich prüfe die Fälle, die das Modell an Menschen weitergibt – mit dem echten Beweisclip vom Server.",
+      alexIntro: "Starte die Kamera und blende ein Ereignis ein. Erkennt OpenCV Gegenbewegung, entsteht ein Ticket.",
+      kiraIntro: "Wir ordnen das Ticket ein: Gefahr, Fehlalarm oder menschliche Prüfung?",
+      schmidtIntro: "Sieh dir den Beweisclip an. Bestätige die Gefahr oder gib Entwarnung.",
       schmidtRadio: "📻 Gefahr bestätigen (Einsatz)",
       schmidtFalseAlarm: "❌ Gefahr verneinen",
       schmidtCoffee: "☕ Kaffeepause (niemand entscheidet)",
       schmidtCoffeeAway: "Ich hol mir schnell einen Kaffee! Niemand entscheidet jetzt – an Tisch 2 läuft die echte Frist des Falls weiter.",
       weberSticky: "☕ Bin kurz Kaffee holen – Weber",
-      weberAlert: "Officer Weber ist abwesend. Läuft die Frist eines Falls ohne Entscheidung ab, meldet der Server ihn automatisch an das simulierte Behördenpostfach.",
+      weberAlert: "Weber ist kurz weg. Ohne Entscheidung wird das Ticket bei Fristablauf automatisch gemeldet.",
       weberManual: "🚨 Gefahr manuell bestätigen"
     },
     en: {
-      title: "VisionFlow – Emergency Dispatch Mission Control",
-      subtitle: "Video analysis demonstrator · all case data live from the VisionFlow server",
+      title: "VisionFlow · Traffic control room",
+      subtitle: "Follow a ticket from the camera to the decision.",
       soundOn: "🔊 Sound: ON",
       soundOff: "🔇 Sound: OFF",
       langToggle: "🌐 DE",
       detailsShow: "🔍 Technical case view",
       detailsHide: "🔍 Hide case view",
-      room1: "🚦 1. Traffic Outpost",
-      room2: "🏢 2. Datacenter",
-      room3: "🚓 3. Dispatch Alpha",
-      room4: "🚨 4. Dispatch Beta (Deadline)",
+      room1: "1. Camera",
+      room2: "2. Assessment",
+      room3: "3. Decision",
+      room4: "4. Deadline & report",
       followCableTo2: "Follow Data Cable to Datacenter ➔",
       followCableTo3: "Follow Alert Cable to Dispatch ➔",
       followCableTo4: "Follow Cable to Desk 2 ➔",
-      alexIntro: "Hello! I am technician Alex at B4 North. The camera shows a synthetic traffic scene. OpenCV analyses the real rendered frames for motion and opposing traffic. Inject an event with the buttons – only the analysis decides whether it becomes a finding.",
-      kiraIntro: "Welcome to the datacenter! When the image analysis raises a finding, the server cuts a clip (5 s before, 10 s after), hashes it with SHA-256 and sends it to the model. Here you see what the model actually answered.",
-      schmidtIntro: "Dispatch Alpha, Officer Schmidt. I review the cases the model hands over to humans – with the real evidence clip from the server.",
+      alexIntro: "Start the camera and inject an event. When OpenCV detects opposing motion, it opens a ticket.",
+      kiraIntro: "We assess the ticket: hazard, false alarm or human review?",
+      schmidtIntro: "Watch the evidence clip. Confirm the hazard or give the all-clear.",
       schmidtRadio: "📻 Confirm hazard (dispatch)",
       schmidtFalseAlarm: "❌ Deny hazard",
       schmidtCoffee: "☕ Coffee break (nobody decides)",
       schmidtCoffeeAway: "Grabbing a coffee! Nobody decides now – the case's real deadline keeps running at desk 2.",
       weberSticky: "☕ Grabbing coffee, be right back – Weber",
-      weberAlert: "Officer Weber is away. If a case deadline expires without a decision, the server reports it automatically to the simulated authority inbox.",
+      weberAlert: "Weber is away. Without a decision, the ticket is reported automatically at the deadline.",
       weberManual: "🚨 Confirm hazard manually"
     }
   };
@@ -276,7 +177,7 @@
 
   function setText(id, text) {
     const el = $(id);
-    if (el) el.textContent = text;
+    if (el && el.textContent !== text) el.textContent = text;
   }
 
   function formatDecimal(value, digits = 2) {
@@ -366,8 +267,8 @@
 
   function focusAt(station) {
     const selected = selectedCaseId ? tickets.get(selectedCaseId) : null;
-    if (selected && selected.number && stationOf(selected) === station) return selected;
-    return ticketsAt(station)[0] || null;
+    if (selected && selected.number) return selected;
+    return newestTicket() || ticketsAt(station)[0] || null;
   }
 
   function newestTicket() {
@@ -541,6 +442,7 @@
     if (global.RoadSFX) global.RoadSFX.playSiren();
     const car = $("cartoon-patrol-car");
     if (!car) return;
+    car.closest(".patrol-car-stage").hidden = false;
     car.classList.remove("dispatching");
     void car.offsetWidth; // trigger reflow
     car.classList.add("dispatching");
@@ -548,12 +450,16 @@
 
   // --- Room Switching ---
   function switchRoom(roomNum) {
+    if (![1, 2, 3, 4].includes(roomNum)) return;
     if (global.RoadSFX) global.RoadSFX.playClick();
     currentRoom = roomNum;
     [1, 2, 3, 4].forEach((idx) => {
       const navBtn = $(`nav-node-room-${idx}`);
       const roomEl = $(`cartoon-room-${idx}`);
-      if (navBtn) navBtn.classList.toggle("active", idx === currentRoom);
+      if (navBtn) {
+        navBtn.classList.toggle("active", idx === currentRoom);
+        navBtn.setAttribute("aria-current", idx === currentRoom ? "step" : "false");
+      }
       if (roomEl) roomEl.hidden = idx !== currentRoom;
     });
     render();
@@ -745,7 +651,8 @@
   // datacenter, else the newest ticket, else the case the camera is watching.
   function datacenterTicket() {
     const state = cameraState();
-    return focusAt(2) || newestTicket() || (state && state.caseId ? tickets.get(state.caseId) : null);
+    const selected = selectedCaseId ? tickets.get(selectedCaseId) : null;
+    return (selected && selected.number ? selected : null) || newestTicket() || selected || (state && state.caseId ? tickets.get(state.caseId) : null);
   }
 
   function renderTransparency() {
@@ -756,17 +663,17 @@
     const pillBox = $("transparency-pill");
     if (pill) {
       pill.textContent = snapshot && snapshot.mode === "gemini_video"
-        ? L("MODELL: GEMINI-VIDEO (EXTERN, KOSTENPFLICHTIG)", "MODEL: GEMINI VIDEO (EXTERNAL, PAID)")
-        : L("MODELL: OFFLINE-FIXTURE (FESTE TESTANTWORT)", "MODEL: OFFLINE FIXTURE (FIXED TEST ANSWER)");
+        ? L("Gemini Video · kostenpflichtig", "Gemini Video · paid")
+        : L("Feste Offline-Testantwort", "Fixed offline test answer");
     }
     if (pillBox) pillBox.classList.toggle("fallback", !(snapshot && snapshot.mode === "gemini_video"));
     setText("transparency-profile-val", snapshot
       ? `${snapshot.mode}${snapshot.fixture_profile ? "/" + snapshot.fixture_profile : ""}`
       : L("noch kein Fall", "no case yet"));
     setText("transparency-native-val", nativeEnabled ? L("freigegeben (Server mit Kostenfreigabe)", "enabled (server with cost approval)") : L("nicht freigegeben", "not enabled"));
-    setText("transparency-notice", nativeEnabled
-      ? L("Ehrlichkeitshinweis: Der Server erlaubt Gemini-Video. Fälle im Modus „gemini_video“ senden den Clip und Belegbilder an Google; Fixture-Fälle bleiben lokal und liefern feste Testantworten.", "Honesty note: the server allows Gemini video. Cases in “gemini_video” mode send the clip and evidence images to Google; fixture cases stay local and return fixed test answers.")
-      : L("Ehrlichkeitshinweis: Kein externes Modell freigegeben (Server ohne --allow-gemini-costs oder ohne GEMINI_API_KEY). Stufe 2 liefert deshalb feste Offline-Testantworten nach dem gewählten Profil – sie bewerten den Bildinhalt nicht. Echt sind die gerenderte Szene, die OpenCV-Analyse der Frames, Clip-Export mit SHA-256, Fristen und das simulierte Behördenpostfach.", "Honesty note: no external model is enabled (server without --allow-gemini-costs or without GEMINI_API_KEY). Stage 2 therefore returns fixed offline test answers per the selected profile – they do not evaluate the image content. Real are the rendered scene, the OpenCV analysis of the frames, clip export with SHA-256, deadlines and the simulated authority inbox."));
+    setText("transparency-notice", snapshot && snapshot.mode === "gemini_video"
+      ? L("Dieser Fall sendet den Beweisclip an Gemini Video. Meldungen bleiben simuliert.", "This case sends the evidence clip to Gemini Video. Reports remain simulated.")
+      : L("Feste Testantwort, keine Bildbewertung. Bewegungserkennung und Beweisclip sind echt; Meldungen sind simuliert.", "Fixed test answer, no image assessment. Motion detection and evidence clip are real; reports are simulated."));
   }
 
   function ticketCard(item, className, detail) {
@@ -808,7 +715,8 @@
     if (verdictBox) {
       verdictBox.replaceChildren();
       if (!ticket) {
-        verdictBox.textContent = L("Bereit – noch kein Fall.", "Ready – no case yet.");
+        verdictBox.textContent = L("Starte die Kamera und blende ein Ereignis ein.", "Start the camera and inject an event.");
+        $("datacenter-case-detail")?.replaceChildren();
       } else {
         let stage1 = L("Beobachtet die Szene (Bewegung + Richtung auf echten Frames) …", "Observing the scene (motion + direction on real frames) …");
         if (phase === "normal") stage1 = L("Kein Befund im Beobachtungsfenster.", "No finding in observation window.");
@@ -822,22 +730,21 @@
         else if (phase === "model_review") stage2 = L("Modell prüft den Clip …", "Model is reviewing the clip …");
         const hazard = snapshot && snapshot.assessment ? snapshot.assessment.hazard : null;
         const fixture = snapshot && snapshot.mode === "fixture";
-        verdictBox.append(h("div", { className: "stage-breakdown" }, [
-          h("span", { className: "stage-badge", textContent: `${ticketName(ticket)} · ${phaseLabel(phase)}` }),
-          stationOf(ticket) > 2
-            ? h("small", { className: "inference-interface-hint", textContent: L(`Weitergeleitet – jetzt in: ${roomName(stationOf(ticket))}`, `Forwarded – now at: ${roomName(stationOf(ticket))}`) })
-            : null,
-          h("small", { className: "inference-interface-hint", textContent: L(`Eingeblendetes Szenario: ${scenarioText(ticket)}`, `Injected scenario: ${scenarioText(ticket)}`) }),
-          h("span", { className: "stage-badge", textContent: L(`Stufe 1 (OpenCV): ${stage1}`, `Stage 1 (OpenCV): ${stage1}`) }),
-          h("span", {
-            className: `verdict-badge ${hazard === true ? "danger" : hazard === false ? "safe" : ""}`,
-            textContent: L(`Stufe 2 (Modell): ${stage2}`, `Stage 2 (model): ${stage2}`),
-          }),
-          h("small", { className: "inference-interface-hint", textContent: L(`Quelle: ${modelSourceText(ticket)}`, `Source: ${modelSourceText(ticket)}`) }),
-          fixture && assessment
-            ? h("small", { className: "inference-interface-hint", textContent: L("Hinweis: Fixture-Antworten sind fest vorgegeben und hängen nicht vom eingeblendeten Szenario ab.", "Note: fixture answers are fixed and do not depend on the injected scenario.") })
-            : null,
-        ].filter(Boolean)));
+        verdictBox.append(
+          h("h3", { textContent: ticketName(ticket) }),
+          h("p", { className: "case-result", textContent: assessment || (snapshot && snapshot.model_error ? L("Bewertung nicht verfügbar", "Assessment unavailable") : stage2) }),
+          h("p", { className: "case-status", textContent: phaseLabel(phase) }),
+          h("p", { className: "case-next", textContent: nextStep(ticket) }),
+        );
+        const detail = $("datacenter-case-detail");
+        if (detail) detail.replaceChildren(
+          h("p", { textContent: L(`Stufe 1 (OpenCV): ${stage1}`, `Stage 1 (OpenCV): ${stage1}`) }),
+          h("p", { textContent: L(`Stufe 2 (Modell): ${stage2}`, `Stage 2 (model): ${stage2}`) }),
+          h("p", { textContent: L(`Eingeblendetes Szenario: ${scenarioText(ticket)}`, `Injected scenario: ${scenarioText(ticket)}`) }),
+          h("p", { textContent: L(`Quelle: ${modelSourceText(ticket)}`, `Source: ${modelSourceText(ticket)}`) }),
+          h("p", { textContent: L(`Fall-ID: ${ticket.caseId}`, `Case ID: ${ticket.caseId}`) }),
+          h("p", { textContent: snapshot && snapshot.clip ? `SHA-256: ${snapshot.clip.sha256}` : L("Noch kein Clip", "No clip yet") }),
+        );
       }
     }
 
@@ -971,6 +878,10 @@
     }
 
     renderReviewMonitor(ticket);
+    const humanDeadline = ticket && ticket.snapshot && ticket.snapshot.phase === "human_review" && ticket.snapshot.deadline_at;
+    const humanRemaining = humanDeadline ? Math.max(0, Math.ceil((Date.parse(humanDeadline) - Date.now()) / 1000)) : null;
+    setText("schmidt-countdown", humanRemaining !== null && Number.isFinite(humanRemaining)
+      ? L(`Noch ${humanRemaining} s für deine Entscheidung`, `${humanRemaining} s left to decide`) : "");
 
     const state = decisionState(ticket);
     if (currentRoom === 3) ensureOpen(ticket, state);
@@ -1017,6 +928,8 @@
   function onSchmidtCoffee() {
     if (global.RoadSFX) global.RoadSFX.playCoffee();
     setText("speech-schmidt", t("schmidtCoffeeAway"));
+    const away = $("schmidt-away");
+    if (away) away.hidden = false;
     setCablePulsing("cable-3-4", true);
     const followBtn3 = $("follow-btn-3");
     if (followBtn3) followBtn3.hidden = false;
@@ -1026,10 +939,8 @@
   // Desk 2 watches the deadline of the ticket waiting in dispatch Alpha; when it
   // expires unanswered, the ticket lands here.
   function deadlineTicket() {
-    const selected = selectedCaseId ? tickets.get(selectedCaseId) : null;
-    if (selected && selected.number && (stationOf(selected) === 4 || phaseOf(selected) === "human_review")) return selected;
-    const waiting = ticketsAt(3).find((item) => phaseOf(item) === "human_review");
-    return waiting || focusAt(4);
+    const ticket = datacenterTicket();
+    return ticket && ticket.number ? ticket : null;
   }
 
   function renderBeta() {
@@ -1056,8 +967,15 @@
       list.replaceChildren();
       for (const item of ticketsAt(4).slice(0, 4)) {
         const receipt = item.snapshot && item.snapshot.first_receipt;
-        list.appendChild(ticketCard(item, "queue-item high-risk", receipt ? L(`Beleg ${receipt.receipt_id || "–"}`, `Receipt ${receipt.receipt_id || "–"}`) : ""));
+        list.appendChild(ticketCard(item, "queue-item high-risk", receipt ? L("Meldung gespeichert", "Report recorded") : ""));
       }
+    }
+    const receiptDetail = $("beta-receipt-detail");
+    if (receiptDetail) {
+      const receipt = snapshot && snapshot.first_receipt;
+      receiptDetail.textContent = receipt
+        ? L(`Meldungs-ID: ${receipt.receipt_id || "–"} · Fall-ID: ${ticket.caseId}`, `Report ID: ${receipt.receipt_id || "–"} · Case ID: ${ticket.caseId}`)
+        : L("Noch keine Meldung für dieses Ticket.", "No report for this ticket yet.");
     }
     const state = decisionState(ticket);
     if (currentRoom === 4) ensureOpen(ticket, state);
@@ -1067,7 +985,7 @@
     if (alertBanner) {
       const receipt = snapshot && snapshot.first_receipt;
       if (snapshot && snapshot.phase === "no_response" && receipt) {
-        alertBanner.textContent = L(`Frist abgelaufen ohne Entscheidung: Der Server hat ${ticketName(ticket)} automatisch an das simulierte Behördenpostfach gemeldet (Beleg ${receipt.receipt_id || "–"}). Eine Entwarnung ist hier weiterhin möglich.`, `Deadline expired without a decision: the server automatically reported ${ticketName(ticket)} to the simulated authority inbox (receipt ${receipt.receipt_id || "–"}). An all-clear is still possible here.`);
+        alertBanner.textContent = L(`${ticketName(ticket)}: automatisch gemeldet. Du kannst weiterhin Entwarnung senden.`, `${ticketName(ticket)}: reported automatically. You can still send an all-clear.`);
         alertBanner.hidden = false;
       } else {
         alertBanner.hidden = true;
@@ -1086,6 +1004,7 @@
     renderDatacenter();
     renderSchmidt();
     renderBeta();
+    renderTicketJourney();
     for (const station of [2, 3, 4]) {
       const badge = $(`nav-badge-${station}`);
       if (!badge) continue;
@@ -1097,325 +1016,146 @@
   }
 
   // --- Build Full Cartoon Interface ---
+  function nextStep(ticket) {
+    const phase = phaseOf(ticket);
+    if (phase === "human_review") return L("Nächster Schritt: Beweisclip prüfen und entscheiden.", "Next: review the evidence clip and decide.");
+    if (phase === "no_response" || phase === "reported") return L("Meldung im simulierten Postfach. Entwarnung weiterhin möglich.", "Report in the simulated inbox. An all-clear is still possible.");
+    if (["dismissed", "rejected", "corrected"].includes(phase)) return L("Fall abgeschlossen. Kein weiterer Einsatz nötig.", "Case closed. No further dispatch needed.");
+    if (["cancelled", "failed", "source_ended", "normal"].includes(phase)) return L("Starte einen neuen Fall an der Kamera.", "Start a new case at the camera.");
+    return L("Die Analyse läuft. Warte auf das Ergebnis.", "Analysis is running. Wait for the result.");
+  }
+
+  function renderTicketJourney() {
+    const ticket = datacenterTicket();
+    setText("journey-ticket-title", ticket ? ticketName(ticket) : L("Noch kein Ticket", "No ticket yet"));
+    setText("journey-ticket-status", ticket ? phaseLabel(phaseOf(ticket)) : L("Beginne an der Kamera.", "Start at the camera."));
+    setText("journey-ticket-next", ticket ? nextStep(ticket) : L("Kamera starten, Ereignis einblenden, Ticket verfolgen.", "Start the camera, inject an event, follow the ticket."));
+    const select = $("journey-ticket-select");
+    const numbered = ticketOrder.map(id => tickets.get(id)).filter(item => item.number);
+    if (select && listChanged("journey-ticket-select", ticketSignature())) {
+      select.replaceChildren(...numbered.map(item => h("option", { value: item.caseId, textContent: `${ticketName(item)} · ${phaseLabel(phaseOf(item))}` })));
+      select.value = ticket && ticket.number ? ticket.caseId : "";
+      select.disabled = numbered.length === 0;
+      select.closest(".ticket-picker").hidden = numbered.length < 2;
+    }
+    for (const station of [1, 2, 3, 4]) {
+      const node = $(`nav-node-room-${station}`);
+      if (node) node.classList.toggle("ticket-location", Boolean(ticket && ticket.number && stationOf(ticket) === station));
+    }
+  }
+
   function buildCartoonDOM(container) {
     const root = h("div", { className: "cartoon-stage road-cartoon-stage" });
+    const details = (title, children, className = "case-disclosure") => h("details", { className }, [h("summary", { textContent: title }), ...children]);
+    const avatar = (name, alt) => h("div", { className: "cartoon-avatar" }, [h("img", { src: `/assets/${name}.png`, alt, width: "96", height: "96" })]);
+    const person = (name, alt, title, speechId, copy) => h("div", { className: "cartoon-character-row" }, [
+      avatar(name, alt),
+      h("div", { className: "cartoon-speech-bubble" }, [h("div", { className: "cartoon-speaker-name", textContent: title }), h("p", { id: speechId, className: "cartoon-speech-text", "aria-live": "polite", textContent: copy })]),
+    ]);
+    const action = (id, copy, handler, variant = "", disabled = false) => h("button", { id, type: "button", className: `chunky-btn ${variant}`, textContent: copy, onclick: handler, disabled });
+    const coffee = (id, hidden = false) => h("div", { id, className: "coffee-away", hidden }, [
+      h("span", { className: "coffee-away-icon", "aria-hidden": "true", textContent: "☕" }),
+      h("div", {}, [h("strong", { textContent: L("Ich bin kurz weg", "Be right back") }), h("p", { textContent: L("Die Frist läuft weiter.", "The deadline keeps running.") })]),
+      h("span", { "aria-hidden": "true", textContent: "→" }),
+    ]);
+    const roomNav = (idx) => h("nav", { className: "room-pagination", "aria-label": L("Station wechseln", "Change station") }, [
+      h("button", { id: `room-back-${idx}`, type: "button", className: "room-arrow", textContent: "←", "aria-label": L("Vorherige Station", "Previous station"), disabled: idx === 1, onclick: () => switchRoom(idx - 1) }),
+      h("span", { className: "room-pagination-caption", textContent: `${idx} / 4` }),
+      h("button", { id: `room-next-${idx}`, type: "button", className: "room-arrow", textContent: "→", "aria-label": L("Nächste Station", "Next station"), disabled: idx === 4, onclick: () => switchRoom(idx + 1) }),
+    ]);
+    const room = (idx, children) => root.appendChild(h("section", { id: `cartoon-room-${idx}`, className: "cartoon-room", hidden: idx !== 1, "aria-label": t(`room${idx}`) }, [h("div", { className: "cartoon-room__stage" }, children), roomNav(idx)]));
 
-    // 1. Header with Title & Toggles
-    const header = h("header", { className: "cartoon-header" }, [
-      h("div", { className: "cartoon-brand" }, [
-        h("span", { className: "cartoon-brand__badge", textContent: "🚨" }),
-        h("div", {}, [
-          h("h2", { id: "cartoon-title", className: "cartoon-brand__title", textContent: t("title") }),
-          h("p", { id: "cartoon-subtitle", className: "cartoon-brand__subtitle", textContent: t("subtitle") })
-        ])
-      ]),
+    root.appendChild(h("header", { className: "cartoon-header" }, [
+      h("div", { className: "cartoon-brand" }, [h("div", {}, [h("h2", { id: "cartoon-title", className: "cartoon-brand__title", textContent: t("title") }), h("p", { id: "cartoon-subtitle", className: "cartoon-brand__subtitle", textContent: t("subtitle") })])]),
       h("div", { className: "cartoon-top-controls" }, [
-        h("button", {
-          id: "cartoon-details-btn",
-          className: "cartoon-pill-btn",
-          type: "button",
-          textContent: t("detailsShow"),
-          onclick: () => {
-            const open = container.classList.toggle("road-workspace--details");
-            setText("cartoon-details-btn", open ? t("detailsHide") : t("detailsShow"));
-          }
-        }),
-        h("button", {
-          id: "cartoon-sound-btn",
-          className: "cartoon-pill-btn",
-          type: "button",
-          textContent: global.RoadSFX && global.RoadSFX.getMuted() ? t("soundOff") : t("soundOn"),
-          onclick: () => {
-            if (!global.RoadSFX) return;
-            const next = !global.RoadSFX.getMuted();
-            global.RoadSFX.setMuted(next);
-            setText("cartoon-sound-btn", next ? t("soundOff") : t("soundOn"));
-          }
-        }),
-        h("button", {
-          id: "cartoon-lang-btn",
-          className: "cartoon-pill-btn",
-          type: "button",
-          textContent: t("langToggle"),
-          onclick: () => {
-            if (window.VisionFlowI18n) window.VisionFlowI18n.setLang(currentLang === "de" ? "en" : "de");
-          }
-        })
-      ])
+        h("button", { id: "cartoon-details-btn", className: "cartoon-pill-btn", type: "button", "aria-expanded": "false", textContent: t("detailsShow"), onclick: () => {
+          const open = container.classList.toggle("road-workspace--details");
+          setText("cartoon-details-btn", open ? t("detailsHide") : t("detailsShow"));
+          $("cartoon-details-btn").setAttribute("aria-expanded", String(open));
+        } }),
+        h("button", { id: "cartoon-sound-btn", className: "cartoon-pill-btn", type: "button", textContent: global.RoadSFX && global.RoadSFX.getMuted() ? t("soundOff") : t("soundOn"), onclick: () => {
+          if (!global.RoadSFX) return;
+          const next = !global.RoadSFX.getMuted(); global.RoadSFX.setMuted(next); setText("cartoon-sound-btn", next ? t("soundOff") : t("soundOn"));
+        } }),
+        h("button", { id: "cartoon-lang-btn", className: "cartoon-pill-btn", type: "button", textContent: t("langToggle"), onclick: () => window.VisionFlowI18n?.setLang(currentLang === "de" ? "en" : "de") }),
+      ]),
+    ]));
+
+    const navNode = (idx) => h("button", { id: `nav-node-room-${idx}`, type: "button", className: `cartoon-station-node ${idx === 1 ? "active" : ""}`, "aria-current": idx === 1 ? "step" : "false", onclick: () => switchRoom(idx) }, [
+      h("span", { id: `nav-text-${idx}`, textContent: t(`room${idx}`) }), h("span", { id: `nav-badge-${idx}`, className: "cartoon-station-badge", hidden: true }),
     ]);
-    root.appendChild(header);
-
-    // 2. Conduit Navigation Bar (Rooms + Cables)
-    const navNode = (idx, icon) => h("button", {
-      id: `nav-node-room-${idx}`,
-      type: "button",
-      className: `cartoon-station-node ${idx === 1 ? "active" : ""}`,
-      onclick: () => switchRoom(idx)
-    }, [
-      h("span", { className: "cartoon-station-icon", textContent: icon }),
-      h("span", { id: `nav-text-${idx}`, textContent: t(`room${idx}`) }),
-      h("span", { id: `nav-badge-${idx}`, className: "cartoon-station-badge", hidden: true })
+    root.appendChild(h("nav", { className: "cartoon-conduit-nav", "aria-label": L("Der Weg des Tickets", "The ticket journey") }, [navNode(1), navNode(2), navNode(3), navNode(4)]));
+    root.appendChild(h("div", { className: "ticket-journey", "aria-live": "polite" }, [
+      h("div", { className: "ticket-journey-summary" }, [h("strong", { id: "journey-ticket-title" }), h("span", { id: "journey-ticket-status" }), h("p", { id: "journey-ticket-next" })]),
+      h("label", { className: "ticket-picker" }, [h("span", { textContent: L("Ticket auswählen", "Choose a ticket") }), h("select", { id: "journey-ticket-select", className: "cartoon-select", disabled: true })]),
+    ]));
+    const inject = (event, id, image, copy, variant) => h("div", { className: "scenario-row" }, [
+      h("img", { className: "scenario-icon", src: `/assets/${image}.png`, alt: "", width: "64", height: "64" }),
+      action(id, copy, () => void triggerEvent(event), variant),
     ]);
-    root.appendChild(h("nav", { className: "cartoon-conduit-nav", "aria-label": L("Rettungszentrale Räume", "Rescue center rooms") }, [
-      navNode(1, "🚦"),
-      h("div", { id: "cable-1-2", className: "cartoon-cable-segment" }),
-      navNode(2, "🏢"),
-      h("div", { id: "cable-2-3", className: "cartoon-cable-segment" }),
-      navNode(3, "🚓"),
-      h("div", { id: "cable-3-4", className: "cartoon-cable-segment" }),
-      navNode(4, "🚨")
-    ]));
-
-    // 3. Room 1: Verkehrsraumüberwachung (Roadside Station B4 Nord)
-    root.appendChild(h("section", { id: "cartoon-room-1", className: "cartoon-room" }, [
-      h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.technicianAlex }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: L("Alex · Techniker B4 Nord", "Alex · Technician B4 North") }),
-            h("p", { id: "speech-alex", className: "cartoon-speech-text", "aria-live": "polite", textContent: t("alexIntro") })
-          ])
+    room(1, [
+      person("alex", L("Comicporträt von Alex", "Comic portrait of Alex"), L("Alex · Techniker B4 Nord", "Alex · Technician B4 North"), "speech-alex", t("alexIntro")),
+      h("div", { className: "traffic-screen-wrap" }, [
+        h("div", { className: "traffic-monitor" }, [
+          h("div", { className: "traffic-monitor__header" }, [h("span", { textContent: L("B4 Nord · synthetische Straße", "B4 North · synthetic road") }), h("span", { id: "cartoon-cam-status", textContent: "[● STANDBY]" }), action("btn-toggle-cam", L("Kamera ein / aus", "Camera on / off"), () => void toggleCamera(), "chunky-btn--power")]),
+          h("div", { id: "cartoon-feed-mount", className: "traffic-feed-box" }),
         ]),
-        h("div", { className: "traffic-screen-wrap" }, [
-          h("div", { className: "traffic-monitor" }, [
-            h("div", { className: "traffic-monitor__header" }, [
-              h("span", { textContent: L("CAM-01 · B4 NORD · SYNTHETISCHE SZENE", "CAM-01 · B4 NORTH · SYNTHETIC SCENE") }),
-              h("span", { id: "cartoon-cam-status", textContent: "[● STANDBY]" })
-            ]),
-            h("div", { id: "cartoon-feed-mount", className: "traffic-feed-box" })
+        h("div", { className: "traffic-control-panel" }, [
+          h("h3", { textContent: L("Ereignis einblenden", "Inject an event") }),
+          h("label", { className: "cartoon-field" }, [h("span", { textContent: L("Modell für den nächsten Fall", "Model for the next case") }), h("select", { id: "cartoon-model-mode", className: "cartoon-select" })]),
+          h("label", { className: "cartoon-field" }, [h("span", { textContent: L("Feste Offline-Testantwort (Profil)", "Fixed offline test answer (profile)") }), h("select", { id: "cartoon-fixture-profile", className: "cartoon-select" })]),
+          h("div", { className: "cartoon-btn-grid" }, [
+            inject("wrong_way", "btn-sim-wrongway", "wrong-way", L("Falschfahrer einblenden", "Inject wrong-way driver"), "chunky-btn--wrongway"),
+            inject("bird", "btn-sim-bird", "bird", L("Vogel einblenden", "Inject bird"), "chunky-btn--bird"),
+            inject("leaf", "btn-sim-leaf", "leaf", L("Blatt einblenden", "Inject leaf"), "chunky-btn--leaf"),
           ]),
-          h("div", { className: "traffic-control-panel" }, [
-            h("h3", { textContent: L("Ereignis-Pult (Szenario einblenden)", "Event console (inject scenario)") }),
-            h("label", { className: "cartoon-field" }, [
-              h("span", { textContent: L("Modell für den nächsten Fall", "Model for the next case") }),
-              h("select", { id: "cartoon-model-mode", className: "cartoon-select" })
-            ]),
-            h("label", { className: "cartoon-field" }, [
-              h("span", { textContent: L("Feste Offline-Testantwort (Profil)", "Fixed offline test answer (profile)") }),
-              h("select", { id: "cartoon-fixture-profile", className: "cartoon-select" })
-            ]),
-            h("div", { className: "cartoon-btn-grid" }, [
-              h("button", {
-                id: "btn-toggle-cam",
-                type: "button",
-                className: "chunky-btn chunky-btn--power",
-                textContent: L("📷 Kamera AN / AUS", "📷 Camera ON / OFF"),
-                onclick: () => void toggleCamera()
-              }),
-              h("button", {
-                id: "btn-sim-leaf",
-                type: "button",
-                className: "chunky-btn chunky-btn--leaf",
-                textContent: L("🍂 Blatt einblenden", "🍂 Inject leaf"),
-                onclick: () => void triggerEvent("leaf")
-              }),
-              h("button", {
-                id: "btn-sim-bird",
-                type: "button",
-                className: "chunky-btn chunky-btn--bird",
-                textContent: L("🐦 Vogel einblenden", "🐦 Inject bird"),
-                onclick: () => void triggerEvent("bird")
-              }),
-              h("button", {
-                id: "btn-sim-wrongway",
-                type: "button",
-                className: "chunky-btn chunky-btn--wrongway",
-                textContent: L("⚠️ Falschfahrer einblenden!", "⚠️ Inject wrong-way driver!"),
-                onclick: () => void triggerEvent("wrong_way")
-              })
-            ]),
-            h("button", {
-              id: "follow-btn-1",
-              type: "button",
-              className: "cable-follow-btn",
-              textContent: t("followCableTo2"),
-              hidden: true,
-              onclick: () => switchRoom(2)
-            })
-          ])
-        ])
-      ])
-    ]));
-
-    // 4. Room 2: AI-Rechenzentrum (Serverraum & Dr. Kira)
-    root.appendChild(h("section", { id: "cartoon-room-2", className: "cartoon-room", hidden: true }, [
-      h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.drKira }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: L("Dr. Kira · Vision-Analyse", "Dr. Kira · Vision analysis") }),
-            h("p", { id: "speech-kira", className: "cartoon-speech-text", "aria-live": "polite", textContent: t("kiraIntro") })
-          ])
+          h("p", { className: "scenario-note", textContent: L("Ein Ereignis verändert die Szene. Erst die Bildanalyse erstellt ein Ticket.", "An event changes the scene. Only the image analysis creates a ticket.") }),
         ]),
-        h("div", { className: "pipeline-flow-banner" }, [
-          h("div", { id: "stage-chip-1", className: "pipeline-stage-chip" }, [
-            h("span", { className: "stage-badge", textContent: L("STUFE 1 (OpenCV)", "STAGE 1 (OpenCV)") }),
-            h("span", { textContent: L("📹 Bewegung (Differenzbild) + Richtung (Graustufen-Patchabgleich) auf echten Frames", "📹 Motion (difference image) + direction (grayscale patch matching) on real frames") })
-          ]),
-          h("span", { className: "pipeline-arrow", textContent: "➔" }),
-          h("div", { id: "stage-chip-2", className: "pipeline-stage-chip" }, [
-            h("span", { className: "stage-badge", textContent: L("STUFE 2 (Video-Modell)", "STAGE 2 (video model)") }),
-            h("span", { textContent: L("🧠 Bewertung des geschnittenen Clips", "🧠 Assessment of the cut clip") })
-          ])
+      ]),
+    ]);
+    room(2, [
+      person("kira", L("Comicporträt von Dr. Kira", "Comic portrait of Dr. Kira"), L("Dr. Kira · Einordnung", "Dr. Kira · Assessment"), "speech-kira", t("kiraIntro")),
+      h("div", { className: "inference-transparency-card" }, [
+        h("div", { id: "transparency-pill", className: "transparency-pill" }, [h("span", { id: "transparency-pill-text" })]),
+        h("p", { id: "transparency-notice", className: "transparency-notice" }),
+      ]),
+      h("div", { id: "datacenter-verdict-box", className: "datacenter-verdict" }),
+      details(L("Analyse, Belege und Ereignisprotokoll", "Analysis, evidence and event log"), [
+        h("div", { className: "pipeline-flow-banner" }, [h("div", { id: "stage-chip-1", textContent: L("Stufe 1 · OpenCV: Bewegung und Richtung", "Stage 1 · OpenCV: motion and direction") }), h("div", { id: "stage-chip-2", textContent: L("Stufe 2 · Modell: Einordnung des Clips", "Stage 2 · Model: clip assessment") })]),
+        h("div", { className: "transparency-grid" }, [
+          h("div", { className: "transparency-item" }, [h("span", { className: "label", textContent: L("Modus / Profil", "Mode / profile") }), h("span", { id: "transparency-profile-val", className: "value" })]),
+          h("div", { className: "transparency-item" }, [h("span", { className: "label", textContent: L("Externes Modell", "External model") }), h("span", { id: "transparency-native-val", className: "value" })]),
         ]),
-        h("div", { className: "inference-transparency-card" }, [
-          h("div", { className: "transparency-header" }, [
-            h("div", { id: "transparency-pill", className: "transparency-pill fallback" }, [
-              h("span", { className: "dot" }),
-              h("span", { id: "transparency-pill-text", textContent: L("MODELL: OFFLINE-FIXTURE (FESTE TESTANTWORT)", "MODEL: OFFLINE FIXTURE (FIXED TEST ANSWER)") })
-            ]),
-            h("span", { className: "transparency-sub", textContent: L("Werte live vom VisionFlow-Server", "Values live from the VisionFlow server") })
-          ]),
-          h("div", { className: "transparency-grid" }, [
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: L("Modus / Profil des Falls", "Mode / profile of the case") }),
-              h("span", { className: "value", id: "transparency-profile-val", textContent: L("noch kein Fall", "no case yet") })
-            ]),
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: L("Externes Modell", "External model") }),
-              h("span", { className: "value", id: "transparency-native-val", textContent: "–" })
-            ]),
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: L("Ausführung", "Execution") }),
-              h("span", { className: "value", textContent: L("Lokaler VisionFlow-Server (nur Loopback)", "Local VisionFlow server (loopback only)") })
-            ]),
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: L("Beweisclip", "Evidence clip") }),
-              h("span", { className: "value", textContent: L("5 s Vorlauf + 10 s Nachlauf · H.264 (libx264) · SHA-256", "5 s lead-in + 10 s follow-up · H.264 (libx264) · SHA-256") })
-            ])
-          ]),
-          h("p", { id: "transparency-notice", className: "transparency-notice", textContent: "" })
+        h("div", { id: "datacenter-case-detail", className: "case-technical-data" }),
+        h("h4", { textContent: L("Tickets in der Einordnung", "Tickets at assessment") }), h("div", { id: "datacenter-queue-list", className: "datacenter-queue-list" }),
+        h("h4", { textContent: L("Ereignisprotokoll", "Event log") }), h("div", { id: "datacenter-console", className: "datacenter-console" }),
+      ]),
+    ]);
+    room(3, [
+      person("schmidt", L("Comicporträt von Officer Schmidt", "Comic portrait of Officer Schmidt"), L("Officer Schmidt · Leitstelle Alpha", "Officer Schmidt · Dispatch Alpha"), "speech-schmidt", t("schmidtIntro")),
+      h("div", { className: "dispatch-grid" }, [
+        h("div", { id: "schmidt-video-mount", className: "traffic-monitor" }, [h("div", { className: "traffic-monitor__header", textContent: L("Derselbe Beweisclip", "The same evidence clip") }), h("div", { id: "cartoon-review-video-box", className: "traffic-feed-box" }), details(L("Weitere Tickets an diesem Tisch", "Other tickets at this desk"), [h("div", { id: "schmidt-ticket-list", className: "schmidt-ticket-list" })])]),
+        h("div", { className: "dispatch-desk" }, [
+          h("h3", { textContent: L("Deine Entscheidung", "Your decision") }), h("p", { id: "schmidt-decision-status", className: "decision-status", "aria-live": "polite" }),
+          h("p", { id: "schmidt-countdown", className: "decision-time", "aria-live": "off" }),
+          h("div", { className: "dispatch-actions" }, [action("btn-schmidt-radio", t("schmidtRadio"), () => decideTicket(focusAt(3), "confirm", "speech-schmidt"), "chunky-btn--radio", true), action("btn-schmidt-reject", t("schmidtFalseAlarm"), () => decideTicket(focusAt(3), "reject", "speech-schmidt"), "", true), action("btn-schmidt-coffee", t("schmidtCoffee"), onSchmidtCoffee, "chunky-btn--coffee")]),
+          coffee("schmidt-away", true),
         ]),
-        h("div", { className: "datacenter-layout" }, [
-          h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: L("Fälle", "Cases") }),
-            h("div", { id: "datacenter-queue-list", className: "datacenter-queue-list", textContent: L("Noch keine Fälle.", "No cases yet.") })
-          ]),
-          h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: L("Ereignisprotokoll (Server-Zustände)", "Event log (server states)") }),
-            h("div", { id: "datacenter-console", className: "datacenter-console" })
-          ]),
-          h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: L("Modellantwort", "Model answer") }),
-            h("div", { id: "datacenter-verdict-box", className: "datacenter-verdict", textContent: L("Bereit – noch kein Fall.", "Ready – no case yet.") })
-          ])
-        ]),
-        h("button", {
-          id: "follow-btn-2",
-          type: "button",
-          className: "cable-follow-btn",
-          textContent: t("followCableTo3"),
-          hidden: true,
-          onclick: () => switchRoom(3)
-        })
-      ])
-    ]));
-
-    // 5. Room 3: Leitstelle Alpha (Officer Schmidt)
-    root.appendChild(h("section", { id: "cartoon-room-3", className: "cartoon-room", hidden: true }, [
-      h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.officerSchmidt }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: L("Officer Schmidt · Leitstelle Alpha", "Officer Schmidt · Dispatch Alpha") }),
-            h("p", { id: "speech-schmidt", className: "cartoon-speech-text", "aria-live": "polite", textContent: t("schmidtIntro") })
-          ])
-        ]),
-        h("div", { className: "dispatch-grid" }, [
-          h("div", { id: "schmidt-video-mount", className: "traffic-monitor" }, [
-            h("div", { className: "traffic-monitor__header", textContent: L("Beweisclip vom Server", "Evidence clip from the server") }),
-            h("div", { id: "cartoon-review-video-box", className: "traffic-feed-box" }),
-            h("div", { className: "schmidt-ticket-inbox" }, [
-              h("div", { className: "schmidt-ticket-inbox__title" }, [
-                h("span", { textContent: L("Fälle", "Cases") }),
-                h("small", { textContent: L("Klick zum Prüfen", "Click to review") })
-              ]),
-              h("div", { id: "schmidt-ticket-list", className: "schmidt-ticket-list" })
-            ])
-          ]),
-          h("div", { className: "dispatch-desk" }, [
-            h("h3", { textContent: L("Einsatzentscheidung", "Dispatch decision") }),
-            h("p", { id: "schmidt-decision-status", className: "decision-status", "aria-live": "polite", textContent: L("Kein Fall ausgewählt.", "No case selected.") }),
-            h("div", { className: "dispatch-actions" }, [
-              h("button", {
-                id: "btn-schmidt-radio",
-                type: "button",
-                className: "chunky-btn chunky-btn--radio",
-                textContent: t("schmidtRadio"),
-                disabled: true,
-                onclick: () => decideTicket(focusAt(3), "confirm", "speech-schmidt")
-              }),
-              h("button", {
-                id: "btn-schmidt-reject",
-                type: "button",
-                className: "chunky-btn",
-                textContent: t("schmidtFalseAlarm"),
-                disabled: true,
-                onclick: () => decideTicket(focusAt(3), "reject", "speech-schmidt")
-              }),
-              h("button", {
-                id: "btn-schmidt-coffee",
-                type: "button",
-                className: "chunky-btn chunky-btn--coffee",
-                textContent: t("schmidtCoffee"),
-                onclick: onSchmidtCoffee
-              })
-            ]),
-            h("button", {
-              id: "follow-btn-3",
-              type: "button",
-              className: "cable-follow-btn",
-              textContent: t("followCableTo4"),
-              hidden: true,
-              onclick: () => switchRoom(4)
-            })
-          ])
-        ])
-      ])
-    ]));
-
-    // 6. Room 4: Leitstelle Beta (real deadline of the open case)
-    root.appendChild(h("section", { id: "cartoon-room-4", className: "cartoon-room", hidden: true }, [
-      h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.officerWeberEmpty }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: L("Officer Weber · Leitstelle Beta (Abwesend)", "Officer Weber · Dispatch Beta (away)") }),
-            h("p", { id: "speech-weber", className: "cartoon-speech-text", textContent: t("weberAlert") })
-          ])
-        ]),
-        h("div", { className: "beta-alert-box" }, [
-          h("div", { id: "weber-sticky", className: "sticky-note", textContent: t("weberSticky") }),
-          h("div", { id: "beta-countdown-clock", className: "beta-countdown-display", textContent: "–" }),
-          h("p", { id: "beta-countdown-caption", className: "cartoon-countdown-caption", textContent: L("Kein Fall mit offener Frist.", "No case with an open deadline.") }),
-          h("button", {
-            id: "btn-manual-dispatch",
-            type: "button",
-            className: "chunky-btn chunky-btn--wrongway",
-            textContent: t("weberManual"),
-            disabled: true,
-            onclick: () => decideTicket(deadlineTicket(), "confirm", "speech-weber")
-          }),
-          h("button", {
-            id: "btn-weber-reject",
-            type: "button",
-            className: "chunky-btn",
-            textContent: t("schmidtFalseAlarm"),
-            disabled: true,
-            onclick: () => decideTicket(deadlineTicket(), "reject", "speech-weber")
-          }),
-          h("div", { id: "beta-alert-msg", className: "verdict-badge danger", textContent: "", hidden: true }),
-          h("div", { id: "beta-ticket-list", className: "beta-ticket-list" })
-        ])
-      ])
-    ]));
-
-    // 7. Bottom Patrol Car Track
-    root.appendChild(h("div", { className: "patrol-car-stage" }, [
-      h("div", { className: "patrol-car-road" }),
-      h("div", { id: "cartoon-patrol-car", className: "patrol-car", innerHTML: SVGS.patrolCar })
-    ]));
-
+      ]),
+    ]);
+    room(4, [
+      person("weber", L("Comicporträt von Officer Weber", "Comic portrait of Officer Weber"), L("Officer Weber · Leitstelle Beta", "Officer Weber · Dispatch Beta"), "speech-weber", t("weberAlert")),
+      h("div", { className: "beta-alert-box" }, [
+        coffee("weber-sticky"),
+        h("div", { id: "beta-countdown-clock", className: "beta-countdown-display", textContent: "–" }),
+        h("p", { id: "beta-countdown-caption", className: "cartoon-countdown-caption" }),
+        h("div", { id: "beta-alert-msg", className: "case-report-message", "aria-live": "polite", hidden: true }),
+        h("div", { className: "dispatch-actions" }, [action("btn-manual-dispatch", t("weberManual"), () => decideTicket(deadlineTicket(), "confirm", "speech-weber"), "chunky-btn--radio", true), action("btn-weber-reject", t("schmidtFalseAlarm"), () => decideTicket(deadlineTicket(), "reject", "speech-weber"), "", true)]),
+        details(L("Meldungsbeleg und weitere Tickets", "Report receipt and other tickets"), [h("p", { id: "beta-receipt-detail", className: "case-technical-data" }), h("div", { id: "beta-ticket-list", className: "beta-ticket-list" })]),
+      ]),
+    ]);
+    root.appendChild(h("div", { className: "patrol-car-stage", hidden: true, "aria-label": L("Simulierter Einsatz", "Simulated dispatch") }, [h("p", { className: "patrol-dispatch-label", textContent: L("Meldung an simuliertes Behördenpostfach gesendet", "Report sent to simulated authority inbox") }), h("div", { className: "patrol-car-road" }), h("div", { id: "cartoon-patrol-car", className: "patrol-car" }, [h("img", { src: "/assets/patrol.png", alt: L("Spielzeug-Polizeiauto für den simulierten Einsatz", "Toy police car for the simulated dispatch"), width: "210", height: "145" })])]));
+    root.querySelector("#journey-ticket-select").addEventListener("change", event => selectTicket(event.target.value));
     return root;
   }
 
@@ -1433,7 +1173,7 @@
     setText("btn-schmidt-radio", t("schmidtRadio"));
     setText("btn-schmidt-coffee", t("schmidtCoffee"));
     setText("btn-manual-dispatch", t("weberManual"));
-    setText("weber-sticky", t("weberSticky"));
+
     setText("speech-weber", t("weberAlert"));
     render();
   }

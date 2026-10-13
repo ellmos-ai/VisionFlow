@@ -123,10 +123,12 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         page.locator("#nav-node-room-2").click()
         verdict = _text(page, "#datacenter-verdict-box")
         print("Verdict:", verdict)
-        assert "Ticket #1" in verdict and "jetzt in: 3. Leitstelle Alpha" in verdict, verdict
+        assert "Ticket #1" in verdict and "Beweisclip prüfen und entscheiden" in verdict, verdict
         assert "Fahrzeug · Gefahr · Sicherheit 0,80" in verdict, verdict
-        assert "Profil „pending“" in verdict and "Falschfahrer → " in verdict
-        assert "OFFLINE-FIXTURE" in _text(page, "#transparency-pill-text")
+        page.locator("#cartoon-room-2 details > summary").click()
+        technical = _text(page, "#datacenter-case-detail")
+        assert "Profil „pending“" in technical and "Falschfahrer → " in technical
+        assert "Feste Offline-Testantwort" in _text(page, "#transparency-pill-text")
         assert "fixture/pending" in _text(page, "#transparency-profile-val")
         page.screenshot(path=str(out_dir / "02_room2_real_assessment.png"))
         checks["room2_shows_backend_assessment"] = True
@@ -144,6 +146,8 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         checks["second_event_during_review_starts_next_case_on_same_camera"] = True
 
         page.locator("#nav-node-room-3").click()
+        if page.locator("#journey-ticket-select").is_visible():
+            page.locator("#journey-ticket-select").select_option(label="Ticket #1 · Menschliche Prüfung offen")
         page.wait_for_function(
             "() => { const b = document.querySelector('#btn-schmidt-radio'); return b && !b.disabled; }",
             timeout=20000,
@@ -169,13 +173,19 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         print("Waiting for ticket #2 ...")
         page.locator("#nav-node-room-2").click()
         page.wait_for_function(
+            "() => [...document.querySelector('#journey-ticket-select').options].some(o => o.textContent.includes('Ticket #2') && o.textContent.includes('Entwarnung durch Modell'))",
+            timeout=90000,
+        )
+        page.locator("#journey-ticket-select").select_option(label="Ticket #2 · Entwarnung durch Modell")
+        page.wait_for_function(
             "() => { const v = document.querySelector('#datacenter-verdict-box');"
             " return v && v.textContent.includes('Ticket #2') && v.textContent.includes('Entwarnung durch Modell'); }",
             timeout=90000,
         )
         verdict = _text(page, "#datacenter-verdict-box")
         print("Verdict #2:", verdict)
-        assert "Blatt · keine Gefahr · Sicherheit 0,99" in verdict and "Vogel" in verdict
+        assert "Blatt · keine Gefahr · Sicherheit 0,99" in verdict
+        assert "Vogel" in _text(page, "#datacenter-case-detail")
         assert "Ticket #2" in _text(page, "#datacenter-queue-list")
         assert "Ticket #2" not in _text(page, "#schmidt-ticket-list")
         page.screenshot(path=str(out_dir / "05_room2_ticket2.png"))
@@ -207,7 +217,7 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         print("Countdown:", first, "->", second)
         assert int(second.rstrip("s")) < int(first.rstrip("s"))
         page.screenshot(path=str(out_dir / "06_room4_real_deadline.png"))
-        alert = _wait_text(page, "#beta-alert-msg", "automatisch", 40000)
+        alert = _wait_text(page, "#beta-alert-msg", "automatisch", 70000)
         print("Deadline alert:", alert)
         page.screenshot(path=str(out_dir / "07_room4_no_response.png"))
         checks["room4_shows_real_deadline_and_auto_report"] = True

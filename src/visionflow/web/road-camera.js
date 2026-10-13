@@ -21,7 +21,7 @@ const CAMERA_STANDBY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
   <circle cx="320" cy="115" r="30" fill="#131b2e" stroke="#38bdf8" stroke-width="2" />
   <path d="M310,107 L328,107 L328,123 L310,123 Z M328,111 L336,107 L336,123 L328,119 Z" fill="#38bdf8"/>
   <text x="320" y="195" fill="#f8fafc" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="700" text-anchor="middle">${L("Kamera im Bereitschaftsmodus", "Camera in standby mode")}</text>
-  <text x="320" y="222" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="12" text-anchor="middle">${L("Sitzung starten oder ⚡ 1-Klick Demo aktivieren", "Start a session or enable the ⚡ 1-click demo")}</text>
+  <text x="320" y="222" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="12" text-anchor="middle">${L("Kamera einschalten, um die Straße zu beobachten", "Turn on the camera to watch the road")}</text>
 </svg>`;
 
 let standbyBlobUrl = null;

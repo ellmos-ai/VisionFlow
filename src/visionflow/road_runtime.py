@@ -125,7 +125,7 @@ def build_road_runtime(
         road_sessions = RoadSessionService(sessions, recordings, controller)
         service_holder["service"] = road_sessions
         decisions = DecisionStore(
-            DecisionPolicy(confidence_threshold=0.90, countdown_seconds=20.0),
+            DecisionPolicy(confidence_threshold=0.90, countdown_seconds=60.0),
             SimulatedAuthorityInbox(),
             SystemClock(),
         )

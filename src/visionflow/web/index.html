@@ -19,11 +19,17 @@
         <p class="eyebrow" data-de="Agentische Bildverarbeitung mit OpenCV 5">Agentic vision with OpenCV 5</p>
         <h1>VisionFlow</h1>
       </div>
+      <nav class="workspace-tabs" aria-label="Workspaces" data-de-aria-label="Arbeitsbereiche">
+        <button id="road-tab" class="button primary" type="button" aria-pressed="true" disabled data-de="🚦 Falschfahrer-Warnung (Leitstelle)">🚦 Wrong-way driver warning (control room)</button>
+        <button id="analysis-tab" class="button secondary" type="button" aria-pressed="false" data-de="🧩 Wiederverwendbare Abläufe (Bild / Video)">🧩 Reusable workflows (image / video)</button>
+      </nav>
       <p id="connection-status" class="connection-status" role="status" aria-live="polite" data-de="Lokale Sitzung wird geprüft …">
         Checking local session …
       </p>
     </header>
 
+    <details class="intro-details">
+      <summary><span class="intro-info" aria-hidden="true">ⓘ</span><span data-de="So funktioniert VisionFlow">How VisionFlow works</span></summary>
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
         <h2 id="hero-title" data-de="Die Pixel entscheiden, was als Nächstes passiert.">The pixels decide what happens next.</h2>
@@ -54,12 +60,10 @@
         See the “Reusable workflows” tab.
       </p>
     </section>
+    </details>
 
     <main class="workspace-shell">
-      <nav class="workspace-tabs" aria-label="Workspaces" data-de-aria-label="Arbeitsbereiche">
-        <button id="road-tab" class="button primary" type="button" aria-pressed="true" disabled data-de="🚦 Falschfahrer-Warnung (Leitstelle)">🚦 Wrong-way driver warning (control room)</button>
-        <button id="analysis-tab" class="button secondary" type="button" aria-pressed="false" data-de="🧩 Wiederverwendbare Abläufe (Bild / Video)">🧩 Reusable workflows (image / video)</button>
-      </nav>
+
       <div id="workspace-analysis" class="layout workspace-analysis" hidden>
       <section class="panel setup-panel" aria-labelledby="setup-title">
         <div class="section-heading">
