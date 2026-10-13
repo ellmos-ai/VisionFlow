@@ -18,6 +18,10 @@ The public demo uses synthetic traffic, fixed offline model answers and a simula
 inbox. Each camera session ends after two minutes; at most four sessions run at once (“All demo
 cameras are busy” means: try again a minute later).
 
+Each detection creates a numbered ticket at its current station: room 2 for model review,
+room 3 for human review, and room 4 after the deadline expires. Injecting a second event during
+review starts the next case on the same camera; stopping it keeps sealed tickets decidable.
+
 ## 2. Run it locally
 
 Python 3.12+ and FFmpeg with `libx264` (for road clips). From the source archive or repository:

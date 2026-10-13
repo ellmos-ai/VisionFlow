@@ -122,12 +122,16 @@ interface via `?lang=de`; waits and assertions are unchanged.
 `game_multievent_acceptance.py` plays three cases:
 
 1. **Profile `pending`:** inject a wrong-way driver and a leaf into the running analysis; check
-   the real model answer `0.80`; check that new events are locked during review; load the server
-   clip with confirmed SHA-256 and confirm the hazard.
+   the real model answer `0.80`; start the next case on the same camera during review; load the
+   server clip with confirmed SHA-256 and confirm the hazard.
 2. **Profile `leaf` with an injected bird:** the interface shows the fixture answer "leaf", not
    the scenario.
 3. **Profile `pending` without a decision:** real deadline in room 4, automatic report after it
-   expires, late rejection with an all-clear.
+   expires even after stopping the camera, late rejection with an all-clear.
+
+Every detection becomes a numbered ticket shown at its current station: model review in
+room 2, human review in room 3, and expired deadlines in room 4. The multi-event acceptance
+checks room routing, a second event during review, and decidable tickets after camera stop.
 
 A run takes about three minutes. Playwright's open-source Chromium has no H.264 decoder; there
 the clip is loaded and checked but not played. Edge and Chrome play it.

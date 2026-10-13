@@ -63,7 +63,7 @@ never authorize a new media source or a new output destination.
 
 ## The control room demo
 
-The browser interface turns the road workflow into four rooms that follow one case:
+The browser interface turns the road workflow into four rooms:
 
 1. **Traffic room.** A live synthetic camera with traffic in both directions. Inject a wrong-way
    driver, a bird or a leaf. Injecting is not a detection: only the analysis decides.
@@ -71,6 +71,10 @@ The browser interface turns the road workflow into four rooms that follow one ca
    source clearly labelled (offline profile or Gemini).
 3. **Dispatch Alpha.** Human review of the hash-verified evidence clip: confirm or reject.
 4. **Dispatch Beta.** The real deadline. If nobody decides, the server reports automatically.
+
+Each detection creates a numbered ticket that appears at its current station: model review
+in room 2, human review in room 3, and expired deadlines in room 4. A second event during a
+review starts the next case on the same camera; stopping the camera keeps sealed tickets decidable.
 
 The public demo runs in **offline-profile mode**: the model step returns a fixed, selectable
 answer and does not look at the image. Everything else is real: rendered frames, OpenCV

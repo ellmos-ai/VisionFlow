@@ -27,6 +27,11 @@ Live-Demo, Video und alle Belege. Gebaut von Lukas Geiger (Einzelteilnahme) für
 
 Die Oberfläche ist standardmäßig englisch; Deutsch über den Knopf „DE“ oder `?lang=de`.
 
+Jede Erkennung erzeugt ein nummeriertes Ticket an seiner aktuellen Station: Modellprüfung
+in Raum 2, menschliche Prüfung in Raum 3 und abgelaufene Fristen in Raum 4. Ein zweites Ereignis
+während einer Prüfung startet den nächsten Fall auf derselben Kamera; beim Kamera-Stopp
+bleiben versiegelte Tickets entscheidbar.
+
 ## Schnellstart
 
 ```bash
