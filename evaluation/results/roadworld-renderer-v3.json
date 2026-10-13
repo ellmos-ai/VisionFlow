@@ -1,0 +1,195 @@
+{
+  "protocol": {
+    "seeds": [
+      17,
+      18,
+      101,
+      102
+    ],
+    "events": [
+      null,
+      "wrong_way",
+      "bird",
+      "leaf"
+    ],
+    "frames": 24,
+    "fps": 5,
+    "params": {
+      "lanes": [
+        {
+          "id": "northbound",
+          "region": [
+            0,
+            90,
+            480,
+            450
+          ],
+          "expected": [
+            0,
+            -1
+          ]
+        },
+        {
+          "id": "southbound",
+          "region": [
+            480,
+            90,
+            480,
+            450
+          ],
+          "expected": [
+            0,
+            1
+          ]
+        }
+      ],
+      "min_frames": 3,
+      "min_displacement_px": 4.0,
+      "opposition_cosine": -0.75
+    }
+  },
+  "sequences": [
+    {
+      "sequence": "s17-normal",
+      "seed": 17,
+      "event": null,
+      "truth_wrong_way": false,
+      "candidate": false,
+      "first_candidate_frame": null
+    },
+    {
+      "sequence": "s17-wrong_way",
+      "seed": 17,
+      "event": "wrong_way",
+      "truth_wrong_way": true,
+      "candidate": true,
+      "first_candidate_frame": 2
+    },
+    {
+      "sequence": "s17-bird",
+      "seed": 17,
+      "event": "bird",
+      "truth_wrong_way": false,
+      "candidate": true,
+      "first_candidate_frame": 2
+    },
+    {
+      "sequence": "s17-leaf",
+      "seed": 17,
+      "event": "leaf",
+      "truth_wrong_way": false,
+      "candidate": true,
+      "first_candidate_frame": 3
+    },
+    {
+      "sequence": "s18-normal",
+      "seed": 18,
+      "event": null,
+      "truth_wrong_way": false,
+      "candidate": false,
+      "first_candidate_frame": null
+    },
+    {
+      "sequence": "s18-wrong_way",
+      "seed": 18,
+      "event": "wrong_way",
+      "truth_wrong_way": true,
+      "candidate": true,
+      "first_candidate_frame": 2
+    },
+    {
+      "sequence": "s18-bird",
+      "seed": 18,
+      "event": "bird",
+      "truth_wrong_way": false,
+      "candidate": true,
+      "first_candidate_frame": 2
+    },
+    {
+      "sequence": "s18-leaf",
+      "seed": 18,
+      "event": "leaf",
+      "truth_wrong_way": false,
+      "candidate": true,
+      "first_candidate_frame": 5
+    },
+    {
+      "sequence": "s101-normal",
+      "seed": 101,
+      "event": null,
+      "truth_wrong_way": false,
+      "candidate": false,
+      "first_candidate_frame": null
+    },
+    {
+      "sequence": "s101-wrong_way",
+      "seed": 101,
+      "event": "wrong_way",
+      "truth_wrong_way": true,
+      "candidate": true,
+      "first_candidate_frame": 2
+    },
+    {
+      "sequence": "s101-bird",
+      "seed": 101,
+      "event": "bird",
+      "truth_wrong_way": false,
+      "candidate": true,
+      "first_candidate_frame": 3
+    },
+    {
+      "sequence": "s101-leaf",
+      "seed": 101,
+      "event": "leaf",
+      "truth_wrong_way": false,
+      "candidate": true,
+      "first_candidate_frame": 3
+    },
+    {
+      "sequence": "s102-normal",
+      "seed": 102,
+      "event": null,
+      "truth_wrong_way": false,
+      "candidate": false,
+      "first_candidate_frame": null
+    },
+    {
+      "sequence": "s102-wrong_way",
+      "seed": 102,
+      "event": "wrong_way",
+      "truth_wrong_way": true,
+      "candidate": true,
+      "first_candidate_frame": 2
+    },
+    {
+      "sequence": "s102-bird",
+      "seed": 102,
+      "event": "bird",
+      "truth_wrong_way": false,
+      "candidate": true,
+      "first_candidate_frame": 2
+    },
+    {
+      "sequence": "s102-leaf",
+      "seed": 102,
+      "event": "leaf",
+      "truth_wrong_way": false,
+      "candidate": true,
+      "first_candidate_frame": 3
+    }
+  ],
+  "summary": {
+    "candidates_by_event": {
+      "normal": "0/4",
+      "wrong_way": "4/4",
+      "bird": "4/4",
+      "leaf": "4/4"
+    },
+    "as_wrong_way_vehicle_detector": {
+      "TP": 4,
+      "FP": 8,
+      "TN": 4,
+      "FN": 0
+    }
+  }
+}
