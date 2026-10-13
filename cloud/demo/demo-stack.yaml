@@ -115,21 +115,45 @@ Resources:
           apt-get install -y -q python3.12-venv ffmpeg nginx unzip libgl1 libglib2.0-0t64
           snap install aws-cli --classic
           useradd --system --home-dir /opt/visionflow --shell /usr/sbin/nologin visionflow || true
-          install -d -o root -g root /opt/visionflow
-          for attempt in $(seq 1 180); do
+          install -d -o root -g root /opt/visionflow /opt/visionflow/releases
+          install -d -o visionflow -g visionflow /var/lib/visionflow
+
+          # Idempotent installer: first boot (waits for the upload) and every update via SSM.
+          cat > /opt/visionflow/install.sh <<'INSTALL'
+          #!/bin/bash
+          set -euxo pipefail
+          WAIT="$1"
+          if [ -z "$WAIT" ]; then WAIT=1; fi
+          for attempt in $(seq 1 "$WAIT"); do
             if /snap/bin/aws s3 cp "s3://${SourceBucket}/${SourceKey}" /opt/visionflow/source.zip --region "${AWS::Region}"; then break; fi
             sleep 10
           done
           test -s /opt/visionflow/source.zip
-          sha256sum /opt/visionflow/source.zip
-          rm -rf /opt/visionflow/app && install -d /opt/visionflow/app
-          unzip -q /opt/visionflow/source.zip -d /opt/visionflow/app
-          python3.12 -m venv /opt/visionflow/venv
-          /opt/visionflow/venv/bin/python -m pip install --no-cache-dir -r /opt/visionflow/app/requirements.lock
-          /opt/visionflow/venv/bin/python -m pip install --no-cache-dir --no-deps /opt/visionflow/app
-          /opt/visionflow/venv/bin/python -m pip check
-          /opt/visionflow/venv/bin/python -c "import cv2, numpy, platform; print(platform.machine(), cv2.__version__, numpy.__version__)"
-          install -d -o visionflow -g visionflow /var/lib/visionflow
+          SHA=$(sha256sum /opt/visionflow/source.zip | cut -d " " -f 1)
+          REL=/opt/visionflow/releases/$SHA
+          if [ ! -f "$REL/deployment.json" ]; then
+            rm -rf "$REL"
+            install -d "$REL/app"
+            unzip -q /opt/visionflow/source.zip -d "$REL/app"
+            python3.12 -m venv "$REL/venv"
+            "$REL/venv/bin/python" -m pip install --no-cache-dir -r "$REL/app/requirements.lock"
+            "$REL/venv/bin/python" -m pip install --no-cache-dir --no-deps "$REL/app"
+            "$REL/venv/bin/python" -m pip check
+            "$REL/venv/bin/python" -c "import cv2, numpy, platform; print(platform.machine(), cv2.__version__, numpy.__version__)"
+            python3 - "$REL" "$SHA" <<'PY'
+          import json, sys, time
+          rel, sha = sys.argv[1], sys.argv[2]
+          manifest = json.load(open(rel + "/app/source-manifest.json", encoding="utf-8"))
+          record = {"source_commit": manifest["source_commit"], "source_zip_sha256": sha,
+                    "installed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+          json.dump(record, open(rel + "/deployment.json", "w", encoding="utf-8"))
+          PY
+          fi
+          ln -sfn "$REL" /opt/visionflow/current
+          systemctl restart visionflow || true
+          INSTALL
+          chmod 755 /opt/visionflow/install.sh
+          /opt/visionflow/install.sh 180
 
           cat > /etc/systemd/system/visionflow.service <<'UNIT'
           [Unit]
@@ -142,7 +166,7 @@ Resources:
           Group=visionflow
           Environment=PYTHONIOENCODING=utf-8
           ExecStartPre=/bin/rm -rf /var/lib/visionflow/data
-          ExecStart=/opt/visionflow/venv/bin/python -m visionflow.cli serve --public-demo --max-live-sessions 4 --host 127.0.0.1 --port 8765 --data-dir /var/lib/visionflow/data
+          ExecStart=/opt/visionflow/current/venv/bin/python -m visionflow.cli serve --public-demo --max-live-sessions 4 --host 127.0.0.1 --port 8765 --data-dir /var/lib/visionflow/data
           Restart=always
           RestartSec=3
           RuntimeMaxSec=86400
@@ -185,6 +209,12 @@ Resources:
                   limit_req zone=vf_create burst=5 nodelay;
                   limit_req_status 429;
                   proxy_pass http://127.0.0.1:8765;
+              }
+              # Which source is actually installed (commit and ZIP hash), read back by deploy_demo.py.
+              location = /deployment.json {
+                  alias /opt/visionflow/current/deployment.json;
+                  default_type application/json;
+                  add_header Cache-Control "no-store";
               }
               location / {
                   proxy_pass http://127.0.0.1:8765;
