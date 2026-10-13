@@ -52,8 +52,36 @@
     element.classList.toggle("error-message", isError);
   }
 
+  // Server messages are German; known codes get a message in the UI language.
+  const ERROR_TEXT = {
+    demo_busy: L(
+      "Alle Demo-Kameras sind belegt. Jede Sitzung endet nach zwei Minuten – bitte gleich erneut versuchen.",
+      "All demo cameras are busy. Each session ends after two minutes – please try again shortly.",
+    ),
+    public_demo_source_rejected: L(
+      "Die öffentliche Demo liest nur die Straßensimulation und hier hochgeladene Medien.",
+      "The public demo only reads the road simulation and media uploaded here.",
+    ),
+    demo_storage_full: L(
+      "Der Upload-Speicher der öffentlichen Demo ist voll. Er wird täglich geleert.",
+      "The public demo upload storage is full. It is cleared every day.",
+    ),
+    service_closed: L("Die Kamerademo ist beendet.", "The camera demo has ended."),
+  };
+
   function apiError(payload, status) {
     const error = payload && payload.error;
+    if (error && typeof error.code === "string" && ERROR_TEXT[error.code]) {
+      const known = new Error(`${ERROR_TEXT[error.code]} (HTTP ${status})`);
+      known.code = error.code;
+      return known;
+    }
+    if (status === 429) {
+      return new Error(L(
+        "Zu viele Anfragen in kurzer Zeit – bitte einen Moment warten.",
+        "Too many requests in a short time – please wait a moment.",
+      ));
+    }
     if (error && typeof error.message === "string") {
       return new Error(`${error.message} (HTTP ${status})`);
     }
@@ -145,7 +173,7 @@
       const option = document.createElement("option");
       option.value = descriptor.name;
       option.textContent = descriptor.name;
-      option.title = descriptor.description || "";
+      option.title = toolText(descriptor);
       select.append(option);
     }
     select.disabled = available.length === 0;
@@ -163,9 +191,28 @@
     updateToolDescription();
   }
 
+  const TOOL_TEXT = {
+    quality: L(
+      "Misst Schärfe und mittlere Grauwerthelligkeit eines Einzelbilds.",
+      "Measures sharpness and mean grayscale brightness of a single image.",
+    ),
+    motion: L(
+      "Vergleicht aufeinanderfolgende Bilder auf sichtbare Bewegung.",
+      "Compares consecutive frames for visible motion.",
+    ),
+    direction: L(
+      "Prüft sichtbare Bewegung gegen konfigurierte Spurvektoren.",
+      "Checks visible motion against configured lane directions.",
+    ),
+  };
+
+  function toolText(descriptor) {
+    return descriptor ? TOOL_TEXT[descriptor.name] || descriptor.description || "" : "";
+  }
+
   function updateToolDescription() {
     const descriptor = descriptors.find((item) => item.name === $("tool-select").value);
-    $("tool-description").textContent = descriptor ? descriptor.description : "";
+    $("tool-description").textContent = toolText(descriptor);
   }
 
   async function resolveSource(kind, input = $("source-file")) {
@@ -934,7 +981,11 @@
       sessionReady = true;
       descriptors = (await jsonRequest("/tools")).tools || [];
       renderToolChoices();
-      $("connection-status").textContent = L("Lokaler Server verbunden · Sitzung aktiv", "Local server connected · session active");
+      const publicDemo = session.public_demo === true;
+      $("public-demo-note").hidden = !publicDemo;
+      $("connection-status").textContent = publicDemo
+        ? L("Öffentliche Demo auf AWS · Sitzung aktiv", "Public demo on AWS · session active")
+        : L("Lokaler Server verbunden · Sitzung aktiv", "Local server connected · session active");
       $("road-tab").disabled = false;
       $("start-button").disabled = false;
       void activateRoadWorkspace();

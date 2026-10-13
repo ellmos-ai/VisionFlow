@@ -16,7 +16,7 @@
   <body>
     <header class="app-header">
       <div>
-        <p class="eyebrow" data-de="Lokale Computer-Vision">Local computer vision</p>
+        <p class="eyebrow" data-de="Agentische Bildverarbeitung mit OpenCV 5">Agentic vision with OpenCV 5</p>
         <h1>VisionFlow</h1>
       </div>
       <p id="connection-status" class="connection-status" role="status" aria-live="polite" data-de="Lokale Sitzung wird geprüft …">
@@ -24,10 +24,41 @@
       </p>
     </header>
 
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h2 id="hero-title" data-de="Die Pixel entscheiden, was als Nächstes passiert.">The pixels decide what happens next.</h2>
+        <p class="hero-lead" data-de="VisionFlow macht aus Kamera-, Video- und Bildanalyse begrenzte, überprüfbare Abläufe. Dieses Beispiel: eine Falschfahrer-Warnung für eine Verkehrsleitstelle.">
+          VisionFlow turns camera, video and image analysis into bounded, reviewable workflows.
+          This example: a wrong-way driver warning for a traffic control room.
+        </p>
+        <p id="public-demo-note" class="public-demo-note" hidden data-de="Öffentliche Demo: synthetischer Verkehr · feste Offline-Modellantwort · simulierte Empfänger · jede Kamera-Sitzung endet nach zwei Minuten.">
+          Public demo: synthetic traffic · fixed offline model answer · simulated recipients · each camera session ends after two minutes.
+        </p>
+      </div>
+      <ol class="hero-steps">
+        <li>
+          <span class="hero-step-label" data-de="1 · Wahrnehmen">1 · Perceive</span>
+          <span data-de="OpenCV vergleicht jedes Bild mit dem vorherigen und erkennt Bewegung gegen die Fahrtrichtung der Spur.">OpenCV compares every frame with the previous one and finds motion against the lane direction.</span>
+        </li>
+        <li>
+          <span class="hero-step-label" data-de="2 · Entscheiden">2 · Decide</span>
+          <span data-de="Ein Treffer öffnet einen Fall mit unveränderlichem Beweisclip. Modell und Mensch prüfen denselben Clip – hier wird ein Auto von Vogel oder Blatt unterschieden.">A hit opens a case with an immutable evidence clip. Model and human review the same clip – this is where a car is told apart from a bird or a leaf.</span>
+        </li>
+        <li>
+          <span class="hero-step-label" data-de="3 · Handeln">3 · Act</span>
+          <span data-de="Bestätigte oder unbeantwortete Fälle gehen nach Ablauf der Frist an ein simuliertes Behördenpostfach; eine späte Ablehnung sendet eine Entwarnung.">Confirmed or unanswered cases reach a simulated authority inbox when the deadline expires; a late rejection sends an all-clear.</span>
+        </li>
+      </ol>
+      <p class="hero-reuse" data-de="Derselbe Kern prüft auch Dokumentfotos und beobachtet Videos – nur die JSON-Konfiguration ist anders. Siehe Reiter „Wiederverwendbare Abläufe“.">
+        The same core also checks document photos and watches videos – only the JSON configuration differs.
+        See the “Reusable workflows” tab.
+      </p>
+    </section>
+
     <main class="workspace-shell">
       <nav class="workspace-tabs" aria-label="Workspaces" data-de-aria-label="Arbeitsbereiche">
-        <button id="road-tab" class="button primary" type="button" aria-pressed="true" disabled data-de="🚨 Emergency Leitstelle (Mission Control)">🚨 Emergency Dispatch (Mission Control)</button>
-        <button id="analysis-tab" class="button secondary" type="button" aria-pressed="false" data-de="📁 Archiv / Einzellauf-Analyse">📁 Archive / single-run analysis</button>
+        <button id="road-tab" class="button primary" type="button" aria-pressed="true" disabled data-de="🚦 Falschfahrer-Warnung (Leitstelle)">🚦 Wrong-way driver warning (control room)</button>
+        <button id="analysis-tab" class="button secondary" type="button" aria-pressed="false" data-de="🧩 Wiederverwendbare Abläufe (Bild / Video)">🧩 Reusable workflows (image / video)</button>
       </nav>
       <div id="workspace-analysis" class="layout workspace-analysis" hidden>
       <section class="panel setup-panel" aria-labelledby="setup-title">
@@ -64,7 +95,7 @@
               <button id="sample-sharp-btn" type="button" class="button secondary sample-btn" data-de="📄 Beispieldokument (scharf)">📄 Sample document (sharp)</button>
               <button id="sample-blurred-btn" type="button" class="button secondary sample-btn" data-de="📄 Beispieldokument (unscharf)">📄 Sample document (blurred)</button>
             </div>
-            <p id="file-description" class="hint" data-de="Die Datei bleibt lokal. Der Server speichert sie unter einer erzeugten Referenz.">The file stays local. The server stores it under a generated reference.</p>
+            <p id="file-description" class="hint" data-de="Die Datei geht nur an diesen VisionFlow-Server. Er speichert sie unter einer erzeugten Referenz.">The file only goes to this VisionFlow server. It stores it under a generated reference.</p>
             <p id="file-name" class="file-name" aria-live="polite" data-de="Keine Datei ausgewählt.">No file selected.</p>
           </div>
 
@@ -209,7 +240,7 @@
       </section>
     </main>
     <footer class="app-footer">
-      <span data-de="Verarbeitung und Speicherung erfolgen lokal.">Processing and storage happen locally.</span>
+      <span data-de="Verarbeitung und Speicherung erfolgen auf dem VisionFlow-Server.">Processing and storage happen on the VisionFlow server.</span>
       <span data-de="Diese Oberfläche öffnet keine externen Dienste.">This interface opens no external services.</span>
     </footer>
   </body>

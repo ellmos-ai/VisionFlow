@@ -183,7 +183,7 @@
   const I18N = {
     de: {
       title: "VisionFlow – Emergency Einsatzleitstelle",
-      subtitle: "Video-Analyse-Demonstrator · alle Falldaten live vom lokalen Server",
+      subtitle: "Video-Analyse-Demonstrator · alle Falldaten live vom VisionFlow-Server",
       soundOn: "🔊 Ton: An",
       soundOff: "🔇 Ton: Aus",
       langToggle: "🌐 EN",
@@ -209,7 +209,7 @@
     },
     en: {
       title: "VisionFlow – Emergency Dispatch Mission Control",
-      subtitle: "Video analysis demonstrator · all case data live from the local server",
+      subtitle: "Video analysis demonstrator · all case data live from the VisionFlow server",
       soundOn: "🔊 Sound: ON",
       soundOff: "🔇 Sound: OFF",
       langToggle: "🌐 DE",
@@ -575,7 +575,7 @@
   async function triggerEvent(eventType) {
     if (eventBusy) return;
     if (!env || !env.roadMount) {
-      setText("speech-alex", L("Die Straßenkamera ist nicht verbunden. Ohne lokalen Server gibt es hier nichts zu analysieren.", "The road camera is not connected. Without the local server there is nothing to analyze here."));
+      setText("speech-alex", L("Die Straßenkamera ist nicht verbunden. Ohne VisionFlow-Server gibt es hier nichts zu analysieren.", "The road camera is not connected. Without the VisionFlow server there is nothing to analyze here."));
       return;
     }
     eventBusy = true;
@@ -916,7 +916,7 @@
       return;
     }
     if (global.RoadSFX) global.RoadSFX.playRadio();
-    setText("speech-schmidt", L(`Entscheidung für Fall #${ticket.number} an den lokalen Server gesendet …`, `Decision for case #${ticket.number} sent to the local server …`));
+    setText("speech-schmidt", L(`Entscheidung für Fall #${ticket.number} an den VisionFlow-Server gesendet …`, `Decision for case #${ticket.number} sent to the VisionFlow server …`));
     render();
   }
 
@@ -1149,7 +1149,7 @@
               h("span", { className: "dot" }),
               h("span", { id: "transparency-pill-text", textContent: L("MODELL: OFFLINE-FIXTURE (FESTE TESTANTWORT)", "MODEL: OFFLINE FIXTURE (FIXED TEST ANSWER)") })
             ]),
-            h("span", { className: "transparency-sub", textContent: L("Werte live vom lokalen Server", "Values live from the local server") })
+            h("span", { className: "transparency-sub", textContent: L("Werte live vom VisionFlow-Server", "Values live from the VisionFlow server") })
           ]),
           h("div", { className: "transparency-grid" }, [
             h("div", { className: "transparency-item" }, [
