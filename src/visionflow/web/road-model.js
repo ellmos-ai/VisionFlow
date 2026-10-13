@@ -1,15 +1,17 @@
+const L = (de, en) => window.VisionFlowI18n ? window.VisionFlowI18n.L(de, en) : en;
+
 const STATUS_LABELS = Object.freeze({
-  pending: "Wird geprüft",
-  complete: "Abgeschlossen",
-  failed: "Fehlgeschlagen",
-  cancelled: "Abgebrochen",
+  pending: L("Wird geprüft", "Under review"),
+  complete: L("Abgeschlossen", "Completed"),
+  failed: L("Fehlgeschlagen", "Failed"),
+  cancelled: L("Abgebrochen", "Cancelled"),
 });
 
 const ERROR_LABELS = Object.freeze({
-  model_timeout: "Die Modellanfrage hat das Zeitlimit erreicht.",
-  invalid_json: "Die Modellantwort ließ sich nicht als gültige Bewertung lesen.",
-  invalid_evidence: "Die Modellantwort verwies auf ungültige Belege.",
-  cancelled: "Die Modellprüfung wurde abgebrochen.",
+  model_timeout: L("Die Modellanfrage hat das Zeitlimit erreicht.", "The model request reached its time limit."),
+  invalid_json: L("Die Modellantwort ließ sich nicht als gültige Bewertung lesen.", "The model response could not be read as a valid assessment."),
+  invalid_evidence: L("Die Modellantwort verwies auf ungültige Belege.", "The model response referenced invalid evidence."),
+  cancelled: L("Die Modellprüfung wurde abgebrochen.", "The model review was cancelled."),
 });
 
 const MAX_EVIDENCE_IMAGES = 8;
@@ -30,7 +32,7 @@ function setHidden(node, hidden) {
   node.hidden = Boolean(hidden);
 }
 
-function displayValue(value, fallback = "Nicht angegeben") {
+function displayValue(value, fallback = L("Nicht angegeben", "Not specified")) {
   if (!hasValue(value)) return fallback;
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -42,25 +44,25 @@ function displayValue(value, fallback = "Nicht angegeben") {
 }
 
 function statusLabel(status) {
-  return STATUS_LABELS[status] || (hasValue(status) ? `Unbekannter Status (${displayValue(status)})` : "Status nicht angegeben");
+  return STATUS_LABELS[status] || (hasValue(status) ? L(`Unbekannter Status (${displayValue(status)})`, `Unknown status (${displayValue(status)})`) : L("Status nicht angegeben", "Status not specified"));
 }
 
 function errorLabel(code) {
   if (!hasValue(code)) return "";
   const safeCode = displayValue(code);
-  return ERROR_LABELS[safeCode] || `Modellfehler (${safeCode}).`;
+  return ERROR_LABELS[safeCode] || L(`Modellfehler (${safeCode}).`, `Model error (${safeCode}).`);
 }
 
 function modeLabel(mode) {
-  if (mode === "fixture") return "Offline-Testantwort (fixture)";
+  if (mode === "fixture") return L("Offline-Testantwort (fixture)", "Offline test response (fixture)");
   if (mode === "gemini_video") return "Gemini Video (gemini_video)";
-  return hasValue(mode) ? `Modus (${displayValue(mode)})` : "Im Snapshot nicht angegeben";
+  return hasValue(mode) ? L(`Modus (${displayValue(mode)})`, `Mode (${displayValue(mode)})`) : L("Im Snapshot nicht angegeben", "Not specified in snapshot");
 }
 
 function hazardLabel(hazard) {
-  if (hazard === true) return "Ja";
-  if (hazard === false) return "Nein";
-  return "Unklar";
+  if (hazard === true) return L("Ja", "Yes");
+  if (hazard === false) return L("Nein", "No");
+  return L("Unklar", "Unclear");
 }
 
 function clipIdentity(clip) {
@@ -108,10 +110,10 @@ function imageEvidenceRefs(exchange) {
 
 export function mountRoadModel(container, apiClient) {
   if (!container || typeof container.replaceChildren !== "function") {
-    throw new TypeError("container muss ein DOM-Element sein.");
+    throw new TypeError(L("container muss ein DOM-Element sein.", "container must be a DOM element."));
   }
   if (!apiClient || typeof apiClient.getBytes !== "function") {
-    throw new TypeError("apiClient.getBytes muss verfügbar sein.");
+    throw new TypeError(L("apiClient.getBytes muss verfügbar sein.", "apiClient.getBytes must be available."));
   }
 
   let destroyed = false;
@@ -119,19 +121,19 @@ export function mountRoadModel(container, apiClient) {
   const blobRequests = new Map();
 
   const header = element("header", "road-panel-header");
-  const title = element("h2", "road-panel-title", "Modellprüfung und Ereignisclips");
-  const viewStatus = element("span", "road-panel-meta", "Warten auf Modellprüfungen");
+  const title = element("h2", "road-panel-title", L("Modellprüfung und Ereignisclips", "Model review and event clips"));
+  const viewStatus = element("span", "road-panel-meta", L("Warten auf Modellprüfungen", "Waiting for model reviews"));
   viewStatus.setAttribute("role", "status");
   viewStatus.setAttribute("aria-live", "polite");
   header.append(title, viewStatus);
 
   const list = element("div", "road-model-list");
   list.setAttribute("role", "list");
-  list.setAttribute("aria-label", "Modellprüfungen");
+  list.setAttribute("aria-label", L("Modellprüfungen", "Model reviews"));
   const emptyState = element(
     "p",
     "road-empty-state",
-    "Noch liegt keine Modellprüfung vor. Sobald ein Ereignisclip geprüft wird, erscheinen hier der tatsächliche Prompt, die Belege und die Modellantwort.",
+    L("Noch liegt keine Modellprüfung vor. Sobald ein Ereignisclip geprüft wird, erscheinen hier der tatsächliche Prompt, die Belege und die Modellantwort.", "No model review yet. As soon as an event clip is reviewed, the actual prompt, the evidence and the model response appear here."),
   );
   list.appendChild(emptyState);
   container.replaceChildren(header, list);
@@ -143,7 +145,7 @@ export function mountRoadModel(container, apiClient) {
     const path = `/road/clips/${encodeURIComponent(clip.clip_id)}`;
     const request = Promise.resolve().then(() => apiClient.getBytes(path));
     const guarded = request.then((blob) => {
-      if (!(blob instanceof Blob)) throw new TypeError("Die Cliproute lieferte keine Blob-Daten.");
+      if (!(blob instanceof Blob)) throw new TypeError(L("Die Cliproute lieferte keine Blob-Daten.", "The clip route returned no blob data."));
       return blob;
     }).catch((error) => {
       if (blobRequests.get(key) === guarded) blobRequests.delete(key);
@@ -238,7 +240,7 @@ export function mountRoadModel(container, apiClient) {
     const generation = resource.generation;
     resource.state = "pending";
     releaseEvidenceImageUrl(resource);
-    resource.status.textContent = "Authentifizierter Bildbeleg wird geladen.";
+    resource.status.textContent = L("Authentifizierter Bildbeleg wird geladen.", "Loading authenticated image evidence.");
     resource.status.classList.remove("road-status-error");
     resource.retry.disabled = true;
     setHidden(resource.retry, true);
@@ -257,14 +259,14 @@ export function mountRoadModel(container, apiClient) {
             entry,
             resource,
             generation,
-            "Bildbelegformat nicht unterstützt. Erlaubt sind PNG und JPEG.",
+            L("Bildbelegformat nicht unterstützt. Erlaubt sind PNG und JPEG.", "Image evidence format not supported. Only PNG and JPEG are allowed."),
           );
           return;
         }
 
         const objectUrl = URL.createObjectURL(blob);
         const image = element("img", "road-model-evidence-image-preview");
-        image.alt = "Gespeicherter Bildbeleg " + resource.reference;
+        image.alt = L("Gespeicherter Bildbeleg ", "Stored image evidence ") + resource.reference;
         image.addEventListener("load", () => {
           if (!isCurrentEvidenceImage(entry, resource, generation) || resource.image !== image) return;
           if (image.naturalWidth <= 0) {
@@ -272,12 +274,12 @@ export function mountRoadModel(container, apiClient) {
               entry,
               resource,
               generation,
-              "Bildbeleg konnte nicht dargestellt werden. Bitte erneut laden.",
+              L("Bildbeleg konnte nicht dargestellt werden. Bitte erneut laden.", "Image evidence could not be displayed. Please reload."),
             );
             return;
           }
           resource.state = "loaded";
-          resource.status.textContent = "Bildbeleg geladen.";
+          resource.status.textContent = L("Bildbeleg geladen.", "Image evidence loaded.");
           resource.status.classList.remove("road-status-error");
           resource.retry.disabled = false;
         }, { once: true });
@@ -286,7 +288,7 @@ export function mountRoadModel(container, apiClient) {
             entry,
             resource,
             generation,
-            "Bildbeleg konnte nicht dargestellt werden. Bitte erneut laden.",
+            L("Bildbeleg konnte nicht dargestellt werden. Bitte erneut laden.", "Image evidence could not be displayed. Please reload."),
           );
         }, { once: true });
 
@@ -301,21 +303,21 @@ export function mountRoadModel(container, apiClient) {
           entry,
           resource,
           generation,
-          "Authentifizierter Bildbeleg konnte nicht geladen werden. Bitte erneut laden.",
+          L("Authentifizierter Bildbeleg konnte nicht geladen werden. Bitte erneut laden.", "Authenticated image evidence could not be loaded. Please reload."),
         );
       });
   }
 
   function createEvidenceImage(entry, runId, reference) {
     const figure = element("figure", "evidence-frame road-model-evidence-image");
-    const caption = element("figcaption", "road-model-evidence-image-caption", "Bildbeleg: " + reference);
-    const status = element("p", "road-model-evidence-image-status", "Authentifizierter Bildbeleg wird geladen.");
+    const caption = element("figcaption", "road-model-evidence-image-caption", L("Bildbeleg: ", "Image evidence: ") + reference);
+    const status = element("p", "road-model-evidence-image-status", L("Authentifizierter Bildbeleg wird geladen.", "Loading authenticated image evidence."));
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
-    const retry = element("button", "road-btn road-btn-secondary", "Bild erneut laden");
+    const retry = element("button", "road-btn road-btn-secondary", L("Bild erneut laden", "Reload image"));
     retry.type = "button";
     retry.dataset.roadAction = "retry-evidence-image";
-    retry.setAttribute("aria-label", "Bildbeleg " + reference + " erneut laden");
+    retry.setAttribute("aria-label", L("Bildbeleg " + reference + " erneut laden", "Reload image evidence " + reference));
     setHidden(retry, true);
     const resource = {
       runId,
@@ -357,16 +359,16 @@ export function mountRoadModel(container, apiClient) {
     }
 
     if (!runId) {
-      setEvidenceGalleryMessage(entry, "Bildbelege können ohne Lauf-ID nicht geladen werden.", true);
+      setEvidenceGalleryMessage(entry, L("Bildbelege können ohne Lauf-ID nicht geladen werden.", "Image evidence cannot be loaded without a run ID."), true);
       return;
     }
     if (refs.length === 0) {
-      setEvidenceGalleryMessage(entry, "Keine Bildbelege im Snapshot vorhanden.");
+      setEvidenceGalleryMessage(entry, L("Keine Bildbelege im Snapshot vorhanden.", "No image evidence in the snapshot."));
       return;
     }
     setEvidenceGalleryMessage(
       entry,
-      limited ? "Es werden höchstens " + MAX_EVIDENCE_IMAGES + " eindeutige Bildbelege angezeigt." : "",
+      limited ? L("Es werden höchstens " + MAX_EVIDENCE_IMAGES + " eindeutige Bildbelege angezeigt.", "At most " + MAX_EVIDENCE_IMAGES + " unique image evidence items are shown.") : "",
     );
 
     const created = [];
@@ -394,7 +396,7 @@ export function mountRoadModel(container, apiClient) {
     entry.evidenceImageList.replaceChildren();
   }
 
-  function clearClip(entry, message = "Kein Clip im Snapshot vorhanden.") {
+  function clearClip(entry, message = L("Kein Clip im Snapshot vorhanden.", "No clip in the snapshot.")) {
     cancelClipWork(entry);
     detachMedia(entry);
     entry.clipIdentity = null;
@@ -409,7 +411,7 @@ export function mountRoadModel(container, apiClient) {
     const identity = clipIdentity(clip);
     if (!identity) {
       if (entry.clipIdentity !== null || entry.objectUrl || entry.clipPending) clearClip(entry);
-      else setClipMessage(entry, "Kein Clip im Snapshot vorhanden.");
+      else setClipMessage(entry, L("Kein Clip im Snapshot vorhanden.", "No clip in the snapshot."));
       return;
     }
     const scopedIdentity = `${displayValue(record.case_id, "case")}:${identity}`;
@@ -440,8 +442,8 @@ export function mountRoadModel(container, apiClient) {
     entry.abortController = abortController;
     entry.video.dataset.clipId = displayValue(clip.clip_id);
     entry.video.dataset.clipHash = displayValue(clip.sha256, "");
-    entry.video.setAttribute("aria-label", `Vollständiger Ereignisclip ${displayValue(clip.clip_id)} zur Modellprüfung`);
-    setClipMessage(entry, "Authentifizierter Ereignisclip wird geladen.");
+    entry.video.setAttribute("aria-label", L(`Vollständiger Ereignisclip ${displayValue(clip.clip_id)} zur Modellprüfung`, `Full event clip ${displayValue(clip.clip_id)} for model review`));
+    setClipMessage(entry, L("Authentifizierter Ereignisclip wird geladen.", "Loading authenticated event clip."));
 
     getBlob(clip).then((blob) => {
       if (
@@ -468,12 +470,12 @@ export function mountRoadModel(container, apiClient) {
             // The metadata event is authoritative; a non-seekable clip remains at its start.
           }
         }
-        setClipMessage(entry, "Clip geladen. Native Videosteuerung ist verfügbar.");
+        setClipMessage(entry, L("Clip geladen. Native Videosteuerung ist verfügbar.", "Clip loaded. Native video controls are available."));
       };
       const onError = () => {
         if (destroyed || entry.clipGeneration !== generation) return;
         entry.failedIdentity = scopedIdentity;
-        setClipMessage(entry, "Der Ereignisclip konnte nicht geöffnet werden.", true);
+        setClipMessage(entry, L("Der Ereignisclip konnte nicht geöffnet werden.", "The event clip could not be opened."), true);
       };
       entry.metadataListener = onMetadata;
       entry.errorListener = onError;
@@ -487,7 +489,7 @@ export function mountRoadModel(container, apiClient) {
       entry.clipPending = false;
       entry.abortController = null;
       entry.failedIdentity = scopedIdentity;
-      setClipMessage(entry, "Der authentifizierte Ereignisclip konnte nicht geladen werden.", true);
+      setClipMessage(entry, L("Der authentifizierte Ereignisclip konnte nicht geladen werden.", "The authenticated event clip could not be loaded."), true);
     });
   }
 
@@ -497,8 +499,8 @@ export function mountRoadModel(container, apiClient) {
     card.setAttribute("role", "listitem");
 
     const cardHeader = element("header", "road-panel-header");
-    const name = element("h3", "road-panel-title", `Modellprüfung ${exchangeId}`);
-    const status = element("span", "road-badge", "Status nicht angegeben");
+    const name = element("h3", "road-panel-title", L(`Modellprüfung ${exchangeId}`, `Model review ${exchangeId}`));
+    const status = element("span", "road-badge", L("Status nicht angegeben", "Status not specified"));
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
     cardHeader.append(name, status);
@@ -511,12 +513,12 @@ export function mountRoadModel(container, apiClient) {
     video.controls = true;
     video.playsInline = true;
     video.preload = "metadata";
-    video.setAttribute("aria-label", `Vollständiger Ereignisclip zur Modellprüfung ${exchangeId}`);
+    video.setAttribute("aria-label", L(`Vollständiger Ereignisclip zur Modellprüfung ${exchangeId}`, `Full event clip for model review ${exchangeId}`));
     playerShell.appendChild(video);
     left.appendChild(playerShell);
-    const clipStatus = element("p", "road-model-clip-status", "Kein Clip im Snapshot vorhanden.");
+    const clipStatus = element("p", "road-model-clip-status", L("Kein Clip im Snapshot vorhanden.", "No clip in the snapshot."));
     clipStatus.setAttribute("role", "status");
-    const retryClip = element("button", "road-btn road-btn-secondary", "Clip erneut laden");
+    const retryClip = element("button", "road-btn road-btn-secondary", L("Clip erneut laden", "Reload clip"));
     retryClip.type = "button";
     retryClip.dataset.roadAction = "retry-clip";
     setHidden(retryClip, true);
@@ -532,20 +534,20 @@ export function mountRoadModel(container, apiClient) {
     const rawOutput = element("pre", "road-stream-output road-model-raw-output");
     const assessment = element("div", "road-inspector-box road-model-assessment");
     right.append(modelFacts);
-    right.append(element("h4", "road-model-section-title", "Echte Belegreferenzen und Frame-IDs"), evidence);
+    right.append(element("h4", "road-model-section-title", L("Echte Belegreferenzen und Frame-IDs", "Actual evidence references and frame IDs")), evidence);
     const evidenceGallery = element("section", "road-model-evidence-gallery");
-    evidenceGallery.setAttribute("aria-label", "Bildbelege aus dem Modelllauf");
-    const evidenceGalleryTitle = element("h4", "road-model-section-title", "Übergebene Bildbelege");
-    const evidenceGalleryStatus = element("p", "road-model-evidence-gallery-status", "Keine Bildbelege im Snapshot vorhanden.");
+    evidenceGallery.setAttribute("aria-label", L("Bildbelege aus dem Modelllauf", "Image evidence from the model run"));
+    const evidenceGalleryTitle = element("h4", "road-model-section-title", L("Übergebene Bildbelege", "Submitted image evidence"));
+    const evidenceGalleryStatus = element("p", "road-model-evidence-gallery-status", L("Keine Bildbelege im Snapshot vorhanden.", "No image evidence in the snapshot."));
     evidenceGalleryStatus.setAttribute("role", "status");
     evidenceGalleryStatus.setAttribute("aria-live", "polite");
     const evidenceImageList = element("div", "road-model-evidence-images");
     evidenceGallery.append(evidenceGalleryTitle, evidenceGalleryStatus, evidenceImageList);
     right.append(evidenceGallery);
-    right.append(element("h4", "road-model-section-title", "Tatsächlicher Modell-Prompt"), prompt);
-    right.append(element("h4", "road-model-section-title", "Antwort-Deltas"), deltas);
-    right.append(element("h4", "road-model-section-title", "Unveränderte Modellantwort"), rawOutput);
-    right.append(element("h4", "road-model-section-title", "Validierte Bewertung"), assessment);
+    right.append(element("h4", "road-model-section-title", L("Tatsächlicher Modell-Prompt", "Actual model prompt")), prompt);
+    right.append(element("h4", "road-model-section-title", L("Antwort-Deltas", "Response deltas")), deltas);
+    right.append(element("h4", "road-model-section-title", L("Unveränderte Modellantwort", "Unmodified model response")), rawOutput);
+    right.append(element("h4", "road-model-section-title", L("Validierte Bewertung", "Validated assessment")), assessment);
     grid.append(left, right);
     card.append(cardHeader, grid);
 
@@ -587,72 +589,72 @@ export function mountRoadModel(container, apiClient) {
 
   function renderExchange(entry, exchange) {
     entry.exchange = exchange;
-    entry.name.textContent = `Modellprüfung ${displayValue(exchange.exchange_id)}`;
+    entry.name.textContent = L(`Modellprüfung ${displayValue(exchange.exchange_id)}`, `Model review ${displayValue(exchange.exchange_id)}`);
     const status = statusLabel(exchange.status);
     if (entry.status.textContent !== status) entry.status.textContent = status;
 
     const clip = exchange.clip && typeof exchange.clip === "object" ? exchange.clip : null;
     entry.clipFacts.replaceChildren();
-    appendField(entry.clipFacts, "Modus", modeLabel(exchange.mode));
-    appendField(entry.clipFacts, "Clip-ID", displayValue(clip?.clip_id));
-    appendField(entry.clipFacts, "Clipversion", hasValue(clip?.version) ? `v${displayValue(clip.version)}` : "Nicht angegeben");
+    appendField(entry.clipFacts, L("Modus", "Mode"), modeLabel(exchange.mode));
+    appendField(entry.clipFacts, L("Clip-ID", "Clip ID"), displayValue(clip?.clip_id));
+    appendField(entry.clipFacts, L("Clipversion", "Clip version"), hasValue(clip?.version) ? `v${displayValue(clip.version)}` : L("Nicht angegeben", "Not specified"));
     appendField(entry.clipFacts, "SHA-256", displayValue(clip?.sha256));
-    appendField(entry.clipFacts, "Aufnahmebildrate", hasValue(clip?.source_fps) ? `${displayValue(clip.source_fps)} fps` : "Nicht angegeben");
-    appendField(entry.clipFacts, "Verarbeitungsbildrate", hasValue(exchange.processing_fps) ? `${displayValue(exchange.processing_fps)} fps` : "Nicht angegeben");
-    appendField(entry.clipFacts, "Clipdauer", hasValue(clip?.duration_seconds)
+    appendField(entry.clipFacts, L("Aufnahmebildrate", "Capture frame rate"), hasValue(clip?.source_fps) ? `${displayValue(clip.source_fps)} fps` : L("Nicht angegeben", "Not specified"));
+    appendField(entry.clipFacts, L("Verarbeitungsbildrate", "Processing frame rate"), hasValue(exchange.processing_fps) ? `${displayValue(exchange.processing_fps)} fps` : L("Nicht angegeben", "Not specified"));
+    appendField(entry.clipFacts, L("Clipdauer", "Clip duration"), hasValue(clip?.duration_seconds)
       ? `${displayValue(clip.duration_seconds)} s`
       : hasValue(clip?.start_seconds) && hasValue(clip?.end_seconds)
         ? `${(Number(clip.end_seconds) - Number(clip.start_seconds)).toFixed(2)} s`
-        : "Nicht angegeben");
+        : L("Nicht angegeben", "Not specified"));
 
     entry.modelFacts.replaceChildren();
-    appendField(entry.modelFacts, "Modell-ID", displayValue(exchange.model_id));
-    appendField(entry.modelFacts, "Fall-ID", displayValue(exchange.case_id));
-    appendField(entry.modelFacts, "Lauf-ID", displayValue(exchange.run_id));
-    appendField(entry.modelFacts, "Austausch-ID", displayValue(exchange.exchange_id));
+    appendField(entry.modelFacts, L("Modell-ID", "Model ID"), displayValue(exchange.model_id));
+    appendField(entry.modelFacts, L("Fall-ID", "Case ID"), displayValue(exchange.case_id));
+    appendField(entry.modelFacts, L("Lauf-ID", "Run ID"), displayValue(exchange.run_id));
+    appendField(entry.modelFacts, L("Austausch-ID", "Exchange ID"), displayValue(exchange.exchange_id));
 
     const evidenceValues = [];
     if (Array.isArray(exchange.evidence_refs)) evidenceValues.push(...exchange.evidence_refs);
     if (Array.isArray(exchange.assessment?.evidence_frame_ids)) evidenceValues.push(...exchange.assessment.evidence_frame_ids);
     if (Array.isArray(clip?.frame_ids)) evidenceValues.push(...clip.frame_ids);
     const uniqueEvidence = [...new Set(evidenceValues.map((item) => displayValue(item)))];
-    entry.evidence.textContent = uniqueEvidence.length ? uniqueEvidence.join("\n") : "Keine Belegreferenzen im Snapshot vorhanden.";
+    entry.evidence.textContent = uniqueEvidence.length ? uniqueEvidence.join("\n") : L("Keine Belegreferenzen im Snapshot vorhanden.", "No evidence references in the snapshot.");
     syncEvidenceImages(entry, exchange);
 
-    entry.prompt.textContent = hasValue(exchange.prompt) ? displayValue(exchange.prompt) : "Kein Prompt im Snapshot vorhanden.";
+    entry.prompt.textContent = hasValue(exchange.prompt) ? displayValue(exchange.prompt) : L("Kein Prompt im Snapshot vorhanden.", "No prompt in the snapshot.");
     const deltaText = Array.isArray(exchange.deltas)
       ? exchange.deltas.map((item) => displayValue(item, "")).join("")
       : "";
-    entry.deltas.textContent = deltaText || "Keine Antwort-Deltas im Snapshot vorhanden.";
+    entry.deltas.textContent = deltaText || L("Keine Antwort-Deltas im Snapshot vorhanden.", "No response deltas in the snapshot.");
     entry.rawOutput.textContent = hasValue(exchange.raw_output)
       ? displayValue(exchange.raw_output)
-      : "Keine Rohantwort im Snapshot vorhanden.";
+      : L("Keine Rohantwort im Snapshot vorhanden.", "No raw response in the snapshot.");
 
     entry.assessment.replaceChildren();
     const modelError = exchange.error_code;
     if (hasValue(modelError)) {
       const error = element("p", "road-status-error", errorLabel(modelError));
-      const errorCode = element("code", "road-model-error-code", `Fehlercode: ${displayValue(modelError)}`);
+      const errorCode = element("code", "road-model-error-code", L(`Fehlercode: ${displayValue(modelError)}`, `Error code: ${displayValue(modelError)}`));
       entry.assessment.append(error, errorCode);
     }
     if (exchange.assessment && typeof exchange.assessment === "object") {
       const result = exchange.assessment;
-      appendField(entry.assessment, "Objektklasse", displayValue(result.object_class));
-      appendField(entry.assessment, "Gefahrenstatus", hazardLabel(result.hazard));
+      appendField(entry.assessment, L("Objektklasse", "Object class"), displayValue(result.object_class));
+      appendField(entry.assessment, L("Gefahrenstatus", "Hazard status"), hazardLabel(result.hazard));
       if (typeof result.confidence === "number" && Number.isFinite(result.confidence)) {
-        appendField(entry.assessment, "Vom Modell angegebene Sicherheit", String(result.confidence));
+        appendField(entry.assessment, L("Vom Modell angegebene Sicherheit", "Confidence reported by the model"), String(result.confidence));
       } else {
-        appendField(entry.assessment, "Sicherheit", "Im Snapshot nicht angegeben");
+        appendField(entry.assessment, L("Sicherheit", "Confidence"), L("Im Snapshot nicht angegeben", "Not specified in snapshot"));
       }
-      appendField(entry.assessment, "Zusammenfassung", displayValue(result.summary));
+      appendField(entry.assessment, L("Zusammenfassung", "Summary"), displayValue(result.summary));
       if (result.decision && typeof result.decision === "object") {
-        appendField(entry.assessment, "Validierte Folgeaktion", displayValue(result.decision.action));
+        appendField(entry.assessment, L("Validierte Folgeaktion", "Validated follow-up action"), displayValue(result.decision.action));
       }
     } else if (!hasValue(modelError)) {
-      entry.assessment.textContent = "Noch liegt keine validierte Bewertung vor.";
+      entry.assessment.textContent = L("Noch liegt keine validierte Bewertung vor.", "No validated assessment yet.");
     }
 
-    if (!clip) clearClip(entry, "Kein Clip im Snapshot vorhanden.");
+    if (!clip) clearClip(entry, L("Kein Clip im Snapshot vorhanden.", "No clip in the snapshot."));
     else requestClip(entry, clip, exchange);
   }
 
@@ -675,12 +677,12 @@ export function mountRoadModel(container, apiClient) {
 
     if (records.size === 0) {
       if (emptyState.parentNode !== list) list.appendChild(emptyState);
-      viewStatus.textContent = "Keine Modellprüfungen vorhanden";
+      viewStatus.textContent = L("Keine Modellprüfungen vorhanden", "No model reviews");
       return;
     }
 
     if (emptyState.parentNode === list) emptyState.remove();
-    viewStatus.textContent = `${records.size} Modellprüfung${records.size === 1 ? "" : "en"}`;
+    viewStatus.textContent = L(`${records.size} Modellprüfung${records.size === 1 ? "" : "en"}`, `${records.size} model review${records.size === 1 ? "" : "s"}`);
     const ordered = [];
     for (const [exchangeId, exchange] of records) {
       let entry = entries.get(exchangeId);

@@ -1,5 +1,5 @@
 /**
- * FlowVision Emergency Leitstelle – Interactive Browser Game Engine
+ * VisionFlow Emergency Leitstelle – Interactive Browser Game Engine
  * Inspired by Emergency / Bibi Blocksberg / Benjamin Blümchen Rettungszentrale
  * 
  * Manages 4 Rooms:
@@ -13,6 +13,7 @@
  */
 (function (global) {
   "use strict";
+  const L = (de, en) => window.VisionFlowI18n ? window.VisionFlowI18n.L(de, en) : en;
 
   // --- Cartoon SVG Assets (Clean inline SVG Blobs) ---
   const SVGS = {
@@ -118,47 +119,47 @@
   // the local backend (case snapshots, model exchanges, clip bytes). The game
   // only adds the cartoon presentation around that data.
   const EVENT_LABELS = {
-    wrong_way: "⚠️ Falschfahrer",
-    bird: "🐦 Vogel",
-    leaf: "🍂 Blatt",
+    wrong_way: L("⚠️ Falschfahrer", "⚠️ Wrong-way driver"),
+    bird: L("🐦 Vogel", "🐦 Bird"),
+    leaf: L("🍂 Blatt", "🍂 Leaf"),
   };
   const PHASE_LABELS = {
-    starting: "Fall startet",
-    running: "Analyse läuft",
-    model_review: "Modellprüfung",
-    human_review: "Menschliche Prüfung offen",
-    no_response: "Frist abgelaufen · automatisch gemeldet",
-    reported: "An Behörde gemeldet",
-    dismissed: "Entwarnung durch Modell",
-    rejected: "Als Fehlalarm verworfen",
-    corrected: "Entwarnung nachgesendet",
-    cancelled: "Abgebrochen",
-    normal: "Kein Befund im Beobachtungsfenster",
-    source_ended: "Kameraquelle beendet",
-    failed: "Fehlgeschlagen",
+    starting: L("Fall startet", "Case starting"),
+    running: L("Analyse läuft", "Analysis running"),
+    model_review: L("Modellprüfung", "Model review"),
+    human_review: L("Menschliche Prüfung offen", "Human review pending"),
+    no_response: L("Frist abgelaufen · automatisch gemeldet", "Deadline expired · reported automatically"),
+    reported: L("An Behörde gemeldet", "Reported to authority"),
+    dismissed: L("Entwarnung durch Modell", "All-clear by model"),
+    rejected: L("Als Fehlalarm verworfen", "Dismissed as false alarm"),
+    corrected: L("Entwarnung nachgesendet", "All-clear sent afterwards"),
+    cancelled: L("Abgebrochen", "Cancelled"),
+    normal: L("Kein Befund im Beobachtungsfenster", "No finding in observation window"),
+    source_ended: L("Kameraquelle beendet", "Camera source ended"),
+    failed: L("Fehlgeschlagen", "Failed"),
   };
   const OBJECT_LABELS = {
-    vehicle: "Fahrzeug",
-    bird: "Vogel",
-    leaf: "Blatt",
-    unknown: "unklar",
+    vehicle: L("Fahrzeug", "Vehicle"),
+    bird: L("Vogel", "Bird"),
+    leaf: L("Blatt", "Leaf"),
+    unknown: L("unklar", "unclear"),
   };
   const FIXTURE_PROFILE_LABELS = {
-    pending: "Fahrzeug, Gefahr, Sicherheit 0,80 → menschliche Prüfung",
-    high: "Fahrzeug, Gefahr, Sicherheit 0,99 → automatische Meldung",
-    bird: "Vogel, keine Gefahr (0,99)",
-    leaf: "Blatt, keine Gefahr (0,99)",
-    unclear: "Unklares Ergebnis",
-    followup: "Fordert eine Folgebeobachtung an",
-    error: "Modellfehler",
+    pending: L("Fahrzeug, Gefahr, Sicherheit 0,80 → menschliche Prüfung", "Vehicle, hazard, confidence 0.80 → human review"),
+    high: L("Fahrzeug, Gefahr, Sicherheit 0,99 → automatische Meldung", "Vehicle, hazard, confidence 0.99 → automatic report"),
+    bird: L("Vogel, keine Gefahr (0,99)", "Bird, no hazard (0.99)"),
+    leaf: L("Blatt, keine Gefahr (0,99)", "Leaf, no hazard (0.99)"),
+    unclear: L("Unklares Ergebnis", "Unclear result"),
+    followup: L("Fordert eine Folgebeobachtung an", "Requests a follow-up observation"),
+    error: L("Modellfehler", "Model error"),
   };
   const INJECT_BLOCK_REASONS = {
-    destroyed: "Die Kameraansicht wurde geschlossen.",
-    source_closed: "Die Kamera läuft nicht.",
-    review_locked: "Der aktuelle Fall ist in Prüfung – neue Ereignisse sind bis zur Entscheidung gesperrt.",
-    warming_up: "Die Analyse wärmt sich noch auf (drei echte Startframes).",
-    run_inactive: "Der Analyse-Lauf dieses Falls ist beendet.",
-    source_changed: "Die Kameraquelle wurde inzwischen gewechselt.",
+    destroyed: L("Die Kameraansicht wurde geschlossen.", "The camera view was closed."),
+    source_closed: L("Die Kamera läuft nicht.", "The camera is not running."),
+    review_locked: L("Der aktuelle Fall ist in Prüfung – neue Ereignisse sind bis zur Entscheidung gesperrt.", "The current case is under review – new events are locked until a decision is made."),
+    warming_up: L("Die Analyse wärmt sich noch auf (drei echte Startframes).", "The analysis is still warming up (three real start frames)."),
+    run_inactive: L("Der Analyse-Lauf dieses Falls ist beendet.", "The analysis run of this case has ended."),
+    source_changed: L("Die Kameraquelle wurde inzwischen gewechselt.", "The camera source has been changed in the meantime."),
   };
   const REVIEW_PHASES = new Set(["model_review", "human_review"]);
   const ACTIVE_PHASES = new Set(["starting", "running", "model_review", "human_review"]);
@@ -167,7 +168,7 @@
   let env = null; // { roadMount, apiClient, workplace, openCase }
   let mountedHandle = null;
   let currentRoom = 1;
-  let currentLang = "de";
+  let currentLang = window.VisionFlowI18n ? window.VisionFlowI18n.lang : "en";
   let capabilities = null;
   const tickets = new Map(); // caseId -> ticket
   let ticketOrder = []; // newest first
@@ -181,7 +182,7 @@
   // Translation table (static labels; live case data is shown as delivered)
   const I18N = {
     de: {
-      title: "FlowVision – Emergency Einsatzleitstelle",
+      title: "VisionFlow – Emergency Einsatzleitstelle",
       subtitle: "Video-Analyse-Demonstrator · alle Falldaten live vom lokalen Server",
       soundOn: "🔊 Ton: An",
       soundOff: "🔇 Ton: Aus",
@@ -207,7 +208,7 @@
       weberManual: "🚨 Gefahr manuell bestätigen"
     },
     en: {
-      title: "FlowVision – Emergency Dispatch Mission Control",
+      title: "VisionFlow – Emergency Dispatch Mission Control",
       subtitle: "Video analysis demonstrator · all case data live from the local server",
       soundOn: "🔊 Sound: ON",
       soundOff: "🔇 Sound: OFF",
@@ -272,7 +273,7 @@
 
   function formatDecimal(value, digits = 2) {
     return typeof value === "number" && Number.isFinite(value)
-      ? value.toLocaleString("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits })
+      ? value.toLocaleString(L("de-DE", "en-US"), { minimumFractionDigits: digits, maximumFractionDigits: digits })
       : "–";
   }
 
@@ -327,7 +328,7 @@
   }
 
   function phaseLabel(phase) {
-    return phase ? PHASE_LABELS[phase] || phase : "Fall startet";
+    return phase ? PHASE_LABELS[phase] || phase : L("Fall startet", "Case starting");
   }
 
   function focusTicket() {
@@ -346,20 +347,20 @@
     const modelId = exchange && typeof exchange.model_id === "string" ? exchange.model_id : null;
     if (snapshot.mode === "fixture") {
       const profile = snapshot.fixture_profile || "pending";
-      return `Offline-Testantwort (Profil „${profile}“${modelId ? ", " + modelId : ""})`;
+      return L(`Offline-Testantwort (Profil „${profile}“${modelId ? ", " + modelId : ""})`, `Offline test answer (profile “${profile}”${modelId ? ", " + modelId : ""})`);
     }
     return modelId ? `${modelId} (${snapshot.mode})` : String(snapshot.mode || "–");
   }
 
   function assessmentText(assessment) {
     if (!assessment || typeof assessment !== "object") return null;
-    const object = OBJECT_LABELS[assessment.object_class] || String(assessment.object_class || "unklar");
-    const hazard = assessment.hazard === true ? "Gefahr" : assessment.hazard === false ? "keine Gefahr" : "Gefahr unklar";
-    return `${object} · ${hazard} · Sicherheit ${formatDecimal(assessment.confidence)}`;
+    const object = OBJECT_LABELS[assessment.object_class] || String(assessment.object_class || L("unklar", "unclear"));
+    const hazard = assessment.hazard === true ? L("Gefahr", "Hazard") : assessment.hazard === false ? L("keine Gefahr", "no hazard") : L("Gefahr unklar", "hazard unclear");
+    return L(`${object} · ${hazard} · Sicherheit ${formatDecimal(assessment.confidence)}`, `${object} · ${hazard} · confidence ${formatDecimal(assessment.confidence)}`);
   }
 
   function scenarioText(ticket) {
-    if (!ticket || ticket.scenario.length === 0) return "keine Ereignisse aus dem Spiel eingeblendet";
+    if (!ticket || ticket.scenario.length === 0) return L("keine Ereignisse aus dem Spiel eingeblendet", "no events injected from the game");
     return ticket.scenario.map((entry) => EVENT_LABELS[entry.type] || entry.type).join(" → ");
   }
 
@@ -378,7 +379,7 @@
 
   // --- Phase transitions (all derived from server snapshots) ------------------
   function onPhaseChange(ticket, previous, phase) {
-    const label = `Fall #${ticket.number}`;
+    const label = L(`Fall #${ticket.number}`, `Case #${ticket.number}`);
     const snapshot = ticket.snapshot || {};
     appendDatacenterLog(`[${label}] Phase: ${phaseLabel(previous)} → ${phaseLabel(phase)}`);
     if (phase === "model_review" || (REVIEW_PHASES.has(phase) && !REVIEW_PHASES.has(previous))) {
@@ -392,9 +393,9 @@
     const assessment = assessmentText(snapshot.assessment);
     if (assessment && !ticket.loggedAssessment) {
       ticket.loggedAssessment = true;
-      appendDatacenterLog(`[${label}] Modellantwort: ${assessment} · Quelle: ${modelSourceText(ticket)}`);
+      appendDatacenterLog(L(`[${label}] Modellantwort: ${assessment} · Quelle: ${modelSourceText(ticket)}`, `[${label}] Model answer: ${assessment} · Source: ${modelSourceText(ticket)}`));
     }
-    if (snapshot.model_error) appendDatacenterLog(`[${label}] Modellfehler: ${snapshot.model_error}`);
+    if (snapshot.model_error) appendDatacenterLog(L(`[${label}] Modellfehler: ${snapshot.model_error}`, `[${label}] Model error: ${snapshot.model_error}`));
     if (phase === "human_review") {
       setCablePulsing("cable-2-3", true);
       const follow = $("follow-btn-2");
@@ -404,7 +405,7 @@
     if (phase === "no_response" && !ticket.dispatched && snapshot.first_receipt) {
       ticket.dispatched = true;
       dispatchPatrolCar();
-      appendDatacenterLog(`[${label}] Frist abgelaufen – automatische Meldung (Beleg ${snapshot.first_receipt.receipt_id || "–"})`);
+      appendDatacenterLog(L(`[${label}] Frist abgelaufen – automatische Meldung (Beleg ${snapshot.first_receipt.receipt_id || "–"})`, `[${label}] Deadline expired – automatic report (receipt ${snapshot.first_receipt.receipt_id || "–"})`));
     }
     if (phase === "reported" && !ticket.dispatched) {
       ticket.dispatched = true;
@@ -422,7 +423,7 @@
     const ticket = ticketFor(detail.caseId);
     if (detail.case) updateTicket(detail.caseId, detail.case);
     selectedCaseId = ticket.caseId;
-    appendDatacenterLog(`[Fall #${ticket.number}] Neuer Fall auf ${detail.sourceId || "Kamera"} gestartet · ${modelSourceText(ticket)}`);
+    appendDatacenterLog(L(`[Fall #${ticket.number}] Neuer Fall auf ${detail.sourceId || "Kamera"} gestartet · ${modelSourceText(ticket)}`, `[Case #${ticket.number}] New case started on ${detail.sourceId || "camera"} · ${modelSourceText(ticket)}`));
     render();
   }
 
@@ -452,11 +453,11 @@
         ticket.dispatched = true;
         dispatchPatrolCar();
       }
-      setText("speech-schmidt", `Der Server hat meine Bestätigung für Fall #${ticket.number} angenommen. Die Meldung geht an das simulierte Behördenpostfach – Streife rückt aus!`);
+      setText("speech-schmidt", L(`Der Server hat meine Bestätigung für Fall #${ticket.number} angenommen. Die Meldung geht an das simulierte Behördenpostfach – Streife rückt aus!`, `The server accepted my confirmation for case #${ticket.number}. The report goes to the simulated authority inbox – patrol is on its way!`));
     } else {
-      setText("speech-schmidt", `Der Server hat meine Verneinung für Fall #${ticket.number} angenommen. Kein Einsatz; eine schon gesendete Meldung erhält eine Entwarnung.`);
+      setText("speech-schmidt", L(`Der Server hat meine Verneinung für Fall #${ticket.number} angenommen. Kein Einsatz; eine schon gesendete Meldung erhält eine Entwarnung.`, `The server accepted my denial for case #${ticket.number}. No dispatch; a report already sent receives an all-clear.`));
     }
-    appendDatacenterLog(`[Fall #${ticket.number}] Menschliche Entscheidung angenommen: ${detail.decision === "confirm" ? "Gefahr bestätigt" : "Gefahr verneint"}`);
+    appendDatacenterLog(L(`[Fall #${ticket.number}] Menschliche Entscheidung angenommen: ${detail.decision === "confirm" ? "Gefahr bestätigt" : "Gefahr verneint"}`, `[Case #${ticket.number}] Human decision accepted: ${detail.decision === "confirm" ? "hazard confirmed" : "hazard denied"}`));
   }
 
   async function loadCapabilities() {
@@ -541,7 +542,7 @@
         throw new Error(INJECT_BLOCK_REASONS[state.injectBlocker]);
       }
       if (Date.now() >= deadline) {
-        throw new Error(INJECT_BLOCK_REASONS[state.injectBlocker] || "Die Kamera ist noch nicht bereit.");
+        throw new Error(INJECT_BLOCK_REASONS[state.injectBlocker] || L("Die Kamera ist noch nicht bereit.", "The camera is not ready yet."));
       }
       await wait(200);
     }
@@ -574,7 +575,7 @@
   async function triggerEvent(eventType) {
     if (eventBusy) return;
     if (!env || !env.roadMount) {
-      setText("speech-alex", "Die Straßenkamera ist nicht verbunden. Ohne lokalen Server gibt es hier nichts zu analysieren.");
+      setText("speech-alex", L("Die Straßenkamera ist nicht verbunden. Ohne lokalen Server gibt es hier nichts zu analysieren.", "The road camera is not connected. Without the local server there is nothing to analyze here."));
       return;
     }
     eventBusy = true;
@@ -583,32 +584,32 @@
     try {
       let state = cameraState();
       if (!state.available) {
-        throw new Error((capabilities && capabilities.message) || "Die Straßenkamera ist nicht verfügbar (FFmpeg mit libx264 erforderlich).");
+        throw new Error((capabilities && capabilities.message) || L("Die Straßenkamera ist nicht verfügbar (FFmpeg mit libx264 erforderlich).", "The road camera is not available (FFmpeg with libx264 required)."));
       }
       const current = state.caseId ? tickets.get(state.caseId) : null;
       const phase = phaseOf(current);
       if (state.sourceOpen && current && REVIEW_PHASES.has(phase)) {
-        throw new Error(`Fall #${current.number} ist in Prüfung (${phaseLabel(phase)}). Entscheide in Raum 3 oder lass die Frist in Raum 4 ablaufen – erst dann startet ein neuer Fall.`);
+        throw new Error(L(`Fall #${current.number} ist in Prüfung (${phaseLabel(phase)}). Entscheide in Raum 3 oder lass die Frist in Raum 4 ablaufen – erst dann startet ein neuer Fall.`, `Case #${current.number} is under review (${phaseLabel(phase)}). Decide in room 3 or let the deadline run out in room 4 – only then does a new case start.`));
       }
       if (!state.sourceOpen || !state.caseId || (phase && !ACTIVE_PHASES.has(phase))) {
-        setText("speech-alex", "Ich starte eine neue Kameraquelle mit einem neuen Fall und warte, bis die Analyse drei echte Startframes gesehen hat …");
+        setText("speech-alex", L("Ich starte eine neue Kameraquelle mit einem neuen Fall und warte, bis die Analyse drei echte Startframes gesehen hat …", "I am starting a new camera source with a new case and waiting until the analysis has seen three real start frames …"));
         await startNewCase();
       }
       state = await waitForInjectable(20000);
       const result = await env.roadMount.injectScenarioEvent(eventType);
       if (!result || !result.injected) {
-        throw new Error(INJECT_BLOCK_REASONS[result && result.reason] || "Das Ereignis wurde nicht eingeblendet.");
+        throw new Error(INJECT_BLOCK_REASONS[result && result.reason] || L("Das Ereignis wurde nicht eingeblendet.", "The event was not injected."));
       }
       const ticket = ticketFor(result.caseId || state.caseId);
       ticket.scenario.push({ type: eventType, at: new Date() });
       selectedCaseId = ticket.caseId;
       const label = EVENT_LABELS[eventType] || eventType;
-      showBanner(`Szenario eingeblendet: ${label} · Fall #${ticket.number} · OpenCV analysiert jetzt die echten Frames`);
-      setText("speech-alex", `${label} ist jetzt in der Live-Szene. Das ist noch kein Befund: Erst wenn die Bildanalyse auf den echten Frames anschlägt, schneidet der Server einen Clip für Fall #${ticket.number}.`);
-      appendDatacenterLog(`[Fall #${ticket.number}] Szenario eingeblendet: ${label} (Spielaktion, kein Analysebefund)`);
+      showBanner(L(`Szenario eingeblendet: ${label} · Fall #${ticket.number} · OpenCV analysiert jetzt die echten Frames`, `Scenario injected: ${label} · Case #${ticket.number} · OpenCV is now analyzing the real frames`));
+      setText("speech-alex", L(`${label} ist jetzt in der Live-Szene. Das ist noch kein Befund: Erst wenn die Bildanalyse auf den echten Frames anschlägt, schneidet der Server einen Clip für Fall #${ticket.number}.`, `${label} is now in the live scene. That is not a finding yet: only when the image analysis triggers on the real frames does the server cut a clip for case #${ticket.number}.`));
+      appendDatacenterLog(L(`[Fall #${ticket.number}] Szenario eingeblendet: ${label} (Spielaktion, kein Analysebefund)`, `[Case #${ticket.number}] Scenario injected: ${label} (game action, not an analysis finding)`));
       render();
     } catch (error) {
-      setText("speech-alex", error && error.message ? error.message : "Das Ereignis konnte nicht eingeblendet werden.");
+      setText("speech-alex", error && error.message ? error.message : L("Das Ereignis konnte nicht eingeblendet werden.", "The event could not be injected."));
     } finally {
       eventBusy = false;
       setEventButtonsDisabled(false);
@@ -625,16 +626,16 @@
       if (state.sourceOpen) {
         const current = state.caseId ? tickets.get(state.caseId) : null;
         if (current && REVIEW_PHASES.has(phaseOf(current))) {
-          throw new Error(`Fall #${current.number} ist in Prüfung. Stoppen würde die offene Prüfung abbrechen – entscheide zuerst in Raum 3.`);
+          throw new Error(L(`Fall #${current.number} ist in Prüfung. Stoppen würde die offene Prüfung abbrechen – entscheide zuerst in Raum 3.`, `Case #${current.number} is under review. Stopping would abort the open review – decide in room 3 first.`));
         }
         await env.roadMount.stopSource();
-        setText("speech-alex", "Kamera gestoppt. Die Aufnahme wurde als Clip gesichert.");
+        setText("speech-alex", L("Kamera gestoppt. Die Aufnahme wurde als Clip gesichert.", "Camera stopped. The recording was saved as a clip."));
       } else {
-        setText("speech-alex", "Ich starte die Kamera mit einem neuen Fall …");
+        setText("speech-alex", L("Ich starte die Kamera mit einem neuen Fall …", "I am starting the camera with a new case …"));
         await startNewCase();
       }
     } catch (error) {
-      setText("speech-alex", error && error.message ? error.message : "Die Kamera konnte nicht umgeschaltet werden.");
+      setText("speech-alex", error && error.message ? error.message : L("Die Kamera konnte nicht umgeschaltet werden.", "The camera could not be toggled."));
     } finally {
       eventBusy = false;
       setEventButtonsDisabled(false);
@@ -651,9 +652,9 @@
     const previousMode = modeSelect.value;
     const previousProfile = profileSelect.value;
     modeSelect.replaceChildren();
-    if (modes.includes("fixture")) modeSelect.appendChild(h("option", { value: "fixture", textContent: "Offline-Testantwort (lokal, ohne Netz)" }));
-    if (modes.includes("gemini_video")) modeSelect.appendChild(h("option", { value: "gemini_video", textContent: "Gemini-Video (extern, kostenpflichtig)" }));
-    if (!modeSelect.options.length) modeSelect.appendChild(h("option", { value: "", textContent: "Kein Modellmodus verfügbar" }));
+    if (modes.includes("fixture")) modeSelect.appendChild(h("option", { value: "fixture", textContent: L("Offline-Testantwort (lokal, ohne Netz)", "Offline test answer (local, no network)") }));
+    if (modes.includes("gemini_video")) modeSelect.appendChild(h("option", { value: "gemini_video", textContent: L("Gemini-Video (extern, kostenpflichtig)", "Gemini video (external, paid)") }));
+    if (!modeSelect.options.length) modeSelect.appendChild(h("option", { value: "", textContent: L("Kein Modellmodus verfügbar", "No model mode available") }));
     if ([...modeSelect.options].some((option) => option.value === previousMode)) modeSelect.value = previousMode;
     profileSelect.replaceChildren();
     const ordered = ["pending", "high", "bird", "leaf", "unclear"].filter((name) => profiles.includes(name));
@@ -683,17 +684,17 @@
     const pillBox = $("transparency-pill");
     if (pill) {
       pill.textContent = snapshot && snapshot.mode === "gemini_video"
-        ? "MODELL: GEMINI-VIDEO (EXTERN, KOSTENPFLICHTIG)"
-        : "MODELL: OFFLINE-FIXTURE (FESTE TESTANTWORT)";
+        ? L("MODELL: GEMINI-VIDEO (EXTERN, KOSTENPFLICHTIG)", "MODEL: GEMINI VIDEO (EXTERNAL, PAID)")
+        : L("MODELL: OFFLINE-FIXTURE (FESTE TESTANTWORT)", "MODEL: OFFLINE FIXTURE (FIXED TEST ANSWER)");
     }
     if (pillBox) pillBox.classList.toggle("fallback", !(snapshot && snapshot.mode === "gemini_video"));
     setText("transparency-profile-val", snapshot
       ? `${snapshot.mode}${snapshot.fixture_profile ? "/" + snapshot.fixture_profile : ""}`
-      : "noch kein Fall");
-    setText("transparency-native-val", nativeEnabled ? "freigegeben (Server mit Kostenfreigabe)" : "nicht freigegeben");
+      : L("noch kein Fall", "no case yet"));
+    setText("transparency-native-val", nativeEnabled ? L("freigegeben (Server mit Kostenfreigabe)", "enabled (server with cost approval)") : L("nicht freigegeben", "not enabled"));
     setText("transparency-notice", nativeEnabled
-      ? "Ehrlichkeitshinweis: Der Server erlaubt Gemini-Video. Fälle im Modus „gemini_video“ senden den Clip und Belegbilder an Google; Fixture-Fälle bleiben lokal und liefern feste Testantworten."
-      : "Ehrlichkeitshinweis: Kein externes Modell freigegeben (Server ohne --allow-gemini-costs oder ohne GEMINI_API_KEY). Stufe 2 liefert deshalb feste Offline-Testantworten nach dem gewählten Profil – sie bewerten den Bildinhalt nicht. Echt sind die gerenderte Szene, die OpenCV-Analyse der Frames, Clip-Export mit SHA-256, Fristen und das simulierte Behördenpostfach.");
+      ? L("Ehrlichkeitshinweis: Der Server erlaubt Gemini-Video. Fälle im Modus „gemini_video“ senden den Clip und Belegbilder an Google; Fixture-Fälle bleiben lokal und liefern feste Testantworten.", "Honesty note: the server allows Gemini video. Cases in “gemini_video” mode send the clip and evidence images to Google; fixture cases stay local and return fixed test answers.")
+      : L("Ehrlichkeitshinweis: Kein externes Modell freigegeben (Server ohne --allow-gemini-costs oder ohne GEMINI_API_KEY). Stufe 2 liefert deshalb feste Offline-Testantworten nach dem gewählten Profil – sie bewerten den Bildinhalt nicht. Echt sind die gerenderte Szene, die OpenCV-Analyse der Frames, Clip-Export mit SHA-256, Fristen und das simulierte Behördenpostfach.", "Honesty note: no external model is enabled (server without --allow-gemini-costs or without GEMINI_API_KEY). Stage 2 therefore returns fixed offline test answers per the selected profile – they do not evaluate the image content. Real are the rendered scene, the OpenCV analysis of the frames, clip export with SHA-256, deadlines and the simulated authority inbox."));
   }
 
   function renderDatacenter() {
@@ -709,7 +710,7 @@
     const listEl = $("datacenter-queue-list");
     if (listEl && listChanged("datacenter-queue-list", ticketSignature())) {
       listEl.replaceChildren();
-      if (ticketOrder.length === 0) listEl.textContent = "Noch keine Fälle. Starte die Kamera in Raum 1.";
+      if (ticketOrder.length === 0) listEl.textContent = L("Noch keine Fälle. Starte die Kamera in Raum 1.", "No cases yet. Start the camera in room 1.");
       for (const caseId of ticketOrder.slice(0, 6)) {
         const item = tickets.get(caseId);
         const clip = item.snapshot && item.snapshot.clip;
@@ -719,9 +720,9 @@
           className: `queue-item ${hazard ? "high-risk" : ""} ${caseId === selectedCaseId ? "active-ticket" : ""}`,
           onclick: () => selectTicket(caseId),
         }, [
-          h("strong", { textContent: `Fall #${item.number} · ${phaseLabel(phaseOf(item))}` }),
+          h("strong", { textContent: L(`Fall #${item.number} · ${phaseLabel(phaseOf(item))}`, `Case #${item.number} · ${phaseLabel(phaseOf(item))}`) }),
           h("br"),
-          h("small", { textContent: clip ? `Clip ${String(clip.clip_id).slice(0, 8)} · SHA-256 ${shortHash(clip.sha256)}` : "noch kein Clip" }),
+          h("small", { textContent: clip ? `Clip ${String(clip.clip_id).slice(0, 8)} · SHA-256 ${shortHash(clip.sha256)}` : L("noch kein Clip", "no clip yet") }),
         ]));
       }
     }
@@ -730,31 +731,31 @@
     if (verdictBox) {
       verdictBox.replaceChildren();
       if (!ticket) {
-        verdictBox.textContent = "Bereit – noch kein Fall.";
+        verdictBox.textContent = L("Bereit – noch kein Fall.", "Ready – no case yet.");
       } else {
-        let stage1 = "Beobachtet die Szene (Bewegung + Richtung auf echten Frames) …";
-        if (phase === "normal") stage1 = "Kein Befund im Beobachtungsfenster.";
-        else if (phase === "source_ended" || phase === "cancelled") stage1 = "Analyse ohne Befund beendet.";
-        else if (snapshot && snapshot.clip) stage1 = `Befund ausgelöst → Clip ${String(snapshot.clip.clip_id).slice(0, 8)} (SHA-256 ${shortHash(snapshot.clip.sha256)})`;
-        else if (phase && phase !== "running" && phase !== "starting") stage1 = "Befund ausgelöst.";
+        let stage1 = L("Beobachtet die Szene (Bewegung + Richtung auf echten Frames) …", "Observing the scene (motion + direction on real frames) …");
+        if (phase === "normal") stage1 = L("Kein Befund im Beobachtungsfenster.", "No finding in observation window.");
+        else if (phase === "source_ended" || phase === "cancelled") stage1 = L("Analyse ohne Befund beendet.", "Analysis ended without finding.");
+        else if (snapshot && snapshot.clip) stage1 = L(`Befund ausgelöst → Clip ${String(snapshot.clip.clip_id).slice(0, 8)} (SHA-256 ${shortHash(snapshot.clip.sha256)})`, `Finding triggered → clip ${String(snapshot.clip.clip_id).slice(0, 8)} (SHA-256 ${shortHash(snapshot.clip.sha256)})`);
+        else if (phase && phase !== "running" && phase !== "starting") stage1 = L("Befund ausgelöst.", "Finding triggered.");
         const assessment = assessmentText(snapshot && snapshot.assessment);
-        let stage2 = "wartet auf einen Befund aus Stufe 1";
+        let stage2 = L("wartet auf einen Befund aus Stufe 1", "waiting for a finding from stage 1");
         if (assessment) stage2 = assessment;
-        else if (snapshot && snapshot.model_error) stage2 = `Modellfehler: ${snapshot.model_error}`;
-        else if (phase === "model_review") stage2 = "Modell prüft den Clip …";
+        else if (snapshot && snapshot.model_error) stage2 = L(`Modellfehler: ${snapshot.model_error}`, `Model error: ${snapshot.model_error}`);
+        else if (phase === "model_review") stage2 = L("Modell prüft den Clip …", "Model is reviewing the clip …");
         const hazard = snapshot && snapshot.assessment ? snapshot.assessment.hazard : null;
         const fixture = snapshot && snapshot.mode === "fixture";
         verdictBox.append(h("div", { className: "stage-breakdown" }, [
-          h("span", { className: "stage-badge", textContent: `Fall #${ticket.number} · ${phaseLabel(phase)}` }),
-          h("small", { className: "inference-interface-hint", textContent: `Eingeblendetes Szenario: ${scenarioText(ticket)}` }),
-          h("span", { className: "stage-badge", textContent: `Stufe 1 (OpenCV): ${stage1}` }),
+          h("span", { className: "stage-badge", textContent: L(`Fall #${ticket.number} · ${phaseLabel(phase)}`, `Case #${ticket.number} · ${phaseLabel(phase)}`) }),
+          h("small", { className: "inference-interface-hint", textContent: L(`Eingeblendetes Szenario: ${scenarioText(ticket)}`, `Injected scenario: ${scenarioText(ticket)}`) }),
+          h("span", { className: "stage-badge", textContent: L(`Stufe 1 (OpenCV): ${stage1}`, `Stage 1 (OpenCV): ${stage1}`) }),
           h("span", {
             className: `verdict-badge ${hazard === true ? "danger" : hazard === false ? "safe" : ""}`,
-            textContent: `Stufe 2 (Modell): ${stage2}`,
+            textContent: L(`Stufe 2 (Modell): ${stage2}`, `Stage 2 (model): ${stage2}`),
           }),
-          h("small", { className: "inference-interface-hint", textContent: `Quelle: ${modelSourceText(ticket)}` }),
+          h("small", { className: "inference-interface-hint", textContent: L(`Quelle: ${modelSourceText(ticket)}`, `Source: ${modelSourceText(ticket)}`) }),
           fixture && assessment
-            ? h("small", { className: "inference-interface-hint", textContent: "Hinweis: Fixture-Antworten sind fest vorgegeben und hängen nicht vom eingeblendeten Szenario ab." })
+            ? h("small", { className: "inference-interface-hint", textContent: L("Hinweis: Fixture-Antworten sind fest vorgegeben und hängen nicht vom eingeblendeten Szenario ab.", "Note: fixture answers are fixed and do not depend on the injected scenario.") })
             : null,
         ].filter(Boolean)));
       }
@@ -764,15 +765,15 @@
     if (speech && ticket && snapshot) {
       const assessment = snapshot.assessment;
       if (assessment && assessment.hazard === true) {
-        speech.textContent = `Fall #${ticket.number}: Das Modell meldet Gefahr (Sicherheit ${formatDecimal(assessment.confidence)}). ${phase === "human_review" ? "Ein Mensch muss jetzt entscheiden – ab in die Leitstelle!" : phaseLabel(phase) + "."}`;
+        speech.textContent = L(`Fall #${ticket.number}: Das Modell meldet Gefahr (Sicherheit ${formatDecimal(assessment.confidence)}). ${phase === "human_review" ? "Ein Mensch muss jetzt entscheiden – ab in die Leitstelle!" : phaseLabel(phase) + "."}`, `Case #${ticket.number}: the model reports a hazard (confidence ${formatDecimal(assessment.confidence)}). ${phase === "human_review" ? "A human must decide now – off to dispatch!" : phaseLabel(phase) + "."}`);
       } else if (assessment && assessment.hazard === false) {
-        speech.textContent = `Fall #${ticket.number}: Das Modell meldet keine Gefahr (${OBJECT_LABELS[assessment.object_class] || assessment.object_class}). Kein Einsatz.`;
+        speech.textContent = L(`Fall #${ticket.number}: Das Modell meldet keine Gefahr (${OBJECT_LABELS[assessment.object_class] || assessment.object_class}). Kein Einsatz.`, `Case #${ticket.number}: the model reports no hazard (${OBJECT_LABELS[assessment.object_class] || assessment.object_class}). No dispatch.`);
       } else if (phase === "model_review") {
-        speech.textContent = `Fall #${ticket.number}: Der Clip liegt dem Modell vor …`;
+        speech.textContent = L(`Fall #${ticket.number}: Der Clip liegt dem Modell vor …`, `Case #${ticket.number}: the clip is with the model …`);
       } else if (phase === "running" || phase === "starting") {
-        speech.textContent = `Fall #${ticket.number}: Noch kein Befund – die Bildanalyse beobachtet die Szene.`;
+        speech.textContent = L(`Fall #${ticket.number}: Noch kein Befund – die Bildanalyse beobachtet die Szene.`, `Case #${ticket.number}: no finding yet – the image analysis is observing the scene.`);
       } else {
-        speech.textContent = `Fall #${ticket.number}: ${phaseLabel(phase)}.`;
+        speech.textContent = L(`Fall #${ticket.number}: ${phaseLabel(phase)}.`, `Case #${ticket.number}: ${phaseLabel(phase)}.`);
       }
     }
     renderTransparency();
@@ -808,7 +809,7 @@
         clipView.caseId = ticket ? ticket.caseId : null;
         box.replaceChildren(h("p", {
           className: "review-clip-meta",
-          textContent: ticket ? `Fall #${ticket.number}: noch kein Beweisclip (${phaseLabel(phaseOf(ticket))}).` : "Kein Fall ausgewählt.",
+          textContent: ticket ? L(`Fall #${ticket.number}: noch kein Beweisclip (${phaseLabel(phaseOf(ticket))}).`, `Case #${ticket.number}: no evidence clip yet (${phaseLabel(phaseOf(ticket))}).`) : L("Kein Fall ausgewählt.", "No case selected."),
         }));
       }
       return;
@@ -818,7 +819,7 @@
     const generation = clipView.generation;
     clipView.caseId = ticket.caseId;
     clipView.clipId = clip.clip_id;
-    box.replaceChildren(h("p", { className: "review-clip-meta", textContent: `Lade Beweisclip ${clip.clip_id.slice(0, 8)} vom Server …` }));
+    box.replaceChildren(h("p", { className: "review-clip-meta", textContent: L(`Lade Beweisclip ${clip.clip_id.slice(0, 8)} vom Server …`, `Loading evidence clip ${clip.clip_id.slice(0, 8)} from the server …`) }));
     env.apiClient.getClip(`/road/clips/${encodeURIComponent(clip.clip_id)}`)
       .then(({ blob, sha256 }) => {
         if (generation !== clipView.generation) return;
@@ -833,9 +834,9 @@
         video.playsInline = true;
         box.replaceChildren(
           h("p", { className: "review-clip-meta" }, [
-            h("span", { className: "proof-badge", textContent: `Beweisclip ${clip.clip_id.slice(0, 8)} · ${formatDecimal(clip.start_seconds, 1)}–${formatDecimal(clip.end_seconds, 1)} s` }),
+            h("span", { className: "proof-badge", textContent: L(`Beweisclip ${clip.clip_id.slice(0, 8)} · ${formatDecimal(clip.start_seconds, 1)}–${formatDecimal(clip.end_seconds, 1)} s`, `Evidence clip ${clip.clip_id.slice(0, 8)} · ${formatDecimal(clip.start_seconds, 1)}–${formatDecimal(clip.end_seconds, 1)} s`) }),
             h("br"),
-            h("small", { textContent: `SHA-256 ${shortHash(clip.sha256)} · ${verified ? "Prüfsumme vom Server bestätigt" : "Prüfsumme weicht ab!"}` }),
+            h("small", { textContent: L(`SHA-256 ${shortHash(clip.sha256)} · ${verified ? "Prüfsumme vom Server bestätigt" : "Prüfsumme weicht ab!"}`, `SHA-256 ${shortHash(clip.sha256)} · ${verified ? "checksum confirmed by server" : "checksum mismatch!"}`) }),
           ]),
           video,
         );
@@ -843,7 +844,7 @@
       })
       .catch((error) => {
         if (generation !== clipView.generation) return;
-        box.replaceChildren(h("p", { className: "review-clip-meta", textContent: `Clip konnte nicht geladen werden: ${error && error.message ? error.message : "unbekannter Fehler"}` }));
+        box.replaceChildren(h("p", { className: "review-clip-meta", textContent: L(`Clip konnte nicht geladen werden: ${error && error.message ? error.message : "unbekannter Fehler"}`, `Clip could not be loaded: ${error && error.message ? error.message : "unknown error"}`) }));
       });
   }
 
@@ -853,7 +854,7 @@
     if (inboxList && listChanged("schmidt-ticket-list", ticketSignature())) {
       inboxList.replaceChildren();
       if (ticketOrder.length === 0) {
-        inboxList.appendChild(h("p", { className: "hint", textContent: "Noch keine Fälle. Starte in Raum 1 die Kamera und blende ein Ereignis ein." }));
+        inboxList.appendChild(h("p", { className: "hint", textContent: L("Noch keine Fälle. Starte in Raum 1 die Kamera und blende ein Ereignis ein.", "No cases yet. Start the camera in room 1 and inject an event.") }));
       }
       for (const caseId of ticketOrder) {
         const item = tickets.get(caseId);
@@ -868,10 +869,10 @@
           onclick: () => selectTicket(caseId),
         }, [
           h("div", { className: "ticket-header" }, [
-            h("strong", { textContent: `Fall #${item.number}` }),
+            h("strong", { textContent: L(`Fall #${item.number}`, `Case #${item.number}`) }),
             h("span", { className: `ticket-badge ${hazard === true ? "danger" : "safe"}`, textContent: badge }),
           ]),
-          h("span", { className: "ticket-clip-title", textContent: `${phaseLabel(phaseOf(item))} · ${item.createdAt.toLocaleTimeString()} · Szenario: ${scenarioText(item)}` }),
+          h("span", { className: "ticket-clip-title", textContent: L(`${phaseLabel(phaseOf(item))} · ${item.createdAt.toLocaleTimeString()} · Szenario: ${scenarioText(item)}`, `${phaseLabel(phaseOf(item))} · ${item.createdAt.toLocaleTimeString()} · Scenario: ${scenarioText(item)}`) }),
         ]));
       }
     }
@@ -886,18 +887,18 @@
     if (manual) manual.disabled = !state.canConfirm;
     if (reject) {
       reject.disabled = !state.canReject;
-      reject.textContent = state.canReject && /Entwarnung/.test(state.rejectLabel || "")
-        ? "❌ Gefahr verneinen + Entwarnung senden"
+      reject.textContent = state.canReject && /Entwarnung|all-clear/i.test(state.rejectLabel || "")
+        ? L("❌ Gefahr verneinen + Entwarnung senden", "❌ Deny hazard + send all-clear")
         : t("schmidtFalseAlarm");
     }
     const status = $("schmidt-decision-status");
     if (status) {
-      if (!ticket) status.textContent = "Kein Fall ausgewählt.";
-      else if (!state.open) status.textContent = `Fall #${ticket.number} wird in der Prüfansicht geladen …`;
-      else if (state.operationState === "in_flight") status.textContent = "Entscheidung wird an den Server gesendet …";
+      if (!ticket) status.textContent = L("Kein Fall ausgewählt.", "No case selected.");
+      else if (!state.open) status.textContent = L(`Fall #${ticket.number} wird in der Prüfansicht geladen …`, `Case #${ticket.number} is loading in the review view …`);
+      else if (state.operationState === "in_flight") status.textContent = L("Entscheidung wird an den Server gesendet …", "Decision is being sent to the server …");
       else if (state.operationMessage) status.textContent = state.operationMessage;
-      else if (state.canConfirm || state.canReject) status.textContent = `Fall #${ticket.number}: Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`;
-      else status.textContent = `Fall #${ticket.number}: keine Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`;
+      else if (state.canConfirm || state.canReject) status.textContent = L(`Fall #${ticket.number}: Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`, `Case #${ticket.number}: decision possible (${phaseLabel(phaseOf(ticket))}).`);
+      else status.textContent = L(`Fall #${ticket.number}: keine Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`, `Case #${ticket.number}: no decision possible (${phaseLabel(phaseOf(ticket))}).`);
     }
   }
 
@@ -907,15 +908,15 @@
     const result = env.workplace.decide(ticket.caseId, decision);
     if (!result.started) {
       const reasons = {
-        case_not_open: "Dieser Fall ist in der Prüfansicht noch nicht geladen. Einen Moment …",
-        not_allowed: `Für Fall #${ticket.number} ist diese Entscheidung gerade nicht möglich (${phaseLabel(phaseOf(ticket))}).`,
+        case_not_open: L("Dieser Fall ist in der Prüfansicht noch nicht geladen. Einen Moment …", "This case is not yet loaded in the review view. One moment …"),
+        not_allowed: L(`Für Fall #${ticket.number} ist diese Entscheidung gerade nicht möglich (${phaseLabel(phaseOf(ticket))}).`, `This decision is currently not possible for case #${ticket.number} (${phaseLabel(phaseOf(ticket))}).`),
       };
-      setText("speech-schmidt", reasons[result.reason] || "Die Entscheidung konnte nicht gestartet werden.");
+      setText("speech-schmidt", reasons[result.reason] || L("Die Entscheidung konnte nicht gestartet werden.", "The decision could not be started."));
       if (result.reason === "case_not_open" && typeof env.openCase === "function") env.openCase(ticket.caseId);
       return;
     }
     if (global.RoadSFX) global.RoadSFX.playRadio();
-    setText("speech-schmidt", `Entscheidung für Fall #${ticket.number} an den lokalen Server gesendet …`);
+    setText("speech-schmidt", L(`Entscheidung für Fall #${ticket.number} an den lokalen Server gesendet …`, `Decision for case #${ticket.number} sent to the local server …`));
     render();
   }
 
@@ -954,13 +955,13 @@
     }
     if (caption) {
       caption.textContent = ticket
-        ? `Fall #${ticket.number} · ${phaseLabel(phaseOf(ticket))}`
-        : "Kein Fall mit offener Frist.";
+        ? L(`Fall #${ticket.number} · ${phaseLabel(phaseOf(ticket))}`, `Case #${ticket.number} · ${phaseLabel(phaseOf(ticket))}`)
+        : L("Kein Fall mit offener Frist.", "No case with an open deadline.");
     }
     if (alertBanner) {
       const receipt = snapshot && snapshot.first_receipt;
       if (snapshot && snapshot.phase === "no_response" && receipt) {
-        alertBanner.textContent = `Frist abgelaufen ohne Entscheidung: Der Server hat Fall #${ticket.number} automatisch an das simulierte Behördenpostfach gemeldet (Beleg ${receipt.receipt_id || "–"}). Eine Entwarnung ist in Raum 3 weiterhin möglich.`;
+        alertBanner.textContent = L(`Frist abgelaufen ohne Entscheidung: Der Server hat Fall #${ticket.number} automatisch an das simulierte Behördenpostfach gemeldet (Beleg ${receipt.receipt_id || "–"}). Eine Entwarnung ist in Raum 3 weiterhin möglich.`, `Deadline expired without a decision: the server automatically reported case #${ticket.number} to the simulated authority inbox (receipt ${receipt.receipt_id || "–"}). An all-clear is still possible in room 3.`);
         alertBanner.hidden = false;
       } else {
         alertBanner.hidden = true;
@@ -974,7 +975,7 @@
     if (!mountedHandle) return;
     const state = cameraState();
     setText("cartoon-cam-status", state && state.sourceOpen
-      ? (state.runActive ? "[● LIVE · ANALYSE LÄUFT]" : "[● LIVE]")
+      ? (state.runActive ? L("[● LIVE · ANALYSE LÄUFT]", "[● LIVE · ANALYSIS RUNNING]") : "[● LIVE]")
       : "[● STANDBY]");
     renderDatacenter();
     renderSchmidt();
@@ -1023,8 +1024,7 @@
           type: "button",
           textContent: t("langToggle"),
           onclick: () => {
-            currentLang = currentLang === "de" ? "en" : "de";
-            refreshI18n();
+            if (window.VisionFlowI18n) window.VisionFlowI18n.setLang(currentLang === "de" ? "en" : "de");
           }
         })
       ])
@@ -1041,7 +1041,7 @@
       h("span", { className: "cartoon-station-icon", textContent: icon }),
       h("span", { id: `nav-text-${idx}`, textContent: t(`room${idx}`) })
     ]);
-    root.appendChild(h("nav", { className: "cartoon-conduit-nav", "aria-label": "Rettungszentrale Räume" }, [
+    root.appendChild(h("nav", { className: "cartoon-conduit-nav", "aria-label": L("Rettungszentrale Räume", "Rescue center rooms") }, [
       navNode(1, "🚦"),
       h("div", { id: "cable-1-2", className: "cartoon-cable-segment" }),
       navNode(2, "🏢"),
@@ -1057,26 +1057,26 @@
         h("div", { className: "cartoon-character-row" }, [
           h("div", { className: "cartoon-avatar", innerHTML: SVGS.technicianAlex }),
           h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Alex · Techniker B4 Nord" }),
+            h("div", { className: "cartoon-speaker-name", textContent: L("Alex · Techniker B4 Nord", "Alex · Technician B4 North") }),
             h("p", { id: "speech-alex", className: "cartoon-speech-text", "aria-live": "polite", textContent: t("alexIntro") })
           ])
         ]),
         h("div", { className: "traffic-screen-wrap" }, [
           h("div", { className: "traffic-monitor" }, [
             h("div", { className: "traffic-monitor__header" }, [
-              h("span", { textContent: "CAM-01 · B4 NORD · SYNTHETISCHE SZENE" }),
+              h("span", { textContent: L("CAM-01 · B4 NORD · SYNTHETISCHE SZENE", "CAM-01 · B4 NORTH · SYNTHETIC SCENE") }),
               h("span", { id: "cartoon-cam-status", textContent: "[● STANDBY]" })
             ]),
             h("div", { id: "cartoon-feed-mount", className: "traffic-feed-box" })
           ]),
           h("div", { className: "traffic-control-panel" }, [
-            h("h3", { textContent: "Ereignis-Pult (Szenario einblenden)" }),
+            h("h3", { textContent: L("Ereignis-Pult (Szenario einblenden)", "Event console (inject scenario)") }),
             h("label", { className: "cartoon-field" }, [
-              h("span", { textContent: "Modell für den nächsten Fall" }),
+              h("span", { textContent: L("Modell für den nächsten Fall", "Model for the next case") }),
               h("select", { id: "cartoon-model-mode", className: "cartoon-select" })
             ]),
             h("label", { className: "cartoon-field" }, [
-              h("span", { textContent: "Feste Offline-Testantwort (Profil)" }),
+              h("span", { textContent: L("Feste Offline-Testantwort (Profil)", "Fixed offline test answer (profile)") }),
               h("select", { id: "cartoon-fixture-profile", className: "cartoon-select" })
             ]),
             h("div", { className: "cartoon-btn-grid" }, [
@@ -1084,28 +1084,28 @@
                 id: "btn-toggle-cam",
                 type: "button",
                 className: "chunky-btn chunky-btn--power",
-                textContent: "📷 Kamera AN / AUS",
+                textContent: L("📷 Kamera AN / AUS", "📷 Camera ON / OFF"),
                 onclick: () => void toggleCamera()
               }),
               h("button", {
                 id: "btn-sim-leaf",
                 type: "button",
                 className: "chunky-btn chunky-btn--leaf",
-                textContent: "🍂 Blatt einblenden",
+                textContent: L("🍂 Blatt einblenden", "🍂 Inject leaf"),
                 onclick: () => void triggerEvent("leaf")
               }),
               h("button", {
                 id: "btn-sim-bird",
                 type: "button",
                 className: "chunky-btn chunky-btn--bird",
-                textContent: "🐦 Vogel einblenden",
+                textContent: L("🐦 Vogel einblenden", "🐦 Inject bird"),
                 onclick: () => void triggerEvent("bird")
               }),
               h("button", {
                 id: "btn-sim-wrongway",
                 type: "button",
                 className: "chunky-btn chunky-btn--wrongway",
-                textContent: "⚠️ Falschfahrer einblenden!",
+                textContent: L("⚠️ Falschfahrer einblenden!", "⚠️ Inject wrong-way driver!"),
                 onclick: () => void triggerEvent("wrong_way")
               })
             ]),
@@ -1128,61 +1128,61 @@
         h("div", { className: "cartoon-character-row" }, [
           h("div", { className: "cartoon-avatar", innerHTML: SVGS.drKira }),
           h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Dr. Kira · Vision-Analyse" }),
+            h("div", { className: "cartoon-speaker-name", textContent: L("Dr. Kira · Vision-Analyse", "Dr. Kira · Vision analysis") }),
             h("p", { id: "speech-kira", className: "cartoon-speech-text", "aria-live": "polite", textContent: t("kiraIntro") })
           ])
         ]),
         h("div", { className: "pipeline-flow-banner" }, [
           h("div", { id: "stage-chip-1", className: "pipeline-stage-chip" }, [
-            h("span", { className: "stage-badge", textContent: "STUFE 1 (OpenCV)" }),
-            h("span", { textContent: "📹 Bewegung (Differenzbild) + Richtung (Graustufen-Patchabgleich) auf echten Frames" })
+            h("span", { className: "stage-badge", textContent: L("STUFE 1 (OpenCV)", "STAGE 1 (OpenCV)") }),
+            h("span", { textContent: L("📹 Bewegung (Differenzbild) + Richtung (Graustufen-Patchabgleich) auf echten Frames", "📹 Motion (difference image) + direction (grayscale patch matching) on real frames") })
           ]),
           h("span", { className: "pipeline-arrow", textContent: "➔" }),
           h("div", { id: "stage-chip-2", className: "pipeline-stage-chip" }, [
-            h("span", { className: "stage-badge", textContent: "STUFE 2 (Video-Modell)" }),
-            h("span", { textContent: "🧠 Bewertung des geschnittenen Clips" })
+            h("span", { className: "stage-badge", textContent: L("STUFE 2 (Video-Modell)", "STAGE 2 (video model)") }),
+            h("span", { textContent: L("🧠 Bewertung des geschnittenen Clips", "🧠 Assessment of the cut clip") })
           ])
         ]),
         h("div", { className: "inference-transparency-card" }, [
           h("div", { className: "transparency-header" }, [
             h("div", { id: "transparency-pill", className: "transparency-pill fallback" }, [
               h("span", { className: "dot" }),
-              h("span", { id: "transparency-pill-text", textContent: "MODELL: OFFLINE-FIXTURE (FESTE TESTANTWORT)" })
+              h("span", { id: "transparency-pill-text", textContent: L("MODELL: OFFLINE-FIXTURE (FESTE TESTANTWORT)", "MODEL: OFFLINE FIXTURE (FIXED TEST ANSWER)") })
             ]),
-            h("span", { className: "transparency-sub", textContent: "Werte live vom lokalen Server" })
+            h("span", { className: "transparency-sub", textContent: L("Werte live vom lokalen Server", "Values live from the local server") })
           ]),
           h("div", { className: "transparency-grid" }, [
             h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Modus / Profil des Falls" }),
-              h("span", { className: "value", id: "transparency-profile-val", textContent: "noch kein Fall" })
+              h("span", { className: "label", textContent: L("Modus / Profil des Falls", "Mode / profile of the case") }),
+              h("span", { className: "value", id: "transparency-profile-val", textContent: L("noch kein Fall", "no case yet") })
             ]),
             h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Externes Modell" }),
+              h("span", { className: "label", textContent: L("Externes Modell", "External model") }),
               h("span", { className: "value", id: "transparency-native-val", textContent: "–" })
             ]),
             h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Ausführung" }),
-              h("span", { className: "value", textContent: "Lokaler VisionFlow-Server (nur Loopback)" })
+              h("span", { className: "label", textContent: L("Ausführung", "Execution") }),
+              h("span", { className: "value", textContent: L("Lokaler VisionFlow-Server (nur Loopback)", "Local VisionFlow server (loopback only)") })
             ]),
             h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Beweisclip" }),
-              h("span", { className: "value", textContent: "5 s Vorlauf + 10 s Nachlauf · H.264 (libx264) · SHA-256" })
+              h("span", { className: "label", textContent: L("Beweisclip", "Evidence clip") }),
+              h("span", { className: "value", textContent: L("5 s Vorlauf + 10 s Nachlauf · H.264 (libx264) · SHA-256", "5 s lead-in + 10 s follow-up · H.264 (libx264) · SHA-256") })
             ])
           ]),
           h("p", { id: "transparency-notice", className: "transparency-notice", textContent: "" })
         ]),
         h("div", { className: "datacenter-layout" }, [
           h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: "Fälle" }),
-            h("div", { id: "datacenter-queue-list", className: "datacenter-queue-list", textContent: "Noch keine Fälle." })
+            h("h4", { className: "datacenter-card__title", textContent: L("Fälle", "Cases") }),
+            h("div", { id: "datacenter-queue-list", className: "datacenter-queue-list", textContent: L("Noch keine Fälle.", "No cases yet.") })
           ]),
           h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: "Ereignisprotokoll (Server-Zustände)" }),
+            h("h4", { className: "datacenter-card__title", textContent: L("Ereignisprotokoll (Server-Zustände)", "Event log (server states)") }),
             h("div", { id: "datacenter-console", className: "datacenter-console" })
           ]),
           h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: "Modellantwort" }),
-            h("div", { id: "datacenter-verdict-box", className: "datacenter-verdict", textContent: "Bereit – noch kein Fall." })
+            h("h4", { className: "datacenter-card__title", textContent: L("Modellantwort", "Model answer") }),
+            h("div", { id: "datacenter-verdict-box", className: "datacenter-verdict", textContent: L("Bereit – noch kein Fall.", "Ready – no case yet.") })
           ])
         ]),
         h("button", {
@@ -1202,25 +1202,25 @@
         h("div", { className: "cartoon-character-row" }, [
           h("div", { className: "cartoon-avatar", innerHTML: SVGS.officerSchmidt }),
           h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Officer Schmidt · Leitstelle Alpha" }),
+            h("div", { className: "cartoon-speaker-name", textContent: L("Officer Schmidt · Leitstelle Alpha", "Officer Schmidt · Dispatch Alpha") }),
             h("p", { id: "speech-schmidt", className: "cartoon-speech-text", "aria-live": "polite", textContent: t("schmidtIntro") })
           ])
         ]),
         h("div", { className: "dispatch-grid" }, [
           h("div", { id: "schmidt-video-mount", className: "traffic-monitor" }, [
-            h("div", { className: "traffic-monitor__header", textContent: "Beweisclip vom Server" }),
+            h("div", { className: "traffic-monitor__header", textContent: L("Beweisclip vom Server", "Evidence clip from the server") }),
             h("div", { id: "cartoon-review-video-box", className: "traffic-feed-box" }),
             h("div", { className: "schmidt-ticket-inbox" }, [
               h("div", { className: "schmidt-ticket-inbox__title" }, [
-                h("span", { textContent: "Fälle" }),
-                h("small", { textContent: "Klick zum Prüfen" })
+                h("span", { textContent: L("Fälle", "Cases") }),
+                h("small", { textContent: L("Klick zum Prüfen", "Click to review") })
               ]),
               h("div", { id: "schmidt-ticket-list", className: "schmidt-ticket-list" })
             ])
           ]),
           h("div", { className: "dispatch-desk" }, [
-            h("h3", { textContent: "Einsatzentscheidung" }),
-            h("p", { id: "schmidt-decision-status", className: "decision-status", "aria-live": "polite", textContent: "Kein Fall ausgewählt." }),
+            h("h3", { textContent: L("Einsatzentscheidung", "Dispatch decision") }),
+            h("p", { id: "schmidt-decision-status", className: "decision-status", "aria-live": "polite", textContent: L("Kein Fall ausgewählt.", "No case selected.") }),
             h("div", { className: "dispatch-actions" }, [
               h("button", {
                 id: "btn-schmidt-radio",
@@ -1265,14 +1265,14 @@
         h("div", { className: "cartoon-character-row" }, [
           h("div", { className: "cartoon-avatar", innerHTML: SVGS.officerWeberEmpty }),
           h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Officer Weber · Leitstelle Beta (Abwesend)" }),
+            h("div", { className: "cartoon-speaker-name", textContent: L("Officer Weber · Leitstelle Beta (Abwesend)", "Officer Weber · Dispatch Beta (away)") }),
             h("p", { id: "speech-weber", className: "cartoon-speech-text", textContent: t("weberAlert") })
           ])
         ]),
         h("div", { className: "beta-alert-box" }, [
           h("div", { id: "weber-sticky", className: "sticky-note", textContent: t("weberSticky") }),
           h("div", { id: "beta-countdown-clock", className: "beta-countdown-display", textContent: "–" }),
-          h("p", { id: "beta-countdown-caption", className: "cartoon-countdown-caption", textContent: "Kein Fall mit offener Frist." }),
+          h("p", { id: "beta-countdown-caption", className: "cartoon-countdown-caption", textContent: L("Kein Fall mit offener Frist.", "No case with an open deadline.") }),
           h("button", {
             id: "btn-manual-dispatch",
             type: "button",
