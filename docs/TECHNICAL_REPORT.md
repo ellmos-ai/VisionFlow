@@ -84,8 +84,8 @@ simulated inbox.
   (arm64) t4g.small instance running Ubuntu 24.04 serves `visionflow serve --public-demo` on
   loopback behind nginx; Amazon CloudFront provides HTTPS and adds a secret origin header that
   nginx checks; the security group only admits the CloudFront origin-facing prefix list; there is
-  no SSH (SSM only). The public-demo mode only reads the road simulation and media uploaded to the
-  server, caps uploads at 200 MB in total and runs at most four live road sessions; nginx rate
+  no SSH (SSM only). The public-demo mode only reads the synthetic road simulation, rejects
+  uploads and runs at most four live road sessions; nginx rate
   limits session creation and uploads; systemd restarts the service with an empty data
   directory every 24 hours.
 * **Cloud acceptance** (`cloud/template.json`, `cloud/buildspec.yml`, `cloud/acceptance.py`):

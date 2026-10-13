@@ -59,8 +59,12 @@
       "All demo cameras are busy. Each session ends after two minutes – please try again shortly.",
     ),
     public_demo_source_rejected: L(
-      "Die öffentliche Demo liest nur die Straßensimulation und hier hochgeladene Medien.",
-      "The public demo only reads the road simulation and media uploaded here.",
+      "Die öffentliche Demo liest nur die synthetische Straßensimulation.",
+      "The public demo only reads the synthetic road simulation.",
+    ),
+    public_demo_upload_disabled: L(
+      "Uploads sind in der öffentlichen Straßendemo deaktiviert. Bild- und Videoabläufe kannst du lokal ausprobieren.",
+      "Uploads are disabled in the public road demo. Try image and video workflows in the local app.",
     ),
     demo_storage_full: L(
       "Der Upload-Speicher der öffentlichen Demo ist voll. Er wird täglich geleert.",
@@ -991,6 +995,9 @@
       renderToolChoices();
       const publicDemo = session.public_demo === true;
       $("public-demo-note").hidden = !publicDemo;
+      $("analysis-tab").hidden = publicDemo;
+      $("analysis-tab").disabled = publicDemo;
+      $("hero-reuse").hidden = publicDemo;
       $("connection-status").textContent = publicDemo
         ? L("Öffentliche Demo · Sitzung aktiv", "Public demo · session active")
         : L("Lokaler Server verbunden · Sitzung aktiv", "Local server connected · session active");

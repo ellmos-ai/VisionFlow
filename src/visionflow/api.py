@@ -161,8 +161,8 @@ def create_server(
     """Create a local server. It is loopback-only and does not start automatically.
 
     With public_demo the server is prepared for a hosted demo behind a reverse
-    proxy: workflows may only read road simulation sources or media uploaded to
-    this server, and stored uploads are capped. The bind stays loopback-only.
+    proxy: workflows may only read synthetic road simulation sources. Uploads
+    are disabled in this mode. The bind stays loopback-only.
     """
     return VisionFlowHTTPServer(
         (host, port),
@@ -303,7 +303,34 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         self._send_json(status, {"error": {"code": code, "message": message}})
 
     def _send_fault(self, fault: _ApiFault) -> None:
+        self.close_connection = True
         self._send_error(fault.status, fault.code, fault.message)
+        self.wfile.flush()
+        self._discard_unread_body()
+
+    def _discard_unread_body(self) -> None:
+        """Avoid resetting a rejected upload's reply without waiting on its sender."""
+        if self.command != "POST" or getattr(self, "_body_consumed", False):
+            return
+        try:
+            remaining = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError):
+            return
+        if not 0 < remaining <= MAX_UPLOAD_BYTES:
+            return
+        previous_timeout = self.connection.gettimeout()
+        deadline = time.monotonic() + 0.1
+        try:
+            while remaining and time.monotonic() < deadline:
+                self.connection.settimeout(max(0.001, deadline - time.monotonic()))
+                chunk = self.rfile.read1(min(64 * 1024, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except OSError:
+            pass
+        finally:
+            self.connection.settimeout(previous_timeout)
 
     def _handle_exception(self, exc: Exception) -> None:
         if isinstance(exc, _ApiFault):
@@ -345,6 +372,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         if length == 0:
             raise _ApiFault(400, "json_required", "A JSON object is required.")
         raw = self.rfile.read(length)
+        self._body_consumed = True
         if len(raw) != length:
             raise _ApiFault(400, "incomplete_body", "The request body ended early.")
         try:
@@ -429,19 +457,17 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             raise _ApiFault(404, "road_source_not_found", "Die Kameraquelle wurde nicht gefunden.") from exc
 
     def _check_public_source(self, kind: Any, source: Any) -> None:
-        """In the public demo only road simulations and own uploads are readable."""
+        """In the public demo only synthetic road simulations are readable."""
         if not self.server.state.public_demo:
             return
         from visionflow.road_api import ROAD_SOURCE_PREFIX
 
         if kind == "camera" and isinstance(source, str) and source.startswith(ROAD_SOURCE_PREFIX):
             return
-        if kind in {"image", "video"} and isinstance(source, str) and _PUBLIC_UPLOAD_REF.fullmatch(source):
-            return
         raise _ApiFault(
             403,
             "public_demo_source_rejected",
-            "The public demo only reads the road simulation and media uploaded here.",
+            "The public demo only reads the synthetic road simulation.",
         )
 
     def _check_public_resume(self, body: Any) -> None:
@@ -746,6 +772,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         return payload, "application/octet-stream"
 
     def do_POST(self) -> None:
+        self._body_consumed = False
         try:
             self._check_request(require_origin=True)
             parsed = urlsplit(self.path)
@@ -909,6 +936,12 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         return validate_workflow(data, self.server.state.registry)
 
     def _upload_media(self) -> None:
+        if self.server.state.public_demo:
+            self.close_connection = True
+            raise _ApiFault(
+                403, "public_demo_upload_disabled",
+                "Uploads are disabled in the public road simulation demo.",
+            )
         content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
         if content_type != "application/octet-stream":
             raise _ApiFault(415, "binary_upload_required", "Media uploads must use application/octet-stream.")

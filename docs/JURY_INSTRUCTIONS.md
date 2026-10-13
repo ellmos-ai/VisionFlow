@@ -11,8 +11,8 @@
    analyses the rendered frames with OpenCV and opens a case only if it finds opposing motion.
 3. Follow the cable to room 2 (OpenCV stage, clip and model answer), room 3 (human review of the
    hash-verified clip: confirm or deny) and room 4 (the real deadline if nobody decides).
-4. The **Reusable workflows** tab runs the same controller on a document photo: use *Sample
-   document (blurred)*, start the run, upload a sharper image when asked.
+4. Image and video workflows are available in the locally installed app (section 2).
+   The hosted road demo does not accept uploads.
 
 The public demo uses synthetic traffic, fixed offline model answers and a simulated authority
 inbox. Each camera session ends after two minutes; at most four sessions run at once (“All demo
@@ -36,6 +36,9 @@ python -m venv .venv
 Offline end-to-end demo without a server: `.venv/bin/python -m visionflow.cli demo run
 --output-dir ./demo-out-01`. Expected JSON: `status: passed`, `model_mode: fixture`,
 `network_used: false`, measured sharpness values, real frame IDs and trace/evidence paths.
+
+The local app's **Reusable workflows** tab runs the same controller on a document photo:
+use *Sample document (blurred)*, start the run and upload a sharper image when asked.
 
 Optional live model review: set `GEMINI_API_KEY`, start `serve --allow-gemini-costs` and choose
 the Gemini model in room 1 (provider costs may apply; at most two requests per case).

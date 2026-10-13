@@ -1,4 +1,4 @@
-"""Public demo mode: the hosted jury demo may only touch its own media."""
+"""Public demo mode: the hosted jury demo is restricted to synthetic roads."""
 
 from __future__ import annotations
 
@@ -97,35 +97,39 @@ def test_public_demo_rejects_server_paths_and_named_cameras(public, kind, source
     assert payload["error"]["code"] == "public_demo_source_rejected"
 
 
-def test_public_demo_runs_media_uploaded_in_the_same_service(public):
+def test_public_demo_rejects_media_uploads(public):
     status, uploaded = _upload(public, 10)
-    assert status == 201
-    status, _result, _ = public.request(
-        "POST", "/runs", body=_workflow("image", uploaded["source"]), origin=public.base_url
-    )
-    assert status == 202
-
-
-def test_public_demo_resume_cannot_switch_to_a_server_path(public):
-    _status, uploaded = _upload(public, 10)
-    _status, result, _ = public.request(
-        "POST", "/runs", body=_workflow("image", uploaded["source"]), origin=public.base_url
-    )
-    status, payload, _ = public.request(
-        "POST",
-        f"/runs/{result['run_id']}/input",
-        body=json.dumps({"source": "C:/Windows/win.ini"}).encode("utf-8"),
-        origin=public.base_url,
-    )
     assert status == 403
-    assert payload["error"]["code"] == "public_demo_source_rejected"
+    assert uploaded["error"]["code"] == "public_demo_upload_disabled"
 
 
-def test_public_demo_upload_storage_is_capped(public):
-    assert _upload(public, 600)[0] == 201
-    status, payload = _upload(public, 600)
-    assert status == 507
-    assert payload["error"]["code"] == "demo_storage_full"
+def test_public_demo_resume_cannot_switch_to_a_server_path(tmp_path):
+    server, thread, client = _serve(tmp_path)
+    try:
+        status, uploaded = _upload(client, 10)
+        assert status == 201
+        status, result, _ = client.request(
+            "POST", "/runs", body=_workflow("image", uploaded["source"]), origin=client.base_url
+        )
+        assert status == 202
+        server.state.public_demo = True
+        status, payload, _ = client.request(
+            "POST", f"/runs/{result['run_id']}/input",
+            body=json.dumps({"source": "C:/Windows/win.ini"}).encode("utf-8"), origin=client.base_url,
+        )
+        assert status == 403
+        assert payload["error"]["code"] == "public_demo_source_rejected"
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def test_public_demo_rejects_uploads_independent_of_declared_quota(public):
+    for length in (10, 600, 1001):
+        status, payload = _upload(public, length)
+        assert status == 403
+        assert payload["error"]["code"] == "public_demo_upload_disabled"
 
 
 def test_simulation_store_caps_live_sessions_and_frees_closed_slots():
@@ -189,26 +193,26 @@ def public_server(tmp_path: Path):
         server.server_close()
 
 
-def test_parallel_uploads_cannot_exceed_the_public_quota(public_server):
+def test_parallel_public_uploads_store_no_media(public_server):
     server, client = public_server
-    first = _open_upload(server, client, 600)
-    second = _open_upload(server, client, 600)
-    time.sleep(0.5)  # both handlers have read their headers before any body arrives
-    for connection in (first, second):
-        connection.send(b"x" * 600)
-    statuses = sorted([_status(first), _status(second)])
-    assert statuses == [201, 507]
+    responses = []
+    workers = [threading.Thread(target=lambda: responses.append(_upload(client, 600)[0])) for _ in range(2)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=5)
+        assert not worker.is_alive()
+    assert sorted(responses) == [403, 403]
     stored = sum(p.stat().st_size for p in (server.state.uploads_root).iterdir() if p.is_file())
-    assert stored <= 1000
+    assert stored == 0
+    assert server.state.upload_reserved_bytes == 0
 
 
-def test_an_aborted_upload_releases_its_reservation(public_server):
+def test_an_aborted_public_upload_cannot_reserve_storage(public_server):
     server, client = public_server
     aborted = _open_upload(server, client, 600)
     aborted.send(b"x" * 100)
     aborted.close()
-    time.sleep(0.5)  # let the handler reserve, hit the early end of the body and release
-    deadline = time.monotonic() + 3
-    while time.monotonic() < deadline and server.state.upload_reserved_bytes:
-        time.sleep(0.05)
-    assert _upload(client, 600)[0] == 201
+    assert _upload(client, 600)[0] == 403
+    assert server.state.upload_reserved_bytes == 0
+    assert list(server.state.uploads_root.iterdir()) == []

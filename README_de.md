@@ -27,6 +27,9 @@ Live-Demo, Video und alle Belege. Gebaut von Lukas Geiger (Einzelteilnahme) für
 
 Die Oberfläche ist standardmäßig englisch; Deutsch über den Knopf „DE“ oder `?lang=de`.
 
+Die öffentliche Demo zeigt ausschließlich synthetischen Straßenverkehr mit festen
+Offline-Antworten. Bild- und Videouploads sowie die anderen Abläufe stehen in der lokalen App bereit.
+
 Jede Erkennung erzeugt ein nummeriertes Ticket an seiner aktuellen Station: Modellprüfung
 in Raum 2, menschliche Prüfung in Raum 3 und abgelaufene Fristen in Raum 4. Ein zweites Ereignis
 während einer Prüfung startet den nächsten Fall auf derselben Kamera; beim Kamera-Stopp

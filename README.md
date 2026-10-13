@@ -139,7 +139,7 @@ clip and evidence frames to the model, at most two requests per case.
 
 * **Public demo:** the unchanged loopback-only server runs with `--public-demo` on an
   **AWS Graviton (arm64) EC2** instance behind nginx, with **Amazon CloudFront** for HTTPS. The
-  security group only admits CloudFront, there is no SSH (SSM only), uploads are capped, at most
+  security group only admits CloudFront, there is no SSH (SSM only), uploads are disabled, at most
   four live road sessions run at once and the service restarts fresh every day.
   Stack and deploy script: [`cloud/demo/`](cloud/demo/).
 * **Reproducible cloud acceptance:** [`cloud/template.json`](cloud/template.json) and
@@ -183,7 +183,7 @@ in [docs/TESTING.md](docs/TESTING.md).
 
 The server binds to loopback only. In local mode, workflows may read files the server account
 can read, so do not expose it to untrusted users; the hosted demo uses `--public-demo`, which only
-reads the road simulation and media uploaded to that server. Camera access needs an explicit
+reads the synthetic road simulation and rejects media uploads. Camera access needs an explicit
 `--camera NAME=INDEX` mapping. Provider calls need an explicit cost opt-in and never carry
 credentials in source. VisionFlow is a decision-support prototype: a human or a documented policy
 stays responsible for every escalation.

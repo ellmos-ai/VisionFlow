@@ -297,8 +297,8 @@ def _parser() -> argparse.ArgumentParser:
         "--public-demo",
         action="store_true",
         help=(
-            "Hosted jury demo behind a reverse proxy: only road simulations and media "
-            "uploaded to this server are readable, uploads are capped and live road "
+            "Hosted jury demo behind a reverse proxy: only synthetic road simulations "
+            "are readable, uploads are disabled and live road "
             "sessions are limited. The bind stays loopback-only."
         ),
     )
