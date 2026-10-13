@@ -7,6 +7,8 @@ upload the source ZIP with a SHA-256 checksum to the versioned bucket -> read it
 bytes -> start exactly one build pinned to that object version -> wait for a terminal state ->
 save the readback -> download the evidence ZIP -> cloud/acceptance.py verify with all five
 inputs -> empty the bucket (all versions) and delete the stack. Nothing is retried.
+Failed builds save artifacts and paginated CloudWatch events under failure/ before
+cleanup. If either capture fails, the stack is retained for manual recovery.
 """
 from __future__ import annotations
 
@@ -14,11 +16,12 @@ import argparse
 import base64
 import hashlib
 import json
+import stat
 import subprocess
 import sys
 import time
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -30,6 +33,64 @@ def aws(*args: str, region: str, parse: bool = True):
 
 def save(path: Path, data) -> None:
     path.write_text(json.dumps(data, indent=2, default=str) + "\n", encoding="utf-8")
+
+
+def capture_failure(build: dict, work: Path, region: str) -> dict:
+    """Persist both independent evidence channels before any destructive cleanup."""
+    failure = work / "failure"
+    failure.mkdir(parents=True, exist_ok=False)
+    result = {"directory": str(failure), "errors": []}
+    save(failure / "build.json", build)
+    try:
+        location = build.get("artifacts", {}).get("location")
+        if not isinstance(location, str) or not location.startswith("arn:aws:s3:::"):
+            raise ValueError("build has no S3 artifact location")
+        evidence_zip = failure / "evidence.zip"
+        subprocess.check_call(["aws", "s3", "cp", location.replace("arn:aws:s3:::", "s3://", 1),
+                               str(evidence_zip), "--region", region])
+        evidence_dir = failure / "cloud-evidence"
+        with zipfile.ZipFile(evidence_zip) as archive:
+            names = [info.filename for info in archive.infolist()]
+            if len(names) != len(set(names)):
+                raise ValueError("duplicate failure artifact members")
+            for info in archive.infolist():
+                name = PurePosixPath(info.filename)
+                if (name.is_absolute() or ".." in name.parts or "\\" in info.filename
+                        or ":" in info.filename or stat.S_ISLNK(info.external_attr >> 16)):
+                    raise ValueError("unsafe failure artifact member")
+            archive.extractall(evidence_dir)
+        result["artifact"] = str(evidence_zip)
+    except Exception as exc:
+        result["errors"].append({"channel": "artifact", "type": type(exc).__name__, "message": str(exc)})
+
+    # Try logs even if the artifact is missing, corrupt, or cannot be downloaded.
+    events = []
+    logs = build.get("logs", {})
+    record = {"groupName": logs.get("groupName"), "streamName": logs.get("streamName"),
+              "events": events, "complete": False}
+    try:
+        if not record["groupName"] or not record["streamName"]:
+            raise ValueError("build has no CloudWatch log stream")
+        token = None
+        while True:
+            command = ["logs", "get-log-events", "--log-group-name", record["groupName"],
+                       "--log-stream-name", record["streamName"], "--start-from-head"]
+            if token is not None:
+                command += ["--next-token", token]
+            page = aws(*command, region=region)
+            events.extend(page["events"])
+            next_token = page.get("nextForwardToken")
+            if next_token is None or next_token == token:
+                break
+            token = next_token
+        record["complete"] = True
+        result["logs"] = str(failure / "cloudwatch-events.json")
+    except Exception as exc:
+        result["errors"].append({"channel": "logs", "type": type(exc).__name__, "message": str(exc)})
+    finally:
+        save(failure / "cloudwatch-events.json", record)
+    save(failure / "capture.json", result)
+    return result
 
 
 def main() -> int:
@@ -113,9 +174,15 @@ def main() -> int:
             result["verify"] = json.loads(verify.stdout.strip().splitlines()[-1])
         except (IndexError, json.JSONDecodeError):
             result["verify"] = None
+    else:
+        result["failure_evidence"] = capture_failure(readback["builds"][0], work, region)
     save(work / "result.json", result)
 
-    if not args.keep:
+    if result.get("failure_evidence", {}).get("errors"):
+        # Keep the only remaining originals when either channel is incomplete.
+        result["cleanup"] = "skipped: failure evidence incomplete"
+        save(work / "result.json", result)
+    elif not args.keep:
         versions = aws("s3api", "list-object-versions", "--bucket", bucket, region=region)
         objects = [{"Key": v["Key"], "VersionId": v["VersionId"]}
                    for v in (versions.get("Versions") or []) + (versions.get("DeleteMarkers") or [])]

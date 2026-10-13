@@ -32,6 +32,19 @@ role/PassRole for this stack, CodeBuild start/stop/read, S3 on its bucket, log r
 python cloud/run_codebuild_acceptance.py --region eu-central-1 --stack visionflow-acceptance-YYYYMMDD
 ```
 
+Choose a new stack name for each attempt. Results are saved under
+`.local/aws-acceptance/<stack>/`. On a failed build, the runner downloads the original
+artifact ZIP and extracts `cloud-evidence/` (including `pytest.log` when the test phase ran),
+then saves every CloudWatch log page as `failure/cloudwatch-events.json` before deleting
+the stack and all bucket versions. `failure/build.json` and `failure/capture.json` preserve
+the build metadata and capture outcome.
+
+If either evidence channel cannot be captured, cleanup is skipped and `result.json`
+records `skipped: failure evidence incomplete`. Recover the missing evidence from the
+recorded S3 location or CloudWatch stream, then empty the stack's versioned bucket and
+delete the stack; retained AWS resources continue to incur storage/log costs. `--keep`
+also skips automatic cleanup, while still capturing failed-build evidence.
+
 The script performs exactly the steps below and writes everything to
 `.local/aws-acceptance/<stack>/` (package, launch context, build readback, evidence ZIP,
 `verify.txt`, `result.json`). It exits non-zero unless the build succeeded and verification
