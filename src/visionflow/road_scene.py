@@ -57,6 +57,7 @@ class RoadWorld:
         self._events: list[_SceneEvent] = []
         self._last_render_time = 0.0
         self._traffic = self._make_traffic()
+        self._static: np.ndarray | None = None
 
     def inject(self, event: str) -> None:
         """Start one visible scenario event, rejecting unknown values first."""
@@ -87,7 +88,6 @@ class RoadWorld:
         timestamp = float(source_time)
         self._last_render_time = timestamp
         image = self._draw_background()
-        self._draw_road(image)
         self._draw_traffic(image, timestamp)
         self._draw_events(image, timestamp)
         return image
@@ -107,25 +107,72 @@ class RoadWorld:
         return tuple(cars)
 
     def _draw_background(self) -> np.ndarray:
-        image = np.empty((self.height, self.width, 3), dtype=np.uint8)
-        horizon = self._horizon
-        image[:horizon] = (206, 222, 232)
-        image[horizon:] = (74, 113, 67)
+        # The static scenery is rendered once; every frame starts from a copy.
+        if self._static is None:
+            image = np.empty((self.height, self.width, 3), dtype=np.uint8)
+            self._draw_scenery(image)
+            self._draw_road_static(image)
+            self._apply_vignette(image)
+            self._static = image
+        return self._static.copy()
 
-        # Low distant tree lines make the road read as an outdoor scene.
-        tree_y = min(self.height - 1, horizon + max(3, self.height // 70))
-        tree_radius = max(2, min(self.width, self.height) // 55)
-        for fraction, shade in (
-            (0.10, (59, 96, 55)),
-            (0.18, (66, 105, 59)),
-            (0.82, (62, 101, 57)),
-            (0.90, (55, 92, 53)),
-        ):
-            center = (int(self.width * fraction), tree_y)
-            cv2.circle(image, center, tree_radius, shade, -1, cv2.LINE_AA)
-        return image
+    def _draw_scenery(self, image: np.ndarray) -> None:
+        """Sky, hazy hills, grass and soft trees.
 
-    def _draw_road(self, image: np.ndarray) -> None:
+        Scenery is deliberately smooth and blurred: the direction detector picks
+        the strongest corners per lane, so hard static corners would compete
+        with the moving vehicles for its corner budget.
+        """
+        width, height, horizon = self.width, self.height, self._horizon
+        sky_top = np.array((214, 168, 118), dtype=np.float32)
+        sky_low = np.array((236, 228, 214), dtype=np.float32)
+        ramp = np.linspace(0.0, 1.0, horizon, dtype=np.float32)[:, None]
+        image[:horizon] = (sky_top + (sky_low - sky_top) * ramp)[:, None, :].astype(np.uint8)
+        grass_far = np.array((104, 146, 108), dtype=np.float32)
+        grass_near = np.array((58, 118, 66), dtype=np.float32)
+        ramp = np.linspace(0.0, 1.0, height - horizon, dtype=np.float32)[:, None]
+        image[horizon:] = (grass_far + (grass_near - grass_far) * ramp)[:, None, :].astype(np.uint8)
+
+        layer = image.copy()
+        hill_height = max(2, round(height * 0.05))
+        xs = np.arange(0, width + 8, 8, dtype=np.float32)
+        for amplitude, phase, shade in ((1.0, 0.0, (166, 168, 146)), (0.6, 1.9, (148, 156, 128))):
+            ys = horizon - hill_height * amplitude * (0.55 + 0.45 * np.sin(xs / width * 7.0 + phase))
+            hill = np.vstack(
+                ([0, horizon + 1], np.column_stack((xs, ys)), [width, horizon + 1])
+            ).astype(np.int32)
+            cv2.fillPoly(layer, [hill], shade, lineType=cv2.LINE_AA)
+
+        rng = random.Random(1009)
+        for side in (-1, 1):
+            for row in range(9):
+                depth = (row + rng.uniform(0.1, 0.9)) / 9.0
+                y = horizon + max(2, round(depth**1.6 * (height - horizon) * 0.95))
+                road_edge = 0.5 + side * (0.12 + 0.33 * self._depth(y))
+                x = (road_edge + side * (0.04 + 0.10 * depth + rng.uniform(0.0, 0.05))) * width
+                radius = max(2, round((5 + 30 * depth) * min(width / 960.0, height / 540.0)))
+                trunk = (44, 58, 72)
+                cv2.rectangle(
+                    layer,
+                    (round(x - radius * 0.15), y - radius // 3),
+                    (round(x + radius * 0.15), y + radius // 2),
+                    trunk,
+                    -1,
+                )
+                crown = (52 + rng.randint(0, 14), 98 + rng.randint(0, 22), 50 + rng.randint(0, 10))
+                cv2.ellipse(layer, (round(x), y - radius), (radius, round(radius * 1.25)), 0, 0, 360, crown, -1, cv2.LINE_AA)
+        blur = max(3, (round(min(width, height) / 90) // 2) * 2 + 1)
+        image[:] = cv2.GaussianBlur(layer, (blur, blur), 0)
+
+    def _apply_vignette(self, image: np.ndarray) -> None:
+        # A gentle vignette gives the frame a camera-lens feel without edges.
+        width, height = self.width, self.height
+        yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+        dist = ((xx / width - 0.5) ** 2 + (yy / height - 0.5) ** 2) ** 0.5
+        shade = 1.0 - 0.22 * np.clip((dist - 0.35) / 0.35, 0.0, 1.0)
+        image[:] = (image.astype(np.float32) * shade[:, :, None]).astype(np.uint8)
+
+    def _draw_road_static(self, image: np.ndarray) -> None:
         width = self.width
         height = self.height
         horizon = self._horizon
@@ -138,10 +185,23 @@ class RoadWorld:
             ),
             dtype=np.int32,
         )
-        cv2.fillPoly(image, [road], (60, 64, 68), lineType=cv2.LINE_AA)
+        # Asphalt fades into haze towards the horizon (smooth, corner-free).
+        mask = np.zeros((height, width), dtype=np.uint8)
+        cv2.fillPoly(mask, [road], 255, lineType=cv2.LINE_AA)
+        far = np.array((104, 106, 108), dtype=np.float32)
+        near = np.array((58, 61, 65), dtype=np.float32)
+        ramp = np.zeros((height, 1, 1), dtype=np.float32)
+        ramp[horizon:, 0, 0] = np.linspace(0.0, 1.0, height - horizon, dtype=np.float32) ** 0.6
+        asphalt = far + (near - far) * ramp
+        alpha = (mask.astype(np.float32) / 255.0)[:, :, None]
+        image[:] = (image * (1.0 - alpha) + asphalt * alpha).astype(np.uint8)
 
         shoulder = max(1, round(min(width, height) / 240))
         lane_width = max(1, round(min(width, height) / 300))
+        # Guardrails just outside both shoulders: a lit rail over a soft shadow.
+        for top_x, bottom_x in ((0.372, 0.03), (0.628, 0.97)):
+            self._perspective_line(image, top_x, bottom_x, (70, 76, 74), shoulder + 2)
+            self._perspective_line(image, top_x, bottom_x, (196, 200, 198), shoulder)
         self._perspective_line(image, 0.38, 0.05, (175, 177, 171), shoulder)
         self._perspective_line(image, 0.62, 0.95, (175, 177, 171), shoulder)
 
@@ -315,7 +375,18 @@ class RoadWorld:
             -1,
             cv2.LINE_AA,
         )
-        cv2.fillPoly(image, [body], color, lineType=cv2.LINE_AA)
+        # Darker flanks with a lighter centre panel read as a curved body.
+        flank = tuple(round(channel * 0.68) for channel in color)
+        cv2.fillPoly(image, [body], flank, lineType=cv2.LINE_AA)
+        inset = max(1, round(car_width * 0.16))
+        cv2.rectangle(
+            image,
+            (left + inset, top + corner // 2),
+            (right - inset, bottom - corner // 2),
+            color,
+            -1,
+            cv2.LINE_AA,
+        )
         cv2.polylines(image, [body], True, (31, 33, 36), max(1, round(scale)), cv2.LINE_AA)
 
         wheel_width = max(1, round(car_width * 0.12))
@@ -361,6 +432,25 @@ class RoadWorld:
             -1,
             cv2.LINE_AA,
         )
+
+        # Roof panel between the windows, a little brighter than the paint.
+        roof = tuple(min(255, round(channel * 1.18 + 12)) for channel in color)
+        roof_half = max(1, round(car_height * 0.11))
+        roof_center = cy + direction * round(car_height * 0.02)
+        cv2.rectangle(
+            image,
+            (cx - glass_width // 2 + 1, roof_center - roof_half),
+            (cx + glass_width // 2 - 1, roof_center + roof_half),
+            roof,
+            -1,
+            cv2.LINE_AA,
+        )
+        # Side mirrors at the front pillars.
+        mirror_y = front_center - direction * max(1, windshield_height // 2)
+        mirror = max(1, round(car_width * 0.10))
+        for side in (-1, 1):
+            mx = cx + side * (half_width + mirror // 2)
+            cv2.rectangle(image, (mx - mirror // 2, mirror_y - 1), (mx + mirror // 2, mirror_y + 1), flank, -1)
 
         light_width = max(1, round(car_width * 0.14))
         light_y = cy + direction * max(1, half_height - 1)
