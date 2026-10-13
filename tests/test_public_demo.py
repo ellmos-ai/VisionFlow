@@ -151,3 +151,64 @@ def test_cli_refuses_public_demo_with_cameras_or_provider_costs(tmp_path, capsys
     code = main(["serve", "--public-demo", "--data-dir", str(tmp_path / "d"), *extra])
     assert code != 0
     assert "public_demo_conflict" in capsys.readouterr().err
+
+
+def _open_upload(server, client: ApiClient, length: int):
+    import http.client
+
+    address, port = server.server_address[:2]
+    connection = http.client.HTTPConnection(address, port, timeout=5)
+    connection.putrequest("POST", "/media")
+    for name, value in (
+        ("Origin", client.base_url), ("Cookie", client.cookie or ""), ("X-CSRF-Token", client.csrf_token or ""),
+        ("Content-Type", "application/octet-stream"), ("X-VisionFlow-Media-Kind", "image"),
+        ("Content-Length", str(length)), ("Connection", "close"),
+    ):
+        connection.putheader(name, value)
+    connection.endheaders()
+    return connection
+
+
+def _status(connection) -> int:
+    try:
+        response = connection.getresponse()
+        response.read()
+        return response.status
+    finally:
+        connection.close()
+
+
+@pytest.fixture
+def public_server(tmp_path: Path):
+    server, thread, client = _serve(tmp_path, public_demo=True, public_upload_quota_bytes=1000)
+    try:
+        yield server, client
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def test_parallel_uploads_cannot_exceed_the_public_quota(public_server):
+    server, client = public_server
+    first = _open_upload(server, client, 600)
+    second = _open_upload(server, client, 600)
+    time.sleep(0.5)  # both handlers have read their headers before any body arrives
+    for connection in (first, second):
+        connection.send(b"x" * 600)
+    statuses = sorted([_status(first), _status(second)])
+    assert statuses == [201, 507]
+    stored = sum(p.stat().st_size for p in (server.state.uploads_root).iterdir() if p.is_file())
+    assert stored <= 1000
+
+
+def test_an_aborted_upload_releases_its_reservation(public_server):
+    server, client = public_server
+    aborted = _open_upload(server, client, 600)
+    aborted.send(b"x" * 100)
+    aborted.close()
+    time.sleep(0.5)  # let the handler reserve, hit the early end of the body and release
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and server.state.upload_reserved_bytes:
+        time.sleep(0.05)
+    assert _upload(client, 600)[0] == 201

@@ -68,6 +68,8 @@ class _ApiState:
             raise ValueError("public_upload_quota_bytes must be a non-negative integer")
         self.public_demo = public_demo
         self.public_upload_quota_bytes = public_upload_quota_bytes or DEFAULT_PUBLIC_UPLOAD_QUOTA_BYTES
+        self.upload_inflight: set[str] = set()
+        self.upload_reserved_bytes = 0
         self.controller = controller
         self.root = Path(data_dir).expanduser().resolve()
         self.root.mkdir(parents=True, exist_ok=True)
@@ -925,9 +927,26 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         except (OSError, RuntimeError, ValueError) as exc:
             raise _ApiFault(500, "upload_storage_unavailable", "The local upload directory is unsafe.") from exc
 
-        if self.server.state.public_demo:
-            used = sum(item.stat().st_size for item in resolved_uploads.iterdir() if item.is_file())
-            if used + length > self.server.state.public_upload_quota_bytes:
+        state = self.server.state
+        filename = "vf_" + secrets.token_hex(24) + ".bin"
+        reserved = False
+        if state.public_demo:
+            # Reserve the declared size atomically; files still being written are
+            # counted by their reservation, not their partial size on disk.
+            with state.lock:
+                used = sum(
+                    item.stat().st_size
+                    for item in resolved_uploads.iterdir()
+                    if item.is_file() and item.name not in state.upload_inflight
+                )
+                if used + state.upload_reserved_bytes + length > state.public_upload_quota_bytes:
+                    full = True
+                else:
+                    full = False
+                    state.upload_inflight.add(filename)
+                    state.upload_reserved_bytes += length
+                    reserved = True
+            if full:
                 # Drain the bounded body so the client reliably receives the reply.
                 remaining = length
                 while remaining:
@@ -936,8 +955,17 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                         break
                     remaining -= len(chunk)
                 raise _ApiFault(507, "demo_storage_full", "The public demo upload storage is full.")
-        filename = "vf_" + secrets.token_hex(24) + ".bin"
-        target = resolved_uploads / filename
+        try:
+            self._store_upload(resolved_uploads / filename, length)
+        finally:
+            if reserved:
+                with state.lock:
+                    state.upload_inflight.discard(filename)
+                    state.upload_reserved_bytes -= length
+        reference = f"uploads/{filename}"
+        self._send_json(201, {"source": reference, "kind": kind})
+
+    def _store_upload(self, target: Path, length: int) -> None:
         remaining = length
         try:
             with target.open("xb") as stream:
@@ -959,8 +987,6 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             except OSError:
                 pass
             raise _ApiFault(500, "upload_storage_unavailable", "The media upload could not be stored.") from exc
-        reference = f"uploads/{filename}"
-        self._send_json(201, {"source": reference, "kind": kind})
 
 
 __all__ = ["MAX_JSON_BYTES", "MAX_UPLOAD_BYTES", "VisionFlowHTTPServer", "create_server"]
