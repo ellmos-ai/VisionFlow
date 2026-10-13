@@ -130,3 +130,24 @@ def test_failure_artifact_cannot_extract_outside_its_evidence_directory(monkeypa
     assert not (work / "failure/escaped.txt").exists()
     assert not any("delete-stack" in call for call in calls)
     assert (work / "failure/cloudwatch-events.json").is_file()
+
+
+def test_aws_json_log_readback_preserves_utf8_messages(monkeypatch):
+    script = Path(__file__).resolve().parents[1] / "cloud/run_codebuild_acceptance.py"
+    spec = importlib.util.spec_from_file_location("codebuild_unicode_under_test", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    real_check_output = subprocess.check_output
+    raw = json.dumps({"events": [{"message": "Prüfung Straße"}]}, ensure_ascii=False).encode("utf-8")
+
+    def synthetic_aws(command, **kwargs):
+        assert command == ["aws", "logs", "get-log-events", "--region", "eu-central-1", "--output", "json"]
+        # Replace only the external executable; the real subprocess decoder
+        # consumes its actual UTF-8 bytes, including on a cp1252 Windows host.
+        return real_check_output(
+            [sys.executable, "-c", f"import sys; sys.stdout.buffer.write(bytes.fromhex('{raw.hex()}'))"],
+            **kwargs,
+        )
+
+    monkeypatch.setattr(module.subprocess, "check_output", synthetic_aws)
+    assert module.aws("logs", "get-log-events", region="eu-central-1")["events"][0]["message"] == "Prüfung Straße"

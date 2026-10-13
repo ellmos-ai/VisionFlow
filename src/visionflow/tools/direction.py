@@ -633,17 +633,17 @@ def _match_feature_patch(
     best_y = minimum_y + best_location[1]
 
     local_maxima = response >= cv2.dilate(response, np.ones((3, 3), dtype=np.uint8))
-    peak_y, peak_x = np.nonzero(local_maxima)
-    if not len(peak_x):
-        return None
-    distinct = (
-        (peak_x + minimum_x - best_x) ** 2
-        + (peak_y + minimum_y - best_y) ** 2
-        > _PATCH_SECOND_PEAK_DISTANCE**2
+    # Select the same distinct local maxima directly in the response grid.
+    # OpenCV's masked reduction avoids materializing and indexing large peak
+    # coordinate arrays for every forward and backward feature match.
+    yy, xx = np.ogrid[:response.shape[0], :response.shape[1]]
+    distinct = local_maxima & (
+        (xx - best_location[0]) ** 2 + (yy - best_location[1]) ** 2
+        > _PATCH_SECOND_PEAK_DISTANCE ** 2
     )
     if not bool(distinct.any()):
         return None
-    second_score = float(response[peak_y[distinct], peak_x[distinct]].max())
+    _, second_score, _, _ = cv2.minMaxLoc(response, mask=distinct.astype(np.uint8))
     peak_gap = float(best_score) - second_score
     if not math.isfinite(peak_gap) or peak_gap < _PATCH_MIN_PEAK_GAP:
         return None

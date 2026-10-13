@@ -27,7 +27,8 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def aws(*args: str, region: str, parse: bool = True):
-    out = subprocess.check_output(["aws", *args, "--region", region, "--output", "json"], text=True)
+    out = subprocess.check_output(["aws", *args, "--region", region, "--output", "json"],
+                                  text=True, encoding="utf-8")
     return json.loads(out) if parse and out.strip() else out
 
 
