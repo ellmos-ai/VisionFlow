@@ -300,7 +300,7 @@ export function mountRoadWorkplace(container, apiClient) {
     const path = `/road/clips/${encodeURIComponent(clip.clip_id)}`;
     const request = Promise.resolve().then(() => apiClient.getBytes(path));
     const guarded = request.then((blob) => {
-      if (!(blob instanceof Blob)) throw new TypeError("Die Cliproute lieferte keine Blob-Daten.");
+      if (!(blob instanceof Blob)) throw new TypeError(L("Die Cliproute lieferte keine Blob-Daten.", "The clip route returned no blob data."));
       return blob;
     }).catch((error) => {
       if (blobRequests.get(key) === guarded) blobRequests.delete(key);
