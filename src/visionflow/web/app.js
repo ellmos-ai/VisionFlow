@@ -984,7 +984,7 @@
       const publicDemo = session.public_demo === true;
       $("public-demo-note").hidden = !publicDemo;
       $("connection-status").textContent = publicDemo
-        ? L("Öffentliche Demo auf AWS · Sitzung aktiv", "Public demo on AWS · session active")
+        ? L("Öffentliche Demo · Sitzung aktiv", "Public demo · session active")
         : L("Lokaler Server verbunden · Sitzung aktiv", "Local server connected · session active");
       $("road-tab").disabled = false;
       $("start-button").disabled = false;
@@ -1086,7 +1086,9 @@
 
     canvas.toBlob((blob) => {
       if (!blob) return;
-      const fileName = blurred ? "beispieldokument-unscharf.png" : "beispieldokument-scharf.png";
+      const fileName = blurred
+        ? L("beispieldokument-unscharf.png", "sample-document-blurred.png")
+        : L("beispieldokument-scharf.png", "sample-document-sharp.png");
       const file = new File([blob], fileName, { type: "image/png" });
       const dt = new DataTransfer();
       dt.items.add(file);
