@@ -655,6 +655,9 @@ def test_default_opener_does_not_follow_redirects_with_the_api_key():
             return
 
         def do_POST(self):
+            # Drain the POST body before closing: an unread body can reset the
+            # socket on Windows before urllib receives the redirect response.
+            self.rfile.read(int(self.headers.get("Content-Length", "0")))
             # urllib follows 302 for POST as a GET and copies the API key header.
             self.send_response(302)
             self.send_header("Location", f"http://127.0.0.1:{target.server_port}/")

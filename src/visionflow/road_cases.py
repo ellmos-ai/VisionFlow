@@ -886,6 +886,12 @@ class RoadCaseService:
         if run_id and case.run_id is not None and run_id != case.run_id:
             return
         with case.finalize_lock:
+            # A completed analysis owns a sealed clip, so a camera stop/end no
+            # longer invalidates its decision or countdown. This also covers
+            # a stop while _finalize is opening the decision. Explicit case
+            # cancellation and source reset keep their cancellation semantics.
+            if case.finalized and reason in {"source_stopped", "source_end"}:
+                return
             case.stopped_reason = reason
             case.cancel_event.set()
             if case.decision_open:

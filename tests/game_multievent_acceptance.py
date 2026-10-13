@@ -6,8 +6,8 @@ required) and drives two complete road cases through the game:
 
 1. Profile ``pending``: inject a wrong-way driver and a leaf into the running
    analysis, wait for the real human review, check that the game shows the
-   backend's assessment, the server-verified clip hash and that new events are
-   refused while the review is open, then confirm the hazard in room 3.
+   backend's assessment, the server-verified clip hash and that a second event
+   starts the next case on the same camera during review, then confirm in room 3.
 2. Profile ``leaf``: inject a bird into a fresh case and check that the game
    shows the fixture's leaf verdict, not the injected scenario.
 3. Profile ``pending`` without a decision: room 4 shows the real deadline, the
@@ -193,6 +193,15 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
             timeout=90000,
         )
         first = _text(page, "#beta-countdown-clock")
+        # Stop the real camera while this sealed ticket waits for a human.
+        page.locator("#nav-node-room-1").click()
+        page.locator("#btn-toggle-cam").click()
+        _wait_text(page, "#speech-alex", "Kamera gestoppt", 20000)
+        page.locator("#nav-node-room-3").click()
+        assert "Ticket #3" in _text(page, "#schmidt-ticket-list")
+        assert not page.locator("#btn-schmidt-radio").is_disabled()
+        checks["camera_stop_keeps_ticket_decidable"] = True
+        page.locator("#nav-node-room-4").click()
         page.wait_for_timeout(2500)
         second = _text(page, "#beta-countdown-clock")
         print("Countdown:", first, "->", second)
