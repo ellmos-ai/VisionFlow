@@ -75,7 +75,17 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         page.on("pageerror", lambda err: errors.append(f"pageerror: {err}"))
         page.on("console", lambda msg: errors.append(f"console: {msg.text}") if msg.type == "error" else None)
 
+        # English is the default UI language.
         page.goto(base_url + "/", wait_until="networkidle")
+        page.locator(".road-cartoon-stage").wait_for(state="visible", timeout=15000)
+        assert page.evaluate("document.documentElement.lang") == "en"
+        title_en = page.locator("#cartoon-title").inner_text()
+        assert "VisionFlow" in title_en and "FlowVision" not in title_en, title_en
+        assert "Inject wrong-way driver" in page.locator("#btn-sim-wrongway").inner_text()
+        checks["english_default_ui"] = True
+
+        # The remaining checks assert the German texts.
+        page.goto(base_url + "/?lang=de", wait_until="networkidle")
         page.locator(".road-cartoon-stage").wait_for(state="visible", timeout=15000)
 
         # Legacy controls are hidden while the game drives the camera; the real
