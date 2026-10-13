@@ -733,7 +733,11 @@
     const id = typeof detail.caseId === "string" ? detail.caseId : null;
     if (!id) return;
     roadActiveCaseId = id;
-    roadViewedCaseId = id;
+    roadTrackedCaseIds.add(id);
+    // A new case on the same camera must not pull an open review out of view.
+    if (event.type !== "road-case-started" || !ROAD_REVIEW_PHASES.has(roadCasePhases.get(roadViewedCaseId))) {
+      roadViewedCaseId = id;
+    }
     if (roadMount) roadMount.setCase(detail.case || { case_id: id });
     roadRefreshGeneration += 1;
     void refreshRoadViews();
@@ -748,13 +752,11 @@
     void refreshRoadViews();
   }
 
-  function phaseLocksCamera(snapshot) {
-    return Boolean(snapshot && [
-      "model_review",
-      "human_review",
-      "no_response",
-    ].includes(snapshot.phase));
-  }
+  // Phases in which a case can still change; every other phase is final.
+  const ROAD_OPEN_PHASES = new Set(["starting", "running", "model_review", "human_review", "no_response"]);
+  const ROAD_REVIEW_PHASES = new Set(["model_review", "human_review", "no_response"]);
+  const roadTrackedCaseIds = new Set();
+  const roadCasePhases = new Map();
 
   function renderRoadTimeline(snapshot) {
     const target = $("road-timeline-content");
@@ -851,7 +853,8 @@
           : Array.isArray(inboxResult?.cases)
             ? inboxResult.cases
             : [];
-      const ids = [...new Set([roadActiveCaseId, roadViewedCaseId].filter(Boolean))];
+      // Several cases can be open at once (one per detection), so poll all of them.
+      const ids = [...new Set([roadActiveCaseId, roadViewedCaseId, ...roadTrackedCaseIds].filter(Boolean))];
       const loaded = new Map();
       await Promise.all(ids.map(async (caseId) => {
         try {
@@ -871,7 +874,12 @@
       if (generation !== roadRefreshGeneration) return;
       const active = roadActiveCaseId ? loaded.get(roadActiveCaseId) : null;
       const viewed = roadViewedCaseId ? loaded.get(roadViewedCaseId) : null;
-      if (roadMount) roadMount.setLocked(phaseLocksCamera(active?.snapshot));
+      for (const [caseId, entry] of loaded) {
+        const phase = entry?.snapshot?.phase;
+        if (typeof phase !== "string") continue;
+        roadCasePhases.set(caseId, phase);
+        if (!ROAD_OPEN_PHASES.has(phase)) roadTrackedCaseIds.delete(caseId);
+      }
       if (roadWorkplaceMount) {
         roadWorkplaceMount.update(viewed?.snapshot || null, inbox);
       }

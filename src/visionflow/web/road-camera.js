@@ -93,7 +93,6 @@ export function mountRoadCamera(container, apiClient) {
   let sourceGeneration = 0;
   let viewGeneration = 0;
   let clipSelectionGeneration = 0;
-  let locked = false;
   let operationQueue = Promise.resolve();
   const queuedOperations = new Map();
   const clips = new Map();
@@ -474,14 +473,14 @@ export function mountRoadCamera(container, apiClient) {
 
   function updateSourceControls() {
     const hasOpenSource = Boolean(sourceId && sourceOpen);
-    quickDemoButton.disabled = !roadAvailable || locked || destroyed;
-    createButton.disabled = !roadAvailable || locked || destroyed;
+    quickDemoButton.disabled = !roadAvailable || destroyed;
+    createButton.disabled = !roadAvailable || destroyed;
     stopButton.disabled = !sourceId || destroyed;
     stopButton.textContent = hasOpenSource ? L("Aufnahme beenden", "End recording") : L("Aufnahme speichern", "Save recording");
     resetButton.disabled = !sourceId || destroyed;
-    modeSelect.disabled = !roadAvailable || hasOpenSource || locked || destroyed;
+    modeSelect.disabled = !roadAvailable || hasOpenSource || destroyed;
     profileSelect.disabled =
-      modeSelect.value !== "fixture" || hasOpenSource || locked || destroyed;
+      modeSelect.value !== "fixture" || hasOpenSource || destroyed;
     profileLabel.hidden = modeSelect.value !== "fixture";
     profileSelect.hidden = modeSelect.value !== "fixture";
   }
@@ -531,13 +530,11 @@ export function mountRoadCamera(container, apiClient) {
   }
 
   function updateEventControls() {
-    const canInject = sourceOpen && warmedUp && runActive && !locked && !destroyed;
+    const canInject = sourceOpen && warmedUp && runActive && !destroyed;
     eventSelect.disabled = !canInject;
     injectButton.disabled = !canInject;
     cancelRunButton.disabled = !runActive || destroyed;
-    if (locked) {
-      eventHint.textContent = L("Während einer Prüfung sind neue Szenarioereignisse gesperrt. Stoppen und Zurücksetzen bleiben verfügbar.", "New scenario events are locked during a review. Stopping and resetting remain available.");
-    } else if (!roadAvailable) {
+    if (!roadAvailable) {
       eventHint.textContent = L("Die Straßenkamera ist nicht verfügbar. Prüfe die FFmpeg-Voraussetzung.", "The road camera is not available. Check the FFmpeg requirement.");
     } else if (!sourceOpen) {
       eventHint.textContent = L("Starte zuerst eine Quelle.", "Start a source first.");
@@ -620,7 +617,7 @@ export function mountRoadCamera(container, apiClient) {
     traceContent.textContent = JSON.stringify(trace, null, 2);
     updateEventControls();
 
-    if (autoDemoActive && warmedUp && sourceId && sourceOpen && runActive && !locked) {
+    if (autoDemoActive && warmedUp && sourceId && sourceOpen && runActive) {
       autoDemoActive = false;
       setStatus(L("⚡ 1-Klick Demo: Startanalyse (3 Frames) beendet. Falschfahrer wird eingespeist …", "⚡ 1-click demo: start analysis (3 frames) finished. Injecting wrong-way driver …"));
       eventSelect.value = "wrong_way";
@@ -772,15 +769,14 @@ export function mountRoadCamera(container, apiClient) {
   function injectBlocker() {
     if (destroyed) return "destroyed";
     if (!sourceId || !sourceOpen) return "source_closed";
-    if (locked) return "review_locked";
     if (!warmedUp) return "warming_up";
     if (!runActive) return "run_inactive";
     return null;
   }
 
   // Resolves to { injected, reason }. Events are only accepted while the
-  // bound analysis run observes the scene and no case review is open, so
-  // every injected event can still become part of the analysed footage.
+  // bound analysis run observes the scene, so every injected event can still
+  // become part of the analysed footage.
   async function injectEvent(forcedEvent) {
     const event = forcedEvent || eventSelect.value;
     const blocked = injectBlocker();
@@ -802,6 +798,26 @@ export function mountRoadCamera(container, apiClient) {
         setStatus(L(`${label} in die Szene eingeblendet. Das ist noch kein Analysebefund.`, `${label} injected into the scene. This is not an analysis finding yet.`));
       }
       return { injected: true, reason: null, sourceId: source, caseId };
+    });
+  }
+
+  // Opens the next case on the camera that is already running (no new source),
+  // e.g. after the previous case sealed its clip and went to review.
+  async function startNextCase() {
+    return enqueue("next-case", async () => {
+      if (destroyed || !sourceId || !sourceOpen) {
+        throw new Error(L("Die Kamera läuft nicht.", "The camera is not running."));
+      }
+      const source = sourceId;
+      const generation = sourceGeneration;
+      try {
+        await startCase(source, generation);
+      } catch (_error) {
+        // The previous case frees the camera a moment after its run ends; retry once.
+        await new Promise((resolve) => window.setTimeout(resolve, 600));
+        if (!current(source, generation) || !sourceOpen) return;
+        await startCase(source, generation);
+      }
     });
   }
 
@@ -989,11 +1005,6 @@ export function mountRoadCamera(container, apiClient) {
   });
   modeSelect.addEventListener("change", updateSourceControls);
 
-  function setLocked(value) {
-    locked = Boolean(value);
-    updateEventControls();
-  }
-
   function setCase(caseInfo) {
     const nextId = caseInfo && typeof caseInfo.case_id === "string"
       ? caseInfo.case_id
@@ -1043,7 +1054,7 @@ export function mountRoadCamera(container, apiClient) {
     container.replaceChildren();
   }
 
-  setLocked(false);
+  updateEventControls();
   loadRoadCapabilities();
   function getState() {
     return {
@@ -1052,7 +1063,6 @@ export function mountRoadCamera(container, apiClient) {
       caseId,
       runActive,
       warmedUp,
-      locked,
       available: roadAvailable,
       capabilities,
       injectBlocker: injectBlocker(),
@@ -1074,7 +1084,7 @@ export function mountRoadCamera(container, apiClient) {
     getSourceId,
     getState,
     configureCase,
-    setLocked,
+    startNextCase,
     setCase,
     injectScenarioEvent: (event) => injectEvent(event),
     createSource,

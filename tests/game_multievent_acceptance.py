@@ -98,26 +98,32 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         page.locator("#cartoon-details-btn").click()
         checks["legacy_controls_hidden_details_toggle"] = True
 
-        # --- Case 1: profile pending --------------------------------------------------
+        # --- Ticket 1: profile pending --------------------------------------------------
         page.wait_for_function("() => document.querySelectorAll('#cartoon-fixture-profile option').length > 0", timeout=15000)
         page.locator("#cartoon-fixture-profile").select_option("pending")
         page.locator("#btn-sim-wrongway").click()
         banner = _wait_text(page, "#live-anomaly-banner", "Falschfahrer", 40000)
         print("Banner:", banner)
-        assert "Fall #1" in banner and "detektiert" not in banner
+        assert "Ticket" not in banner and "detektiert" not in banner, banner
         page.screenshot(path=str(out_dir / "01_wrong_way_injected.png"))
         page.locator("#btn-sim-leaf").click()
         _wait_text(page, "#live-anomaly-banner", "Blatt", 20000)
         checks["events_injected_into_running_case"] = True
 
-        print("Waiting for the real human review of case #1 ...")
+        print("Waiting for the detection that creates ticket #1 ...")
+        created = _wait_text(page, "#live-anomaly-banner", "Ticket #1 erstellt", 90000)
+        print("Created:", created)
+        checks["detection_creates_ticket"] = True
         page.wait_for_function(
             "() => { const b = document.querySelector('#btn-schmidt-radio'); return b && !b.disabled; }",
             timeout=90000,
         )
+        _wait_text(page, "#nav-badge-3", "1", 10000)
+        checks["room_badge_counts_open_ticket"] = True
         page.locator("#nav-node-room-2").click()
         verdict = _text(page, "#datacenter-verdict-box")
         print("Verdict:", verdict)
+        assert "Ticket #1" in verdict and "jetzt in: 3. Leitstelle Alpha" in verdict, verdict
         assert "Fahrzeug · Gefahr · Sicherheit 0,80" in verdict, verdict
         assert "Profil „pending“" in verdict and "Falschfahrer → " in verdict
         assert "OFFLINE-FIXTURE" in _text(page, "#transparency-pill-text")
@@ -125,13 +131,24 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         page.screenshot(path=str(out_dir / "02_room2_real_assessment.png"))
         checks["room2_shows_backend_assessment"] = True
 
+        # --- Ticket 2 starts on the same camera while ticket 1 waits for a human ------
+        source_before = page.locator("section.road-camera").first.get_attribute("data-source-id")
         page.locator("#nav-node-room-1").click()
+        page.locator("#cartoon-fixture-profile").select_option("leaf")
         page.locator("#btn-sim-bird").click()
-        refused = _wait_text(page, "#speech-alex", "in Prüfung", 10000)
-        print("Refused while in review:", refused)
-        checks["events_refused_during_review"] = True
+        _wait_text(page, "#speech-alex", "Kamera läuft weiter", 10000)
+        _wait_text(page, "#live-anomaly-banner", "Vogel", 40000)
+        source_after = page.locator("section.road-camera").first.get_attribute("data-source-id")
+        print("Source:", source_before, "->", source_after)
+        assert source_before and source_before == source_after
+        checks["second_event_during_review_starts_next_case_on_same_camera"] = True
 
         page.locator("#nav-node-room-3").click()
+        page.wait_for_function(
+            "() => { const b = document.querySelector('#btn-schmidt-radio'); return b && !b.disabled; }",
+            timeout=20000,
+        )
+        assert "Ticket #1" in _text(page, "#schmidt-ticket-list")
         page.locator("#cartoon-review-video-box video").wait_for(state="attached", timeout=20000)
         monitor = _wait_text(page, "#cartoon-review-video-box", "Prüfsumme vom Server bestätigt", 20000)
         print("Monitor:", monitor)
@@ -148,33 +165,29 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         page.screenshot(path=str(out_dir / "04_room3_confirmed.png"))
         checks["confirm_reaches_simulated_inbox"] = True
 
-        # --- Case 2: profile leaf, injected bird ----------------------------------------
-        page.locator("#nav-node-room-1").click()
-        page.locator("#cartoon-fixture-profile").select_option("leaf")
-        page.locator("#btn-sim-bird").click()
-        _wait_text(page, "#live-anomaly-banner", "Fall #2", 40000)
-        print("Waiting for case #2 to finish ...")
+        # Ticket 2 (bird under the leaf profile) ends in the datacenter: model all-clear.
+        print("Waiting for ticket #2 ...")
         page.locator("#nav-node-room-2").click()
         page.wait_for_function(
             "() => { const v = document.querySelector('#datacenter-verdict-box');"
-            " return v && v.textContent.includes('Fall #2') &&"
-            " (v.textContent.includes('Entwarnung durch Modell') || v.textContent.includes('Kein Befund')); }",
+            " return v && v.textContent.includes('Ticket #2') && v.textContent.includes('Entwarnung durch Modell'); }",
             timeout=90000,
         )
         verdict = _text(page, "#datacenter-verdict-box")
         print("Verdict #2:", verdict)
-        if "Entwarnung durch Modell" in verdict:
-            assert "Blatt · keine Gefahr · Sicherheit 0,99" in verdict and "Vogel" in verdict
-        page.screenshot(path=str(out_dir / "05_room2_case2.png"))
-        checks["second_case_shows_fixture_not_scenario"] = True
+        assert "Blatt · keine Gefahr · Sicherheit 0,99" in verdict and "Vogel" in verdict
+        assert "Ticket #2" in _text(page, "#datacenter-queue-list")
+        assert "Ticket #2" not in _text(page, "#schmidt-ticket-list")
+        page.screenshot(path=str(out_dir / "05_room2_ticket2.png"))
+        checks["second_ticket_stays_in_datacenter"] = True
 
-        # --- Case 3: profile pending, nobody decides ---------------------------------------
+        # --- Ticket 3: profile pending, nobody decides ---------------------------------------
         page.locator("#nav-node-room-1").click()
         page.locator("#cartoon-fixture-profile").select_option("pending")
         page.locator("#btn-sim-wrongway").click()
-        _wait_text(page, "#live-anomaly-banner", "Fall #3", 40000)
+        _wait_text(page, "#live-anomaly-banner", "Ticket #3 erstellt", 90000)
         page.locator("#nav-node-room-4").click()
-        print("Waiting for the real deadline of case #3 ...")
+        print("Waiting for the real deadline of ticket #3 ...")
         page.wait_for_function(
             "() => /^\\d+s$/.test(document.querySelector('#beta-countdown-clock').textContent)",
             timeout=90000,
@@ -190,14 +203,15 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         page.screenshot(path=str(out_dir / "07_room4_no_response.png"))
         checks["room4_shows_real_deadline_and_auto_report"] = True
 
-        page.locator("#nav-node-room-3").click()
+        # The unanswered ticket landed at desk 2; the all-clear is sent from there.
+        assert "Ticket #3" in _text(page, "#beta-ticket-list")
         page.wait_for_function(
-            "() => { const b = document.querySelector('#btn-schmidt-reject');"
+            "() => { const b = document.querySelector('#btn-weber-reject');"
             " return b && !b.disabled && b.textContent.includes('Entwarnung'); }",
             timeout=20000,
         )
-        page.locator("#btn-schmidt-reject").click()
-        _wait_text(page, "#speech-schmidt", "Verneinung", 20000)
+        page.locator("#btn-weber-reject").click()
+        _wait_text(page, "#speech-weber", "Verneinung", 20000)
         inbox = page.evaluate("() => window.roadApiClient.get('/road/inbox')")
         kinds = sorted({record.get("kind") for record in inbox})
         print("Inbox kinds:", kinds)

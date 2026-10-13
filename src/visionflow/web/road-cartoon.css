@@ -146,6 +146,35 @@
   white-space: nowrap;
 }
 
+.cartoon-station-node {
+  position: relative;
+}
+
+/* Open tickets waiting in a room. */
+.cartoon-station-badge {
+  position: absolute;
+  top: -0.55rem;
+  right: -0.55rem;
+  min-width: 1.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: #ef4444;
+  border: 2px solid #0f172a;
+  color: #ffffff;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.cartoon-station-badge[hidden] {
+  display: none;
+}
+
+.beta-ticket-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
 .cartoon-station-node:hover {
   border-color: #38bdf8;
   transform: translateY(-3px);

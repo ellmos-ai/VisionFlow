@@ -156,13 +156,21 @@
   const INJECT_BLOCK_REASONS = {
     destroyed: L("Die Kameraansicht wurde geschlossen.", "The camera view was closed."),
     source_closed: L("Die Kamera läuft nicht.", "The camera is not running."),
-    review_locked: L("Der aktuelle Fall ist in Prüfung – neue Ereignisse sind bis zur Entscheidung gesperrt.", "The current case is under review – new events are locked until a decision is made."),
     warming_up: L("Die Analyse wärmt sich noch auf (drei echte Startframes).", "The analysis is still warming up (three real start frames)."),
     run_inactive: L("Der Analyse-Lauf dieses Falls ist beendet.", "The analysis run of this case has ended."),
     source_changed: L("Die Kameraquelle wurde inzwischen gewechselt.", "The camera source has been changed in the meantime."),
   };
   const REVIEW_PHASES = new Set(["model_review", "human_review"]);
   const ACTIVE_PHASES = new Set(["starting", "running", "model_review", "human_review"]);
+  const MONITOR_PHASES = new Set(["starting", "running"]);
+  // Every detection becomes a ticket; it sits in the room that currently handles it:
+  // 2 datacenter (model), 3 dispatch Alpha (human decision), 4 deadline desk.
+  const STATION_OF_PHASE = {
+    model_review: 2, dismissed: 2, failed: 2,
+    human_review: 3, reported: 3, rejected: 3,
+    no_response: 4, corrected: 4,
+  };
+  const OPEN_PHASE_OF_STATION = { 2: "model_review", 3: "human_review", 4: "no_response" };
 
   // --- State ------------------------------------------------------------------
   let env = null; // { roadMount, apiClient, workplace, openCase }
@@ -306,10 +314,9 @@
   function ticketFor(caseId) {
     let ticket = tickets.get(caseId);
     if (!ticket) {
-      ticketSequence += 1;
       ticket = {
         caseId,
-        number: ticketSequence,
+        number: null, // assigned when the analysis detects something (the ticket is born)
         createdAt: new Date(),
         scenario: [],
         snapshot: null,
@@ -331,8 +338,50 @@
     return phase ? PHASE_LABELS[phase] || phase : L("Fall startet", "Case starting");
   }
 
-  function focusTicket() {
-    return (selectedCaseId && tickets.get(selectedCaseId)) || (ticketOrder.length ? tickets.get(ticketOrder[0]) : null);
+  function ticketName(ticket) {
+    return ticket && ticket.number ? `Ticket #${ticket.number}` : L("Überwachung", "Monitoring");
+  }
+
+  function isDetection(ticket) {
+    const snapshot = ticket && ticket.snapshot;
+    if (!snapshot) return false;
+    const phase = snapshot.phase;
+    return Boolean(snapshot.clip) || (phase in STATION_OF_PHASE && phase !== "failed");
+  }
+
+  function stationOf(ticket) {
+    return ticket && ticket.number ? STATION_OF_PHASE[phaseOf(ticket)] || 2 : 1;
+  }
+
+  function roomName(station) {
+    return t(`room${station}`).replace(/^\S+\s+/, "");
+  }
+
+  // Tickets currently at a station, open ones first, newest first.
+  function ticketsAt(station) {
+    const list = ticketOrder.map((caseId) => tickets.get(caseId)).filter((item) => item.number && stationOf(item) === station);
+    const open = OPEN_PHASE_OF_STATION[station];
+    return [...list.filter((item) => phaseOf(item) === open), ...list.filter((item) => phaseOf(item) !== open)];
+  }
+
+  function focusAt(station) {
+    const selected = selectedCaseId ? tickets.get(selectedCaseId) : null;
+    if (selected && selected.number && stationOf(selected) === station) return selected;
+    return ticketsAt(station)[0] || null;
+  }
+
+  function newestTicket() {
+    for (const caseId of ticketOrder) {
+      const item = tickets.get(caseId);
+      if (item.number) return item;
+    }
+    return null;
+  }
+
+  function onTicketCreated(ticket) {
+    const scenario = ticket.scenario.length ? scenarioText(ticket) : L("ohne eingeblendetes Ereignis", "without an injected event");
+    showBanner(L(`${ticketName(ticket)} erstellt: Die Bildanalyse hat angeschlagen (${scenario}). Clip gesichert → Rechenzentrum`, `${ticketName(ticket)} created: the image analysis triggered (${scenario}). Clip sealed → datacenter`));
+    appendDatacenterLog(L(`[${ticketName(ticket)}] Neues Ticket aus Befund der Bildanalyse`, `[${ticketName(ticket)}] New ticket from an image-analysis finding`));
   }
 
   function latestExchange(ticket) {
@@ -369,6 +418,11 @@
     const ticket = ticketFor(caseId);
     ticket.snapshot = snapshot;
     if (Array.isArray(exchanges)) ticket.exchanges = exchanges;
+    if (!ticket.number && isDetection(ticket)) {
+      ticketSequence += 1;
+      ticket.number = ticketSequence;
+      onTicketCreated(ticket);
+    }
     const phase = phaseOf(ticket);
     if (phase !== ticket.lastPhase) {
       const previous = ticket.lastPhase;
@@ -379,7 +433,7 @@
 
   // --- Phase transitions (all derived from server snapshots) ------------------
   function onPhaseChange(ticket, previous, phase) {
-    const label = L(`Fall #${ticket.number}`, `Case #${ticket.number}`);
+    const label = ticketName(ticket);
     const snapshot = ticket.snapshot || {};
     appendDatacenterLog(`[${label}] Phase: ${phaseLabel(previous)} → ${phaseLabel(phase)}`);
     if (phase === "model_review" || (REVIEW_PHASES.has(phase) && !REVIEW_PHASES.has(previous))) {
@@ -423,7 +477,7 @@
     const ticket = ticketFor(detail.caseId);
     if (detail.case) updateTicket(detail.caseId, detail.case);
     selectedCaseId = ticket.caseId;
-    appendDatacenterLog(L(`[Fall #${ticket.number}] Neuer Fall auf ${detail.sourceId || "Kamera"} gestartet · ${modelSourceText(ticket)}`, `[Case #${ticket.number}] New case started on ${detail.sourceId || "camera"} · ${modelSourceText(ticket)}`));
+    appendDatacenterLog(L(`[${ticketName(ticket)}] Neuer Fall auf ${detail.sourceId || "Kamera"} gestartet · ${modelSourceText(ticket)}`, `[${ticketName(ticket)}] New case started on ${detail.sourceId || "camera"} · ${modelSourceText(ticket)}`));
     render();
   }
 
@@ -453,11 +507,11 @@
         ticket.dispatched = true;
         dispatchPatrolCar();
       }
-      setText("speech-schmidt", L(`Der Server hat meine Bestätigung für Fall #${ticket.number} angenommen. Die Meldung geht an das simulierte Behördenpostfach – Streife rückt aus!`, `The server accepted my confirmation for case #${ticket.number}. The report goes to the simulated authority inbox – patrol is on its way!`));
+      setText(currentRoom === 4 ? "speech-weber" : "speech-schmidt", L(`Der Server hat meine Bestätigung für ${ticketName(ticket)} angenommen. Die Meldung geht an das simulierte Behördenpostfach – Streife rückt aus!`, `The server accepted my confirmation for ${ticketName(ticket)}. The report goes to the simulated authority inbox – patrol is on its way!`));
     } else {
-      setText("speech-schmidt", L(`Der Server hat meine Verneinung für Fall #${ticket.number} angenommen. Kein Einsatz; eine schon gesendete Meldung erhält eine Entwarnung.`, `The server accepted my denial for case #${ticket.number}. No dispatch; a report already sent receives an all-clear.`));
+      setText(currentRoom === 4 ? "speech-weber" : "speech-schmidt", L(`Der Server hat meine Verneinung für ${ticketName(ticket)} angenommen. Kein Einsatz; eine schon gesendete Meldung erhält eine Entwarnung.`, `The server accepted my denial for ${ticketName(ticket)}. No dispatch; a report already sent receives an all-clear.`));
     }
-    appendDatacenterLog(L(`[Fall #${ticket.number}] Menschliche Entscheidung angenommen: ${detail.decision === "confirm" ? "Gefahr bestätigt" : "Gefahr verneint"}`, `[Case #${ticket.number}] Human decision accepted: ${detail.decision === "confirm" ? "hazard confirmed" : "hazard denied"}`));
+    appendDatacenterLog(L(`[${ticketName(ticket)}] Menschliche Entscheidung angenommen: ${detail.decision === "confirm" ? "Gefahr bestätigt" : "Gefahr verneint"}`, `[${ticketName(ticket)}] Human decision accepted: ${detail.decision === "confirm" ? "hazard confirmed" : "hazard denied"}`));
   }
 
   async function loadCapabilities() {
@@ -520,12 +574,14 @@
     };
   }
 
-  function startNewCase() {
+  // sameSource: open the next case on the running camera instead of a new source.
+  function startNewCase(sameSource) {
     if (startPromise) return startPromise;
     startPromise = (async () => {
       const mount = env.roadMount;
       if (typeof mount.configureCase === "function") mount.configureCase(selectedModelConfig());
-      await mount.createSource();
+      if (sameSource) await mount.startNextCase();
+      else await mount.createSource();
     })().finally(() => {
       startPromise = null;
     });
@@ -538,7 +594,7 @@
       const state = cameraState();
       if (!state) throw new Error(INJECT_BLOCK_REASONS.destroyed);
       if (!state.injectBlocker) return state;
-      if (state.injectBlocker === "review_locked" || (state.injectBlocker === "run_inactive" && state.warmedUp)) {
+      if (state.injectBlocker === "run_inactive" && state.warmedUp) {
         throw new Error(INJECT_BLOCK_REASONS[state.injectBlocker]);
       }
       if (Date.now() >= deadline) {
@@ -546,6 +602,20 @@
       }
       await wait(200);
     }
+  }
+
+  // True while the camera's current case still observes the scene. Its run can end a
+  // moment before the polled case phase flips, so give the phase a few seconds.
+  async function currentCaseObserving() {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const state = cameraState();
+      if (!state || !state.caseId) return false;
+      const phase = phaseOf(tickets.get(state.caseId));
+      if (phase && !MONITOR_PHASES.has(phase)) return false;
+      if (state.runActive || !state.warmedUp) return true;
+      await wait(250);
+    }
+    return false;
   }
 
   function showBanner(text) {
@@ -586,14 +656,13 @@
       if (!state.available) {
         throw new Error((capabilities && capabilities.message) || L("Die Straßenkamera ist nicht verfügbar (FFmpeg mit libx264 erforderlich).", "The road camera is not available (FFmpeg with libx264 required)."));
       }
-      const current = state.caseId ? tickets.get(state.caseId) : null;
-      const phase = phaseOf(current);
-      if (state.sourceOpen && current && REVIEW_PHASES.has(phase)) {
-        throw new Error(L(`Fall #${current.number} ist in Prüfung (${phaseLabel(phase)}). Entscheide in Raum 3 oder lass die Frist in Raum 4 ablaufen – erst dann startet ein neuer Fall.`, `Case #${current.number} is under review (${phaseLabel(phase)}). Decide in room 3 or let the deadline run out in room 4 – only then does a new case start.`));
-      }
-      if (!state.sourceOpen || !state.caseId || (phase && !ACTIVE_PHASES.has(phase))) {
-        setText("speech-alex", L("Ich starte eine neue Kameraquelle mit einem neuen Fall und warte, bis die Analyse drei echte Startframes gesehen hat …", "I am starting a new camera source with a new case and waiting until the analysis has seen three real start frames …"));
-        await startNewCase();
+      if (!state.sourceOpen) {
+        setText("speech-alex", L("Ich starte die Kamera mit einem neuen Fall und warte, bis die Analyse drei echte Startframes gesehen hat …", "I am starting the camera with a new case and waiting until the analysis has seen three real start frames …"));
+        await startNewCase(false);
+      } else if (!(await currentCaseObserving())) {
+        // The previous case sealed its clip and moved on; the camera keeps running.
+        setText("speech-alex", L("Die Kamera läuft weiter. Ich öffne darauf einen neuen Fall und warte auf drei echte Startframes …", "The camera keeps running. I am opening a new case on it and waiting for three real start frames …"));
+        await startNewCase(true);
       }
       state = await waitForInjectable(20000);
       const result = await env.roadMount.injectScenarioEvent(eventType);
@@ -604,9 +673,9 @@
       ticket.scenario.push({ type: eventType, at: new Date() });
       selectedCaseId = ticket.caseId;
       const label = EVENT_LABELS[eventType] || eventType;
-      showBanner(L(`Szenario eingeblendet: ${label} · Fall #${ticket.number} · OpenCV analysiert jetzt die echten Frames`, `Scenario injected: ${label} · Case #${ticket.number} · OpenCV is now analyzing the real frames`));
-      setText("speech-alex", L(`${label} ist jetzt in der Live-Szene. Das ist noch kein Befund: Erst wenn die Bildanalyse auf den echten Frames anschlägt, schneidet der Server einen Clip für Fall #${ticket.number}.`, `${label} is now in the live scene. That is not a finding yet: only when the image analysis triggers on the real frames does the server cut a clip for case #${ticket.number}.`));
-      appendDatacenterLog(L(`[Fall #${ticket.number}] Szenario eingeblendet: ${label} (Spielaktion, kein Analysebefund)`, `[Case #${ticket.number}] Scenario injected: ${label} (game action, not an analysis finding)`));
+      showBanner(L(`Szenario eingeblendet: ${label} · OpenCV analysiert jetzt die echten Frames`, `Scenario injected: ${label} · OpenCV is now analyzing the real frames`));
+      setText("speech-alex", L(`${label} ist jetzt in der Live-Szene. Das ist noch kein Befund: Erst wenn die Bildanalyse auf den echten Frames anschlägt, schneidet der Server einen Clip und legt ein Ticket an.`, `${label} is now in the live scene. That is not a finding yet: only when the image analysis triggers on the real frames does the server cut a clip and open a ticket.`));
+      appendDatacenterLog(L(`[${ticketName(ticket)}] Szenario eingeblendet: ${label} (Spielaktion, kein Analysebefund)`, `[${ticketName(ticket)}] Scenario injected: ${label} (game action, not an analysis finding)`));
       render();
     } catch (error) {
       setText("speech-alex", error && error.message ? error.message : L("Das Ereignis konnte nicht eingeblendet werden.", "The event could not be injected."));
@@ -624,15 +693,11 @@
     setEventButtonsDisabled(true);
     try {
       if (state.sourceOpen) {
-        const current = state.caseId ? tickets.get(state.caseId) : null;
-        if (current && REVIEW_PHASES.has(phaseOf(current))) {
-          throw new Error(L(`Fall #${current.number} ist in Prüfung. Stoppen würde die offene Prüfung abbrechen – entscheide zuerst in Raum 3.`, `Case #${current.number} is under review. Stopping would abort the open review – decide in room 3 first.`));
-        }
         await env.roadMount.stopSource();
         setText("speech-alex", L("Kamera gestoppt. Die Aufnahme wurde als Clip gesichert.", "Camera stopped. The recording was saved as a clip."));
       } else {
         setText("speech-alex", L("Ich starte die Kamera mit einem neuen Fall …", "I am starting the camera with a new case …"));
-        await startNewCase();
+        await startNewCase(false);
       }
     } catch (error) {
       setText("speech-alex", error && error.message ? error.message : L("Die Kamera konnte nicht umgeschaltet werden.", "The camera could not be toggled."));
@@ -676,9 +741,16 @@
     consoleEl.scrollTop = consoleEl.scrollHeight;
   }
 
+  // Room 2 explains the model stage of the ticket at hand: a ticket in the
+  // datacenter, else the newest ticket, else the case the camera is watching.
+  function datacenterTicket() {
+    const state = cameraState();
+    return focusAt(2) || newestTicket() || (state && state.caseId ? tickets.get(state.caseId) : null);
+  }
+
   function renderTransparency() {
     const nativeEnabled = Boolean(capabilities && capabilities.native_enabled);
-    const ticket = focusTicket();
+    const ticket = datacenterTicket();
     const snapshot = ticket && ticket.snapshot;
     const pill = $("transparency-pill-text");
     const pillBox = $("transparency-pill");
@@ -697,8 +769,20 @@
       : L("Ehrlichkeitshinweis: Kein externes Modell freigegeben (Server ohne --allow-gemini-costs oder ohne GEMINI_API_KEY). Stufe 2 liefert deshalb feste Offline-Testantworten nach dem gewählten Profil – sie bewerten den Bildinhalt nicht. Echt sind die gerenderte Szene, die OpenCV-Analyse der Frames, Clip-Export mit SHA-256, Fristen und das simulierte Behördenpostfach.", "Honesty note: no external model is enabled (server without --allow-gemini-costs or without GEMINI_API_KEY). Stage 2 therefore returns fixed offline test answers per the selected profile – they do not evaluate the image content. Real are the rendered scene, the OpenCV analysis of the frames, clip export with SHA-256, deadlines and the simulated authority inbox."));
   }
 
+  function ticketCard(item, className, detail) {
+    return h("button", {
+      type: "button",
+      className: `${className} ${item.caseId === selectedCaseId ? "active-ticket" : ""}`,
+      onclick: () => selectTicket(item.caseId),
+    }, [
+      h("strong", { textContent: `${ticketName(item)} · ${phaseLabel(phaseOf(item))}` }),
+      h("br"),
+      h("small", { textContent: detail }),
+    ]);
+  }
+
   function renderDatacenter() {
-    const ticket = focusTicket();
+    const ticket = datacenterTicket();
     const snapshot = ticket && ticket.snapshot;
     const phase = phaseOf(ticket);
 
@@ -710,20 +794,13 @@
     const listEl = $("datacenter-queue-list");
     if (listEl && listChanged("datacenter-queue-list", ticketSignature())) {
       listEl.replaceChildren();
-      if (ticketOrder.length === 0) listEl.textContent = L("Noch keine Fälle. Starte die Kamera in Raum 1.", "No cases yet. Start the camera in room 1.");
-      for (const caseId of ticketOrder.slice(0, 6)) {
-        const item = tickets.get(caseId);
+      const here = ticketsAt(2);
+      if (here.length === 0) listEl.textContent = L("Kein Ticket im Rechenzentrum. Tickets entstehen, wenn die Bildanalyse in Raum 1 anschlägt.", "No ticket in the datacenter. Tickets are created when the image analysis in room 1 triggers.");
+      for (const item of here.slice(0, 4)) {
         const clip = item.snapshot && item.snapshot.clip;
         const hazard = item.snapshot && item.snapshot.assessment && item.snapshot.assessment.hazard === true;
-        listEl.appendChild(h("button", {
-          type: "button",
-          className: `queue-item ${hazard ? "high-risk" : ""} ${caseId === selectedCaseId ? "active-ticket" : ""}`,
-          onclick: () => selectTicket(caseId),
-        }, [
-          h("strong", { textContent: L(`Fall #${item.number} · ${phaseLabel(phaseOf(item))}`, `Case #${item.number} · ${phaseLabel(phaseOf(item))}`) }),
-          h("br"),
-          h("small", { textContent: clip ? `Clip ${String(clip.clip_id).slice(0, 8)} · SHA-256 ${shortHash(clip.sha256)}` : L("noch kein Clip", "no clip yet") }),
-        ]));
+        listEl.appendChild(ticketCard(item, `queue-item ${hazard ? "high-risk" : ""}`,
+          clip ? `Clip ${String(clip.clip_id).slice(0, 8)} · SHA-256 ${shortHash(clip.sha256)}` : L("noch kein Clip", "no clip yet")));
       }
     }
 
@@ -746,7 +823,10 @@
         const hazard = snapshot && snapshot.assessment ? snapshot.assessment.hazard : null;
         const fixture = snapshot && snapshot.mode === "fixture";
         verdictBox.append(h("div", { className: "stage-breakdown" }, [
-          h("span", { className: "stage-badge", textContent: L(`Fall #${ticket.number} · ${phaseLabel(phase)}`, `Case #${ticket.number} · ${phaseLabel(phase)}`) }),
+          h("span", { className: "stage-badge", textContent: `${ticketName(ticket)} · ${phaseLabel(phase)}` }),
+          stationOf(ticket) > 2
+            ? h("small", { className: "inference-interface-hint", textContent: L(`Weitergeleitet – jetzt in: ${roomName(stationOf(ticket))}`, `Forwarded – now at: ${roomName(stationOf(ticket))}`) })
+            : null,
           h("small", { className: "inference-interface-hint", textContent: L(`Eingeblendetes Szenario: ${scenarioText(ticket)}`, `Injected scenario: ${scenarioText(ticket)}`) }),
           h("span", { className: "stage-badge", textContent: L(`Stufe 1 (OpenCV): ${stage1}`, `Stage 1 (OpenCV): ${stage1}`) }),
           h("span", {
@@ -765,15 +845,15 @@
     if (speech && ticket && snapshot) {
       const assessment = snapshot.assessment;
       if (assessment && assessment.hazard === true) {
-        speech.textContent = L(`Fall #${ticket.number}: Das Modell meldet Gefahr (Sicherheit ${formatDecimal(assessment.confidence)}). ${phase === "human_review" ? "Ein Mensch muss jetzt entscheiden – ab in die Leitstelle!" : phaseLabel(phase) + "."}`, `Case #${ticket.number}: the model reports a hazard (confidence ${formatDecimal(assessment.confidence)}). ${phase === "human_review" ? "A human must decide now – off to dispatch!" : phaseLabel(phase) + "."}`);
+        speech.textContent = L(`${ticketName(ticket)}: Das Modell meldet Gefahr (Sicherheit ${formatDecimal(assessment.confidence)}). ${phase === "human_review" ? "Ein Mensch muss jetzt entscheiden – ab in die Leitstelle!" : phaseLabel(phase) + "."}`, `${ticketName(ticket)}: the model reports a hazard (confidence ${formatDecimal(assessment.confidence)}). ${phase === "human_review" ? "A human must decide now – off to dispatch!" : phaseLabel(phase) + "."}`);
       } else if (assessment && assessment.hazard === false) {
-        speech.textContent = L(`Fall #${ticket.number}: Das Modell meldet keine Gefahr (${OBJECT_LABELS[assessment.object_class] || assessment.object_class}). Kein Einsatz.`, `Case #${ticket.number}: the model reports no hazard (${OBJECT_LABELS[assessment.object_class] || assessment.object_class}). No dispatch.`);
+        speech.textContent = L(`${ticketName(ticket)}: Das Modell meldet keine Gefahr (${OBJECT_LABELS[assessment.object_class] || assessment.object_class}). Kein Einsatz.`, `${ticketName(ticket)}: the model reports no hazard (${OBJECT_LABELS[assessment.object_class] || assessment.object_class}). No dispatch.`);
       } else if (phase === "model_review") {
-        speech.textContent = L(`Fall #${ticket.number}: Der Clip liegt dem Modell vor …`, `Case #${ticket.number}: the clip is with the model …`);
+        speech.textContent = L(`${ticketName(ticket)}: Der Clip liegt dem Modell vor …`, `${ticketName(ticket)}: the clip is with the model …`);
       } else if (phase === "running" || phase === "starting") {
-        speech.textContent = L(`Fall #${ticket.number}: Noch kein Befund – die Bildanalyse beobachtet die Szene.`, `Case #${ticket.number}: no finding yet – the image analysis is observing the scene.`);
+        speech.textContent = L(`${ticketName(ticket)}: Noch kein Befund – die Bildanalyse beobachtet die Szene.`, `${ticketName(ticket)}: no finding yet – the image analysis is observing the scene.`);
       } else {
-        speech.textContent = L(`Fall #${ticket.number}: ${phaseLabel(phase)}.`, `Case #${ticket.number}: ${phaseLabel(phase)}.`);
+        speech.textContent = L(`${ticketName(ticket)}: ${phaseLabel(phase)}.`, `${ticketName(ticket)}: ${phaseLabel(phase)}.`);
       }
     }
     renderTransparency();
@@ -785,6 +865,18 @@
     selectedCaseId = caseId;
     if (env && typeof env.openCase === "function") env.openCase(caseId);
     render();
+  }
+
+  // The review workplace holds one case at a time; open the one shown in this room.
+  let requestedOpenCaseId = null;
+  function ensureOpen(ticket, state) {
+    if (!ticket || !env || typeof env.openCase !== "function") return;
+    if (state.open) {
+      requestedOpenCaseId = null;
+    } else if (requestedOpenCaseId !== ticket.caseId) {
+      requestedOpenCaseId = ticket.caseId;
+      env.openCase(ticket.caseId);
+    }
   }
 
   function decisionState(ticket) {
@@ -809,7 +901,7 @@
         clipView.caseId = ticket ? ticket.caseId : null;
         box.replaceChildren(h("p", {
           className: "review-clip-meta",
-          textContent: ticket ? L(`Fall #${ticket.number}: noch kein Beweisclip (${phaseLabel(phaseOf(ticket))}).`, `Case #${ticket.number}: no evidence clip yet (${phaseLabel(phaseOf(ticket))}).`) : L("Kein Fall ausgewählt.", "No case selected."),
+          textContent: ticket ? L(`${ticketName(ticket)}: noch kein Beweisclip (${phaseLabel(phaseOf(ticket))}).`, `${ticketName(ticket)}: no evidence clip yet (${phaseLabel(phaseOf(ticket))}).`) : L("Kein Fall ausgewählt.", "No case selected."),
         }));
       }
       return;
@@ -849,15 +941,16 @@
   }
 
   function renderSchmidt() {
-    const ticket = focusTicket();
+    const ticket = focusAt(3);
     const inboxList = $("schmidt-ticket-list");
     if (inboxList && listChanged("schmidt-ticket-list", ticketSignature())) {
       inboxList.replaceChildren();
-      if (ticketOrder.length === 0) {
-        inboxList.appendChild(h("p", { className: "hint", textContent: L("Noch keine Fälle. Starte in Raum 1 die Kamera und blende ein Ereignis ein.", "No cases yet. Start the camera in room 1 and inject an event.") }));
+      const here = ticketsAt(3);
+      if (here.length === 0) {
+        inboxList.appendChild(h("p", { className: "hint", textContent: L("Kein Ticket wartet auf eine menschliche Entscheidung.", "No ticket is waiting for a human decision.") }));
       }
-      for (const caseId of ticketOrder) {
-        const item = tickets.get(caseId);
+      for (const item of here.slice(0, 5)) {
+        const caseId = item.caseId;
         const snapshot = item.snapshot || {};
         const hazard = snapshot.assessment ? snapshot.assessment.hazard : null;
         const badge = snapshot.assessment
@@ -869,10 +962,10 @@
           onclick: () => selectTicket(caseId),
         }, [
           h("div", { className: "ticket-header" }, [
-            h("strong", { textContent: L(`Fall #${item.number}`, `Case #${item.number}`) }),
+            h("strong", { textContent: L(`${ticketName(item)}`, `${ticketName(item)}`) }),
             h("span", { className: `ticket-badge ${hazard === true ? "danger" : "safe"}`, textContent: badge }),
           ]),
-          h("span", { className: "ticket-clip-title", textContent: L(`${phaseLabel(phaseOf(item))} · ${item.createdAt.toLocaleTimeString()} · Szenario: ${scenarioText(item)}`, `${phaseLabel(phaseOf(item))} · ${item.createdAt.toLocaleTimeString()} · Scenario: ${scenarioText(item)}`) }),
+          h("span", { className: "ticket-clip-title", textContent: L(`${phaseLabel(phaseOf(item))} · ${item.createdAt.toLocaleTimeString()}`, `${phaseLabel(phaseOf(item))} · ${item.createdAt.toLocaleTimeString()}`) }),
         ]));
       }
     }
@@ -880,43 +973,44 @@
     renderReviewMonitor(ticket);
 
     const state = decisionState(ticket);
+    if (currentRoom === 3) ensureOpen(ticket, state);
     const radio = $("btn-schmidt-radio");
     const reject = $("btn-schmidt-reject");
-    const manual = $("btn-manual-dispatch");
     if (radio) radio.disabled = !state.canConfirm;
-    if (manual) manual.disabled = !state.canConfirm;
-    if (reject) {
-      reject.disabled = !state.canReject;
-      reject.textContent = state.canReject && /Entwarnung|all-clear/i.test(state.rejectLabel || "")
-        ? L("❌ Gefahr verneinen + Entwarnung senden", "❌ Deny hazard + send all-clear")
-        : t("schmidtFalseAlarm");
-    }
+    setRejectButton(reject, state);
     const status = $("schmidt-decision-status");
     if (status) {
-      if (!ticket) status.textContent = L("Kein Fall ausgewählt.", "No case selected.");
-      else if (!state.open) status.textContent = L(`Fall #${ticket.number} wird in der Prüfansicht geladen …`, `Case #${ticket.number} is loading in the review view …`);
+      if (!ticket) status.textContent = L("Kein Ticket in dieser Leitstelle.", "No ticket at this dispatch desk.");
+      else if (!state.open) status.textContent = L(`${ticketName(ticket)} wird in der Prüfansicht geladen …`, `${ticketName(ticket)} is loading in the review view …`);
       else if (state.operationState === "in_flight") status.textContent = L("Entscheidung wird an den Server gesendet …", "Decision is being sent to the server …");
       else if (state.operationMessage) status.textContent = state.operationMessage;
-      else if (state.canConfirm || state.canReject) status.textContent = L(`Fall #${ticket.number}: Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`, `Case #${ticket.number}: decision possible (${phaseLabel(phaseOf(ticket))}).`);
-      else status.textContent = L(`Fall #${ticket.number}: keine Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`, `Case #${ticket.number}: no decision possible (${phaseLabel(phaseOf(ticket))}).`);
+      else if (state.canConfirm || state.canReject) status.textContent = L(`${ticketName(ticket)}: Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`, `${ticketName(ticket)}: decision possible (${phaseLabel(phaseOf(ticket))}).`);
+      else status.textContent = L(`${ticketName(ticket)}: keine Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`, `${ticketName(ticket)}: no decision possible (${phaseLabel(phaseOf(ticket))}).`);
     }
   }
 
-  function decideSelected(decision) {
-    const ticket = focusTicket();
+  function setRejectButton(button, state) {
+    if (!button) return;
+    button.disabled = !state.canReject;
+    button.textContent = state.canReject && /Entwarnung|all-clear/i.test(state.rejectLabel || "")
+      ? L("❌ Gefahr verneinen + Entwarnung senden", "❌ Deny hazard + send all-clear")
+      : t("schmidtFalseAlarm");
+  }
+
+  function decideTicket(ticket, decision, speechId) {
     if (!ticket || !env || !env.workplace || typeof env.workplace.decide !== "function") return;
     const result = env.workplace.decide(ticket.caseId, decision);
     if (!result.started) {
       const reasons = {
         case_not_open: L("Dieser Fall ist in der Prüfansicht noch nicht geladen. Einen Moment …", "This case is not yet loaded in the review view. One moment …"),
-        not_allowed: L(`Für Fall #${ticket.number} ist diese Entscheidung gerade nicht möglich (${phaseLabel(phaseOf(ticket))}).`, `This decision is currently not possible for case #${ticket.number} (${phaseLabel(phaseOf(ticket))}).`),
+        not_allowed: L(`Für ${ticketName(ticket)} ist diese Entscheidung gerade nicht möglich (${phaseLabel(phaseOf(ticket))}).`, `This decision is currently not possible for ${ticketName(ticket)} (${phaseLabel(phaseOf(ticket))}).`),
       };
-      setText("speech-schmidt", reasons[result.reason] || L("Die Entscheidung konnte nicht gestartet werden.", "The decision could not be started."));
+      setText(speechId, reasons[result.reason] || L("Die Entscheidung konnte nicht gestartet werden.", "The decision could not be started."));
       if (result.reason === "case_not_open" && typeof env.openCase === "function") env.openCase(ticket.caseId);
       return;
     }
     if (global.RoadSFX) global.RoadSFX.playRadio();
-    setText("speech-schmidt", L(`Entscheidung für Fall #${ticket.number} an den VisionFlow-Server gesendet …`, `Decision for case #${ticket.number} sent to the VisionFlow server …`));
+    setText(speechId, L(`Entscheidung für ${ticketName(ticket)} an den VisionFlow-Server gesendet …`, `Decision for ${ticketName(ticket)} sent to the VisionFlow server …`));
     render();
   }
 
@@ -929,14 +1023,13 @@
   }
 
   // --- Room 4: real deadline of the open case ---------------------------------------
+  // Desk 2 watches the deadline of the ticket waiting in dispatch Alpha; when it
+  // expires unanswered, the ticket lands here.
   function deadlineTicket() {
-    const focus = focusTicket();
-    if (focus && phaseOf(focus) === "human_review") return focus;
-    for (const caseId of ticketOrder) {
-      const item = tickets.get(caseId);
-      if (phaseOf(item) === "human_review") return item;
-    }
-    return focus;
+    const selected = selectedCaseId ? tickets.get(selectedCaseId) : null;
+    if (selected && selected.number && (stationOf(selected) === 4 || phaseOf(selected) === "human_review")) return selected;
+    const waiting = ticketsAt(3).find((item) => phaseOf(item) === "human_review");
+    return waiting || focusAt(4);
   }
 
   function renderBeta() {
@@ -955,13 +1048,26 @@
     }
     if (caption) {
       caption.textContent = ticket
-        ? L(`Fall #${ticket.number} · ${phaseLabel(phaseOf(ticket))}`, `Case #${ticket.number} · ${phaseLabel(phaseOf(ticket))}`)
-        : L("Kein Fall mit offener Frist.", "No case with an open deadline.");
+        ? `${ticketName(ticket)} · ${phaseLabel(phaseOf(ticket))}${stationOf(ticket) === 3 ? L(" · wartet in Leitstelle Alpha", " · waiting at dispatch Alpha") : ""}`
+        : L("Kein Ticket mit offener Frist.", "No ticket with an open deadline.");
     }
+    const list = $("beta-ticket-list");
+    if (list && listChanged("beta-ticket-list", ticketSignature())) {
+      list.replaceChildren();
+      for (const item of ticketsAt(4).slice(0, 4)) {
+        const receipt = item.snapshot && item.snapshot.first_receipt;
+        list.appendChild(ticketCard(item, "queue-item high-risk", receipt ? L(`Beleg ${receipt.receipt_id || "–"}`, `Receipt ${receipt.receipt_id || "–"}`) : ""));
+      }
+    }
+    const state = decisionState(ticket);
+    if (currentRoom === 4) ensureOpen(ticket, state);
+    const manual = $("btn-manual-dispatch");
+    if (manual) manual.disabled = !state.canConfirm;
+    setRejectButton($("btn-weber-reject"), state);
     if (alertBanner) {
       const receipt = snapshot && snapshot.first_receipt;
       if (snapshot && snapshot.phase === "no_response" && receipt) {
-        alertBanner.textContent = L(`Frist abgelaufen ohne Entscheidung: Der Server hat Fall #${ticket.number} automatisch an das simulierte Behördenpostfach gemeldet (Beleg ${receipt.receipt_id || "–"}). Eine Entwarnung ist in Raum 3 weiterhin möglich.`, `Deadline expired without a decision: the server automatically reported case #${ticket.number} to the simulated authority inbox (receipt ${receipt.receipt_id || "–"}). An all-clear is still possible in room 3.`);
+        alertBanner.textContent = L(`Frist abgelaufen ohne Entscheidung: Der Server hat ${ticketName(ticket)} automatisch an das simulierte Behördenpostfach gemeldet (Beleg ${receipt.receipt_id || "–"}). Eine Entwarnung ist hier weiterhin möglich.`, `Deadline expired without a decision: the server automatically reported ${ticketName(ticket)} to the simulated authority inbox (receipt ${receipt.receipt_id || "–"}). An all-clear is still possible here.`);
         alertBanner.hidden = false;
       } else {
         alertBanner.hidden = true;
@@ -980,6 +1086,14 @@
     renderDatacenter();
     renderSchmidt();
     renderBeta();
+    for (const station of [2, 3, 4]) {
+      const badge = $(`nav-badge-${station}`);
+      if (!badge) continue;
+      const open = ticketsAt(station).filter((item) => phaseOf(item) === OPEN_PHASE_OF_STATION[station]).length;
+      badge.hidden = open === 0;
+      badge.textContent = String(open);
+      badge.title = L(`${open} offene(s) Ticket(s)`, `${open} open ticket(s)`);
+    }
   }
 
   // --- Build Full Cartoon Interface ---
@@ -1039,7 +1153,8 @@
       onclick: () => switchRoom(idx)
     }, [
       h("span", { className: "cartoon-station-icon", textContent: icon }),
-      h("span", { id: `nav-text-${idx}`, textContent: t(`room${idx}`) })
+      h("span", { id: `nav-text-${idx}`, textContent: t(`room${idx}`) }),
+      h("span", { id: `nav-badge-${idx}`, className: "cartoon-station-badge", hidden: true })
     ]);
     root.appendChild(h("nav", { className: "cartoon-conduit-nav", "aria-label": L("Rettungszentrale Räume", "Rescue center rooms") }, [
       navNode(1, "🚦"),
@@ -1228,7 +1343,7 @@
                 className: "chunky-btn chunky-btn--radio",
                 textContent: t("schmidtRadio"),
                 disabled: true,
-                onclick: () => decideSelected("confirm")
+                onclick: () => decideTicket(focusAt(3), "confirm", "speech-schmidt")
               }),
               h("button", {
                 id: "btn-schmidt-reject",
@@ -1236,7 +1351,7 @@
                 className: "chunky-btn",
                 textContent: t("schmidtFalseAlarm"),
                 disabled: true,
-                onclick: () => decideSelected("reject")
+                onclick: () => decideTicket(focusAt(3), "reject", "speech-schmidt")
               }),
               h("button", {
                 id: "btn-schmidt-coffee",
@@ -1279,9 +1394,18 @@
             className: "chunky-btn chunky-btn--wrongway",
             textContent: t("weberManual"),
             disabled: true,
-            onclick: () => decideSelected("confirm")
+            onclick: () => decideTicket(deadlineTicket(), "confirm", "speech-weber")
           }),
-          h("div", { id: "beta-alert-msg", className: "verdict-badge danger", textContent: "", hidden: true })
+          h("button", {
+            id: "btn-weber-reject",
+            type: "button",
+            className: "chunky-btn",
+            textContent: t("schmidtFalseAlarm"),
+            disabled: true,
+            onclick: () => decideTicket(deadlineTicket(), "reject", "speech-weber")
+          }),
+          h("div", { id: "beta-alert-msg", className: "verdict-badge danger", textContent: "", hidden: true }),
+          h("div", { id: "beta-ticket-list", className: "beta-ticket-list" })
         ])
       ])
     ]));
