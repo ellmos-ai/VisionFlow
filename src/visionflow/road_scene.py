@@ -356,8 +356,8 @@ class RoadWorld:
         an exact anti-aliased alpha without a key colour.
         """
         scale = min(self.width / 960.0, self.height / 540.0)
-        # Cars fill half a lane and grow with the lane towards the camera.
-        car_width = max(5, round(self._lane_width_px(depth) * 0.5))
+        # Cars fill a bit less than half a lane and grow with it towards the camera.
+        car_width = max(5, round(self._lane_width_px(depth) * 0.44))
         car_height = max(9, round(car_width * 1.8))
         top_x, bottom_x = _persp(_LANE_CENTERS[lane])
         travel = max(1, self.height - 1 - self._horizon)
@@ -495,12 +495,6 @@ class RoadWorld:
             -1,
             cv2.LINE_AA,
         )
-        # Side mirrors at the front pillars.
-        mirror_y = front_center - direction * max(1, windshield_height // 2)
-        mirror = max(1, round(car_width * 0.10))
-        for side in (-1, 1):
-            mx = cx + side * (half_width + mirror // 2)
-            cv2.rectangle(image, (mx - mirror // 2, mirror_y - 1), (mx + mirror // 2, mirror_y + 1), flank, -1)
 
         light_width = max(1, round(car_width * 0.14))
         light_y = cy + direction * max(1, half_height - 1)
