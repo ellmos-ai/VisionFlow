@@ -183,3 +183,5 @@ summary { color: var(--muted); cursor: pointer; }
   .status-badge { white-space: normal; }
   .button-row .button { flex: 1 1 100%; }
 }
+
+.app-lang-btn { flex: none; }

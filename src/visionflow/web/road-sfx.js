@@ -1,5 +1,5 @@
 /**
- * FlowVision Emergency Leitstelle – Cartoon Sound Effects
+ * VisionFlow Emergency Leitstelle – Cartoon Sound Effects
  * 100% self-contained Web Audio API synthesizer. Zero external files or CDNs.
  */
 (function (global) {
