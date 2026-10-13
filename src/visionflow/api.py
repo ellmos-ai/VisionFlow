@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import json
 import mimetypes
+import re
 import secrets
 import socket
 import threading
@@ -33,6 +34,8 @@ MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 SESSION_COOKIE = "vf_session"
 SESSION_TTL_SECONDS = 8 * 60 * 60
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+DEFAULT_PUBLIC_UPLOAD_QUOTA_BYTES = 200 * 1024 * 1024
+_PUBLIC_UPLOAD_REF = re.compile(r"uploads/vf_[0-9a-f]{48}\.bin")
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
@@ -56,7 +59,15 @@ class _ApiState:
         road_sessions: Any = None,
         road_cases: Any = None,
         road_unavailable_reason: str | None = None,
+        public_demo: bool = False,
+        public_upload_quota_bytes: int = 0,
     ) -> None:
+        if type(public_demo) is not bool:
+            raise ValueError("public_demo must be a boolean")
+        if type(public_upload_quota_bytes) is not int or public_upload_quota_bytes < 0:
+            raise ValueError("public_upload_quota_bytes must be a non-negative integer")
+        self.public_demo = public_demo
+        self.public_upload_quota_bytes = public_upload_quota_bytes or DEFAULT_PUBLIC_UPLOAD_QUOTA_BYTES
         self.controller = controller
         self.root = Path(data_dir).expanduser().resolve()
         self.root.mkdir(parents=True, exist_ok=True)
@@ -106,6 +117,8 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
         road_sessions: Any = None,
         road_cases: Any = None,
         road_unavailable_reason: str | None = None,
+        public_demo: bool = False,
+        public_upload_quota_bytes: int | None = None,
     ) -> None:
         host = server_address[0]
         if host not in _LOOPBACK_HOSTS:
@@ -122,6 +135,8 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
             road_sessions=road_sessions,
             road_cases=road_cases,
             road_unavailable_reason=road_unavailable_reason,
+            public_demo=public_demo,
+            public_upload_quota_bytes=public_upload_quota_bytes or 0,
         )
         super().__init__(server_address, _VisionFlowHandler)
 
@@ -138,8 +153,15 @@ def create_server(
     road_sessions: Any = None,
     road_cases: Any = None,
     road_unavailable_reason: str | None = None,
+    public_demo: bool = False,
+    public_upload_quota_bytes: int | None = None,
 ) -> VisionFlowHTTPServer:
-    """Create a local server. It is loopback-only and does not start automatically."""
+    """Create a local server. It is loopback-only and does not start automatically.
+
+    With public_demo the server is prepared for a hosted demo behind a reverse
+    proxy: workflows may only read road simulation sources or media uploaded to
+    this server, and stored uploads are capped. The bind stays loopback-only.
+    """
     return VisionFlowHTTPServer(
         (host, port),
         controller,
@@ -150,6 +172,8 @@ def create_server(
         road_sessions=road_sessions,
         road_cases=road_cases,
         road_unavailable_reason=road_unavailable_reason,
+        public_demo=public_demo,
+        public_upload_quota_bytes=public_upload_quota_bytes,
     )
 
 
@@ -402,6 +426,38 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         except KeyError as exc:
             raise _ApiFault(404, "road_source_not_found", "Die Kameraquelle wurde nicht gefunden.") from exc
 
+    def _check_public_source(self, kind: Any, source: Any) -> None:
+        """In the public demo only road simulations and own uploads are readable."""
+        if not self.server.state.public_demo:
+            return
+        from visionflow.road_api import ROAD_SOURCE_PREFIX
+
+        if kind == "camera" and isinstance(source, str) and source.startswith(ROAD_SOURCE_PREFIX):
+            return
+        if kind in {"image", "video"} and isinstance(source, str) and _PUBLIC_UPLOAD_REF.fullmatch(source):
+            return
+        raise _ApiFault(
+            403,
+            "public_demo_source_rejected",
+            "The public demo only reads the road simulation and media uploaded here.",
+        )
+
+    def _check_public_resume(self, body: Any) -> None:
+        if not self.server.state.public_demo or not isinstance(body, dict):
+            return
+        nested = body.get("input")
+        for container in (body, nested if isinstance(nested, dict) else {}):
+            if "source" not in container:
+                continue
+            source = container.get("source")
+            kind = container.get("kind")
+            if kind is None:
+                from visionflow.road_api import ROAD_SOURCE_PREFIX
+
+                road = isinstance(source, str) and source.startswith(ROAD_SOURCE_PREFIX)
+                kind = "camera" if road else "image"
+            self._check_public_source(kind, source)
+
     def _authorize_workflow_source(self, session_id: str, workflow: Any) -> str | None:
         from visionflow.road_api import ROAD_SOURCE_PREFIX
 
@@ -560,7 +616,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                     self.server.state.sessions[session_id] = (csrf, now)
                 self._send_json(
                     200,
-                    {"csrf_token": csrf},
+                    {"csrf_token": csrf, "public_demo": self.server.state.public_demo},
                     extra_headers={
                         "Set-Cookie": (
                             f"{SESSION_COOKIE}={session_id}; Path=/; HttpOnly; SameSite=Strict"
@@ -705,6 +761,10 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                 return
             if path == "/runs":
                 workflow = self._validate_workflow(body)
+                self._check_public_source(
+                    getattr(getattr(workflow, "input", None), "kind", None),
+                    getattr(getattr(workflow, "input", None), "source", None),
+                )
                 road_source_id = self._authorize_workflow_source(session_id, workflow)
                 result = self.server.state.controller.start(workflow)
                 run_id = getattr(result, "run_id", None)
@@ -741,6 +801,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                     return
                 if action == "input":
                     self._require_run_owner(run_id, session_id)
+                    self._check_public_resume(body)
                     road_source_id = self._resume_source(body)
                     if road_source_id is not None:
                         self._authorize_road_source(session_id, road_source_id)
@@ -864,6 +925,17 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         except (OSError, RuntimeError, ValueError) as exc:
             raise _ApiFault(500, "upload_storage_unavailable", "The local upload directory is unsafe.") from exc
 
+        if self.server.state.public_demo:
+            used = sum(item.stat().st_size for item in resolved_uploads.iterdir() if item.is_file())
+            if used + length > self.server.state.public_upload_quota_bytes:
+                # Drain the bounded body so the client reliably receives the reply.
+                remaining = length
+                while remaining:
+                    chunk = self.rfile.read(min(64 * 1024, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                raise _ApiFault(507, "demo_storage_full", "The public demo upload storage is full.")
         filename = "vf_" + secrets.token_hex(24) + ".bin"
         target = resolved_uploads / filename
         remaining = length

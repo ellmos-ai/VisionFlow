@@ -54,6 +54,7 @@ def build_road_runtime(
     allowed_camera_sources: dict[str, int] | None = None,
     gemini_api_key: str | None = None,
     allow_native_costs: bool = False,
+    max_live_sessions: int | None = None,
 ) -> RoadRuntime:
     """Build a controller with explicit road routing and optional recording.
 
@@ -117,7 +118,7 @@ def build_road_runtime(
     from .recording import RecordingStore
 
     recordings = RecordingStore(Path(data_dir) / "road-recordings", Path(ffmpeg))
-    sessions = SimulationStore()
+    sessions = SimulationStore(max_live=max_live_sessions)
     road_sessions: RoadSessionService | None = None
     road_cases: RoadCaseService | None = None
     try:

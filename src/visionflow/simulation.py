@@ -213,13 +213,20 @@ class _SimulationReader:
             self._session._condition.notify_all()
 
 
+class SimulationCapacityError(RuntimeError):
+    """Raised when the configured number of live sessions is already running."""
+
+
 class SimulationStore:
     """In-memory owner-scoped registry for live simulation sessions."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_live: int | None = None) -> None:
+        if max_live is not None and (type(max_live) is not int or max_live <= 0):
+            raise ValueError("max_live must be a positive integer or None")
         self._lock = threading.Lock()
         self._sessions: dict[str, SimulationSession] = {}
         self._closed = False
+        self._max_live = max_live
 
     def create(
         self,
@@ -233,6 +240,12 @@ class SimulationStore:
             if self._closed:
                 session.close()
                 raise RuntimeError("simulation store is closed")
+            if self._max_live is not None:
+                # Sessions stop by themselves at the time cap; only running ones count.
+                live = sum(1 for existing in self._sessions.values() if not existing.closed)
+                if live >= self._max_live:
+                    session.close()
+                    raise SimulationCapacityError("all live simulation slots are in use")
             self._sessions[session.source_id] = session
         return session
 
@@ -277,4 +290,4 @@ class SimulationStore:
             session.close()
 
 
-__all__ = ["SimulationSession", "SimulationStore"]
+__all__ = ["SimulationCapacityError", "SimulationSession", "SimulationStore"]
