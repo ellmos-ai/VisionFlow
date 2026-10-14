@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import secrets
 import subprocess
 import sys
@@ -27,7 +28,10 @@ TEMPLATE = HERE / "demo-stack.yaml"
 
 
 def aws(*args: str, region: str) -> str:
-    return subprocess.check_output(["aws", *args, "--region", region, "--output", "json"], text=True)
+    environment = os.environ.copy()
+    environment.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", AWS_CLI_FILE_ENCODING="utf-8")
+    return subprocess.check_output(["aws", *args, "--region", region, "--output", "json"],
+                                   text=True, encoding="utf-8", env=environment)
 
 
 def outputs(stack: str, region: str) -> dict[str, str]:

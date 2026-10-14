@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .config import load_workflow
 from .contracts import Finding, ModelDecision, RunResult, WorkflowConfig
 from .decision_policy import DecisionConflict, DecisionError, DecisionNotFound
 from .gemini_video import GEMINI_MODEL_ID
@@ -27,6 +26,7 @@ from .video_model import (
     VideoRequest,
     VideoTransportResult,
 )
+from .workflow_resources import load_builtin_workflow
 
 
 _FIXTURE_PROFILES = frozenset({"pending", "high", "bird", "leaf", "followup", "unclear", "error"})
@@ -37,7 +37,6 @@ _TERMINAL_PHASES = frozenset(
 # versions, and up to 30 seconds in each native call. 300 seconds also leaves
 # bounded scheduling margin without confusing wall time with observation limits.
 _CASE_WALL_DEADLINE_SECONDS = 300.0
-_WORKFLOW_PATH = Path(__file__).resolve().parents[2] / "examples" / "workflows" / "road-review.json"
 
 
 class RoadCaseError(RuntimeError):
@@ -329,7 +328,7 @@ class RoadCaseService:
         if manifest.get("source_id") != source:
             raise RoadCaseError("source_mismatch", status=409)
 
-        config = load_workflow(_WORKFLOW_PATH, create_registry())
+        config = load_builtin_workflow("road-review.json", create_registry())
         config.input.source = source
         marker = "road-review-" + uuid.uuid4().hex
         config.name = marker

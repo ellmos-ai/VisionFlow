@@ -10,6 +10,9 @@ Die vollständige Beschreibung steht im [englischen README](README.md); dort fin
 Live-Demo, Video und alle Belege. Gebaut von Lukas Geiger (Einzelteilnahme) für die
 [OpenCV AI Competition 2026, powered by AWS](https://opencv26.devpost.com/).
 
+[Öffentliche AWS-Demo](https://d2fmnfnvxb0cs1.cloudfront.net/?lang=de) ·
+[Devpost-Projekt](https://devpost.com/software/visionflow-yibs83).
+
 ![Spuren des Richtungswerkzeugs: grün mit dem Verkehr, rot dagegen](docs/media/direction-tracks.png)
 
 ## Der Ablauf
@@ -34,6 +37,14 @@ Jede Erkennung erzeugt ein nummeriertes Ticket an seiner aktuellen Station: Mode
 in Raum 2, menschliche Prüfung in Raum 3 und abgelaufene Fristen in Raum 4. Ein zweites Ereignis
 während einer Prüfung startet den nächsten Fall auf derselben Kamera; beim Kamera-Stopp
 bleiben versiegelte Tickets entscheidbar.
+
+Die überarbeitete Leitstelle führt dasselbe Ticket durch Kamera, Bewertung, Entscheidung
+und Frist/Meldung. Die Einführung und technische Belege sind einklappbar; die schwarzen
+Pfeile wechseln die Station. Die menschliche Entscheidung hat eine echte Frist von 60 Sekunden.
+
+Für GUI-Revision `f94289c` bestehen die GitHub-Tests unter Linux und Windows jeweils mit
+600 erfolgreichen Prüfungen und ohne Fehler. Die feste Offline-Antwort erkennt keine
+Bildinhalte; sie bleibt in der Oberfläche ausdrücklich gekennzeichnet.
 
 ## Schnellstart
 

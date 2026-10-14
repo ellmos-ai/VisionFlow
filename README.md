@@ -9,7 +9,7 @@ logged action. The flagship example is a **wrong-way driver warning** you can tr
 
 | Try it | Where |
 |---|---|
-| **Live demo** (no install, synthetic traffic) | <!-- LIVE_DEMO_URL --> |
+| **Live demo** (no install, synthetic traffic) | [Open the AWS control room](https://d2fmnfnvxb0cs1.cloudfront.net/) |
 | Demo video (under 5 minutes) | <!-- VIDEO_URL --> |
 | Local install | [Quick start](#quick-start) below |
 | Technical report | [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) |
@@ -174,7 +174,9 @@ holdout), and nothing here is a claim about real-road safety. Notifications are 
 .venv/bin/python -m pytest -q
 ```
 
-On Windows 11 with Python 3.12.10, OpenCV 5.0.0 and NumPy 2.5.3 the suite reports **560 passed, 1 skipped** (the directory-symlink test needs a Windows privilege), 0 failed (2026-10-13, commit bde0e67).
+For GUI revision `f94289c`, the GitHub Actions run on 14 October 2026 reports
+**600 passed, 0 failed** on both Ubuntu and Windows. The jobs also run the actual offline CLI demo.
+[Source-bound CI result](https://github.com/ellmos-ai/VisionFlow/actions/runs/38487244459).
 
 Browser acceptance scripts (Playwright with Edge or Chromium) live in `tests/` and are described
 in [docs/TESTING.md](docs/TESTING.md).

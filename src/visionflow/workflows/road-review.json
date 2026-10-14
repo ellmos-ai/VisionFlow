@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "name": "road-review",
+  "input": {
+    "kind": "camera",
+    "source": "ROAD_SOURCE_PLACEHOLDER"
+  },
+  "limits": {
+    "max_observation_seconds": 75,
+    "max_frames": 400,
+    "max_llm_calls": 2
+  },
+  "nodes": [
+    {
+      "id": "direction",
+      "type": "analyze",
+      "params": {
+        "tool": "direction",
+        "tool_params": {
+          "lanes": [
+            {
+              "id": "northbound",
+              "region": [0, 90, 480, 450],
+              "expected": [0, -1]
+            },
+            {
+              "id": "southbound",
+              "region": [480, 90, 480, 450],
+              "expected": [0, 1]
+            }
+          ],
+          "min_frames": 3,
+          "min_displacement_px": 4.0,
+          "opposition_cosine": -0.75
+        }
+      },
+      "next": ["monitor"]
+    },
+    {
+      "id": "monitor",
+      "type": "observe",
+      "params": {
+        "duration_seconds": 60,
+        "sample_fps": 5,
+        "stop_when": {
+          "tool": "direction",
+          "metric": "opposition_count",
+          "operator": "gte",
+          "value": 1,
+          "min_consecutive": 1
+        }
+      },
+      "next": ["candidate"]
+    },
+    {
+      "id": "candidate",
+      "type": "branch",
+      "params": {
+        "finding_tool": "direction",
+        "metric": "opposition_count",
+        "operator": "gte",
+        "value": 1,
+        "then_node": "tail",
+        "else_node": "normal"
+      }
+    },
+    {
+      "id": "tail",
+      "type": "observe",
+      "params": {
+        "duration_seconds": 10,
+        "sample_fps": 5
+      },
+      "next": ["review"]
+    },
+    {
+      "id": "review",
+      "type": "ask_model",
+      "params": {
+        "question": "Assess the entire recorded road clip and its trigger images using visible pixel flow. Is a vehicle travelling against its configured lane direction, or is the candidate a bird, leaf, or uncertain?"
+      },
+      "next": []
+    },
+    {
+      "id": "normal",
+      "type": "report",
+      "params": {
+        "format": "markdown"
+      },
+      "next": []
+    },
+    {
+      "id": "followup-authority",
+      "type": "observe",
+      "params": {
+        "duration_seconds": 5,
+        "sample_fps": 5,
+        "region": null
+      },
+      "next": []
+    }
+  ],
+  "outputs": [
+    {
+      "type": "display",
+      "requires_approval": false
+    }
+  ]
+}

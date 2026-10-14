@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "name": "motion-observation",
+  "input": {
+    "kind": "video",
+    "source": "USER_PROVIDED"
+  },
+  "limits": {
+    "max_observation_seconds": 300,
+    "max_frames": 300,
+    "max_llm_calls": 4
+  },
+  "nodes": [
+    {
+      "id": "analyze_initial",
+      "type": "analyze",
+      "params": {
+        "tool": "motion",
+        "tool_params": {
+          "initial_frames": 2
+        }
+      },
+      "next": [
+        "ask_model"
+      ]
+    },
+    {
+      "id": "ask_model",
+      "type": "ask_model",
+      "params": {
+        "question": "Hat sich das Objekt bewegt? Prüfe bei Bedarf einen kurzen Folgeausschnitt."
+      },
+      "next": [
+        "report"
+      ]
+    },
+    {
+      "id": "observe_policy",
+      "type": "observe",
+      "params": {
+        "duration_seconds": 1.5,
+        "sample_fps": 2,
+        "region": null
+      },
+      "next": []
+    },
+    {
+      "id": "report",
+      "type": "report",
+      "params": {
+        "format": "markdown"
+      },
+      "next": []
+    }
+  ],
+  "outputs": [
+    {
+      "type": "display",
+      "requires_approval": false
+    }
+  ]
+}
