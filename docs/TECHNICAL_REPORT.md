@@ -94,7 +94,13 @@ simulated inbox.
   both OpenCV demos, and returns an evidence ZIP with a receipt that is verified against the
   source hashes ([procedure](AWS_ACCEPTANCE.md)).
 
-<!-- AWS_RESULTS -->
+Source `aeb2148` completed AWS CodeBuild on 14 October 2026: **615 passed, 1 skipped,
+0 failed**, followed by both completed offline OpenCV demos. Exact source bytes, downloaded
+evidence and the actual AWS build metadata were verified; the temporary stack was removed.
+The public EC2/CloudFront application passed bird dismissal and a wrong-way case through its
+60-second human deadline, automatic simulated reporting and a linked late correction.
+Both downloaded clips matched their case and HTTP-header SHA-256 values.
+[Publication-safe measurements and limitations](AWS_RESULTS_2026-10-14.json).
 
 ## 7. Evaluation
 
@@ -114,9 +120,11 @@ Full details: [SYNTHETIC_EVALUATION.md](SYNTHETIC_EVALUATION.md).
   Interactions API; three cases failed with HTTP 503 ("high demand"), one direct check confirmed
   the 503, one case exceeded the 30-second client bound. In every case the policy fell back to
   human review and the deadline path, as designed. No model accuracy is claimed.
-* **Software tests**: GUI revision `f94289c` passed **600 tests with no failures** in each
+* **Software tests**: packaged revision `aeb2148` passed **616 tests with no failures** in each
   GitHub Actions job on Ubuntu and Windows (14 October 2026,
-  [source-bound run](https://github.com/ellmos-ai/VisionFlow/actions/runs/38487244459)).
+  [source-bound run](https://github.com/ellmos-ai/VisionFlow/actions/runs/38491740474)).
+  Both jobs also built and consumed an installed wheel outside the source checkout,
+  including the offline demos and actual public-mode road frame analysis.
   Browser acceptance (Playwright with Microsoft Edge):
   multi-event control-room run, camera phase and review phase passed on the integrated tree with
   no browser errors and no external requests.

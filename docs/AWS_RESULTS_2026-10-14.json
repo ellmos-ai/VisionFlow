@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-10-14T00:51:43Z",
+  "source_commit": "aeb214887f825e47d59f58deba748173d6ccbe2b",
+  "source_zip_sha256": "aedd94d98a67c31fb223d789c024b19cf4cc0072b6194979429322114eb1f767",
+  "opencv_version": "5.0.0",
+  "execution": "aws_codebuild",
+  "build_status": "SUCCEEDED",
+  "tests": {
+    "passed": 615,
+    "skipped": 1,
+    "failed": 0,
+    "seconds": 119.75
+  },
+  "offline_demos": {
+    "document_quality": "passed",
+    "motion_observation": "passed",
+    "model_mode": "fixture",
+    "network_used": false
+  },
+  "original_evidence": {
+    "bytes": 74204,
+    "sha256": "8c544fb62145dd0df871f55acf2c9c5c3a21c9c187d164348fb8ebe6b27a61e0",
+    "retained_privately": true
+  },
+  "verification": {
+    "integrity_verified": true,
+    "cloud_verified": true,
+    "verifier_exit_code": 0,
+    "full_private_context_required": true,
+    "public_summary_is_not_a_signature": true
+  },
+  "cleanup": {
+    "temporary_acceptance_stack": "DELETE_COMPLETE"
+  },
+  "public_demo": {
+    "url": "https://d2fmnfnvxb0cs1.cloudfront.net/",
+    "source_commit": "aeb214887f825e47d59f58deba748173d6ccbe2b",
+    "bird": {
+      "phase": "dismissed",
+      "model_mode": "fixed_offline_fixture",
+      "hazard": false,
+      "confidence": 0.99,
+      "clip_sha256": "8d408b103fd618e3cdbb22f2428a76ae67b0b0cb6efb6520d87a021c941522be",
+      "clip_hash_verified": true,
+      "report_sent": false
+    },
+    "wrong_way": {
+      "phase": "no_response",
+      "model_mode": "fixed_offline_fixture",
+      "human_deadline_seconds": 59.999965,
+      "automatic_simulated_report": true,
+      "linked_late_correction": true,
+      "clip_sha256": "fd344e3178ed9877de625bad6f7a3b63e5eb92931abf41fec2b303a0df7414e9",
+      "clip_hash_verified": true
+    }
+  },
+  "limits": [
+    "Synthetic traffic and generated test media; no real-road safety claim.",
+    "Offline fixture model answers do not classify images or clips.",
+    "Authority receipts are simulated.",
+    "Private AWS account, ARN, bucket, project and log identifiers are omitted."
+  ]
+}
