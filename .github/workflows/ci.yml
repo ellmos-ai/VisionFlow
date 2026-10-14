@@ -38,3 +38,10 @@ jobs:
         run: python -m pytest -q
       - name: CLI demo smoke test
         run: python -m visionflow.cli demo run --output-dir "${{ runner.temp }}/visionflow-demo-ci"
+      - name: Build distributable wheel
+        run: python -m pip wheel --no-deps --wheel-dir .local/wheels .
+      - name: Installed wheel outside checkout
+        env:
+          PYTHONUTF8: "1"
+          PYTHONIOENCODING: utf-8
+        run: python tests/wheel_consumer.py .local/wheels/visionflow-0.1.0-py3-none-any.whl
