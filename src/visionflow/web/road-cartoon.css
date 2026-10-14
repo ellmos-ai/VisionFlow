@@ -1,5 +1,5 @@
 /* ==========================================================================
-   FlowVision Emergency Leitstelle – Cartoon / Trickfilm Style
+   VisionFlow Emergency Leitstelle – Cartoon / Trickfilm Style
    Inspired by Emergency / Bibi Blocksberg / Benjamin Blümchen Rettungszentrale
    Bold comic outlines, cheerful tones, chunky 3D buttons, animated cables
    ========================================================================== */
@@ -144,6 +144,35 @@
   box-shadow: var(--comic-shadow-sm);
   transition: all 0.15s ease;
   white-space: nowrap;
+}
+
+.cartoon-station-node {
+  position: relative;
+}
+
+/* Open tickets waiting in a room. */
+.cartoon-station-badge {
+  position: absolute;
+  top: -0.55rem;
+  right: -0.55rem;
+  min-width: 1.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: #ef4444;
+  border: 2px solid #0f172a;
+  color: #ffffff;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.cartoon-station-badge[hidden] {
+  display: none;
+}
+
+.beta-ticket-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .cartoon-station-node:hover {
@@ -1166,3 +1195,234 @@ button.schmidt-ticket-card {
   font-weight: 700;
   color: #1e293b;
 }
+
+/* Ticket guidance: quiet surroundings, a real camera and one case to follow. */
+:root {
+  --control-paper: #ffffff;
+  --control-sky: #edf5fb;
+  --control-ink: #162e43;
+  --control-blue: #12629c;
+  --control-line: #c8d7e2;
+  --control-danger: #a82c2c;
+  --comic-border: 1px solid var(--control-line);
+  --comic-shadow: none;
+  --comic-shadow-sm: none;
+  --comic-shadow-pressed: none;
+}
+body { background: var(--control-sky); }
+.app-header, .app-footer { background: var(--control-paper); color: var(--control-ink); border-color: var(--control-line); }
+.app-header { padding-block: .7rem; }
+.app-header .eyebrow { color: var(--control-blue); letter-spacing: 0; text-transform: none; }
+.connection-status { color: #445d71; font-size: .85rem; }
+.intro-details { margin: .65rem clamp(1rem, 4vw, 2.5rem) 0; color: var(--control-ink); }
+.intro-details > summary { display: flex; align-items: center; gap: .6rem; width: fit-content; cursor: pointer; font-size: .9rem; }
+.intro-info { font-size: 2rem; font-weight: 700; color: var(--control-blue); line-height: 1; }
+.intro-details .hero { background: var(--control-paper); border-color: var(--control-line); margin: .7rem 0; }
+.intro-details .hero h2, .intro-details .hero-step-label { color: var(--control-ink); }
+.intro-details .hero-lead, .intro-details .hero-reuse, .intro-details .hero-steps li { color: #445d71; }
+.workspace-tabs .button { font-size: .85rem; }
+.workspace-tabs .button.secondary { color: var(--control-ink); background: #fff; border-color: var(--control-line); }
+.workspace-tabs .button.primary { background: var(--control-blue); color: #fff; border-color: var(--control-blue); }
+.road-workspace-status { color: #445d71; }
+.cartoon-stage { gap: .85rem; font-family: "Segoe UI", "Helvetica Neue", sans-serif; color: var(--control-ink); }
+.cartoon-header { padding: .8rem 1rem; border-radius: 10px; }
+.cartoon-brand__title { color: var(--control-ink); font-size: 1.2rem; }
+.cartoon-brand__subtitle { color: #445d71; font-weight: 400; }
+.cartoon-top-controls { gap: .4rem; flex-wrap: wrap; }
+.cartoon-pill-btn { border: 1px solid var(--control-line); border-radius: 6px; font-size: .8rem; font-weight: 600; }
+.cartoon-pill-btn:hover, .chunky-btn:hover, .cartoon-station-node:hover { transform: none; box-shadow: none; }
+.cartoon-conduit-nav { padding: 0; gap: 0; background: var(--control-paper); border-radius: 8px; overflow: visible; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cartoon-station-node { min-width: 0; white-space: normal; margin: 0; min-height: 58px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: #445d71; font-weight: 600; padding: .65rem; }
+.cartoon-station-node.active { color: var(--control-blue); border-color: var(--control-blue); background: #eef6fc; box-shadow: none; transform: none; }
+.cartoon-station-node.ticket-location::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--control-blue); position: absolute; bottom: 5px; }
+.cartoon-station-badge { background: var(--control-blue); color: #fff; top: .2rem; right: .2rem; font-size: .7rem; min-width: 1.1rem; border: 0; }
+.ticket-journey { display: flex; gap: 1rem; justify-content: space-between; align-items: center; padding: .75rem 1rem; background: #dcecf7; border-left: 4px solid var(--control-blue); color: var(--control-ink); }
+.ticket-journey-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .8rem; min-width: 0; }
+.ticket-journey-summary strong { font-size: 1.1rem; }
+.ticket-journey-summary span { font-size: .9rem; }
+.ticket-journey-summary p { width: 100%; margin: .15rem 0 0; font-size: .85rem; }
+.ticket-picker { display: grid; gap: .2rem; flex: 0 1 250px; margin: 0; font-size: .75rem; color: #445d71; min-width: 160px; }
+.ticket-picker .cartoon-select { font-size: .8rem; min-height: 34px; }
+.cartoon-room { border-radius: 10px; background: var(--control-paper); border: 1px solid var(--control-line); }
+.cartoon-room__stage { padding: 1rem; gap: 1rem; }
+.cartoon-character-row { gap: .9rem; align-items: center; margin-bottom: .5rem; }
+.cartoon-avatar { width: 88px; height: 88px; flex: 0 0 88px; background: none; border: 0; box-shadow: none; }
+.cartoon-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+.cartoon-speech-bubble { background: none; border: 0; box-shadow: none; border-radius: 0; padding: 0; }
+.cartoon-speech-bubble::before, .cartoon-speech-bubble::after { display: none; }
+.cartoon-speaker-name { color: var(--control-blue); font-size: .9rem; margin-bottom: .2rem; }
+.cartoon-speech-text { font-size: .95rem; line-height: 1.5; max-width: 72ch; color: var(--control-ink); }
+.traffic-screen-wrap { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(270px, 1fr); gap: 1rem; }
+.traffic-monitor { border: 1px solid var(--control-line); padding: .5rem; background: #162e43; border-radius: 8px; box-shadow: none; min-width: 0; }
+.traffic-monitor__header { font-size: .75rem; font-weight: 500; padding: .2rem .35rem .5rem; }
+.traffic-feed-box { border-radius: 4px; }
+.traffic-monitor > .chunky-btn--power { width: 100%; margin-top: .5rem; }
+.traffic-control-panel { border: 0; padding: .25rem 0; background: none; gap: .6rem; }
+.traffic-control-panel h3 { color: var(--control-ink); font-size: 1rem; }
+.cartoon-field { color: #445d71; font-weight: 500; margin-bottom: .2rem; }
+.cartoon-select { border: 1px solid #9bb6ca; border-radius: 6px; color: var(--control-ink); font-weight: 400; }
+.cartoon-btn-grid { display: grid; grid-template-columns: 1fr; gap: .55rem; }
+.scenario-row { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: .6rem; align-items: center; }
+.scenario-icon { width: 60px; height: 60px; object-fit: contain; }
+.chunky-btn { border: 1px solid #9bb6ca; border-radius: 6px; padding: .65rem .8rem; font-size: .9rem; font-weight: 600; min-height: 44px; background: #fff; color: var(--control-ink); box-shadow: none; transition: none; }
+.chunky-btn--wrongway { grid-column: auto; background: #fbe7e7; border-color: #cf9797; color: #7e2020; }
+.chunky-btn--bird { background: #fff4d2; border-color: #ceb97b; color: #625015; }
+.chunky-btn--leaf { background: #e3f3e7; border-color: #9abb9f; color: #245934; }
+.chunky-btn--power, .chunky-btn--radio { background: #e3f0fa; color: #164c74; border-color: #91b5d0; }
+.chunky-btn--coffee { background: #f6eddf; border-color: #cab69b; color: #694b27; }
+.scenario-note { font-size: .8rem; line-height: 1.5; margin: 0; color: #445d71; }
+.room-pagination { padding: .6rem 1rem; border-top: 1px solid var(--control-line); display: flex; justify-content: space-between; align-items: center; }
+.room-arrow { width: 50px; height: 44px; padding: 0; border: 0; background: transparent; color: #000; font-size: 2rem; line-height: 1; cursor: pointer; border-radius: 4px; }
+.room-arrow:hover:not(:disabled) { background: #e3edf4; }
+.room-arrow:disabled { color: #93a1ac; cursor: default; }
+.room-pagination-caption { color: #445d71; font-size: .8rem; }
+.case-disclosure { background: #f4f8fb; border: 1px solid var(--control-line); border-radius: 6px; padding: .7rem .9rem; color: var(--control-ink); }
+.case-disclosure > summary { cursor: pointer; font-size: .85rem; font-weight: 600; }
+.case-disclosure[open] > summary { margin-bottom: .75rem; }
+.case-disclosure h4 { font-size: .85rem; }
+.case-technical-data { overflow-wrap: anywhere; font-size: .8rem; color: #445d71; }
+.case-technical-data p { margin: .4rem 0; }
+.inference-transparency-card { background: #edf5fb; border: 0; padding: .7rem .9rem; margin: 0; box-shadow: none; color: var(--control-ink); }
+.transparency-pill { background: transparent; padding: 0; color: #164c74; font-size: .85rem; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.transparency-notice { border: 0; padding: .2rem 0 0; color: #445d71; font-size: .8rem; }
+.transparency-grid { background: transparent; padding: .5rem 0; color: var(--control-ink); }
+.transparency-item .label, .transparency-item .value { color: #445d71; text-transform: none; font-family: inherit; }
+.pipeline-flow-banner { background: transparent; color: #445d71; border: 0; padding: 0; font-size: .8rem; justify-content: flex-start; flex-wrap: wrap; }
+.datacenter-verdict { background: transparent; min-height: 130px; padding: 1rem .1rem; text-align: left; align-items: flex-start; justify-content: flex-start; gap: .4rem; }
+.datacenter-verdict h3, .datacenter-verdict p { margin: 0; }
+.case-result { font-size: 1.3rem; color: var(--control-ink); font-weight: 600; }
+.case-status { color: #445d71; font-size: .95rem; }
+.case-next { color: var(--control-blue); font-size: .95rem; }
+.datacenter-queue-list { background: transparent; min-height: 0; padding: 0; color: var(--control-ink); }
+.datacenter-console { min-height: 90px; font-size: .75rem; }
+.dispatch-grid { grid-template-columns: minmax(0, 1.45fr) minmax(260px, 1fr); gap: 1rem; }
+.dispatch-desk { padding: .25rem 0; border: 0; background: transparent; gap: .6rem; }
+.dispatch-desk h3 { color: var(--control-ink); margin: 0; }
+.decision-status { font-size: .9rem; font-weight: 400; color: #445d71; }
+.decision-time { font-size: 1rem; color: var(--control-blue); font-weight: 600; margin: 0 0 .4rem; }
+.coffee-away { display: flex; align-items: center; gap: .8rem; padding: .6rem .9rem; background: #f6eddf; border-radius: 6px; color: #694b27; text-align: left; width: 100%; }
+.coffee-away-icon { font-size: 2.8rem; line-height: 1; }
+.coffee-away p { margin: .15rem 0 0; font-size: .85rem; }
+.coffee-away > span:last-child { font-size: 1.8rem; margin-left: auto; }
+.beta-alert-box { background: transparent; border: 0; padding: .5rem 0; box-shadow: none; text-align: left; align-items: stretch; gap: .7rem; }
+.beta-countdown-display { animation: none; padding: .1rem 0; background: transparent; border: 0; border-radius: 0; color: var(--control-ink); box-shadow: none; font-family: inherit; font-size: 2.5rem; text-align: left; }
+.cartoon-countdown-caption { color: var(--control-ink); font-size: 1.05rem; overflow-wrap: anywhere; font-weight: 500; }
+.case-report-message { border-left: 3px solid var(--control-danger); background: #fbe7e7; padding: .6rem .8rem; font-size: 1rem; color: #7e2020; }
+.queue-item, .queue-item.high-risk, .schmidt-ticket-card, .schmidt-ticket-card.active-ticket { background: #fff; color: var(--control-ink); border: 1px solid var(--control-line); box-shadow: none; }
+.ticket-clip-title, .inference-interface-hint { color: #445d71; font-family: inherit; }
+.ticket-header { font-size: .9rem; flex-wrap: wrap; gap: .4rem; }
+.beta-ticket-list { display: grid; gap: .5rem; }
+.traffic-anomaly-banner { animation: none; background: #fff; color: #7e2020; border: 1px solid #cf9797; box-shadow: none; font-weight: 600; font-size: .8rem; }
+.verdict-badge.danger, .patrol-car-siren-light { animation: none; box-shadow: none; }
+.patrol-car-stage { background: #dde7ee; min-height: 64px; padding: .5rem; border-radius: 6px; }
+.patrol-car-road { opacity: .6; }
+.review-clip-meta { color: #d0dce6; font-size: .8rem; }
+.proof-badge { color: #c3e5ff; font-weight: 500; font-size: .8rem; }
+.cartoon-stage .hint { color: #445d71; }
+.cartoon-stage button:focus-visible, .cartoon-stage select:focus-visible, .cartoon-stage summary:focus-visible, .intro-details > summary:focus-visible { outline: 3px solid var(--control-blue); outline-offset: 3px; }
+@media (max-width: 850px) {
+  .traffic-screen-wrap, .dispatch-grid { grid-template-columns: 1fr; }
+  .ticket-journey { align-items: stretch; flex-direction: column; gap: .5rem; }
+  .ticket-picker { flex-basis: auto; }
+  .cartoon-top-controls { width: 100%; }
+}
+@media (max-width: 480px) {
+  .app-header { align-items: flex-start; gap: .5rem; }
+  .app-header .eyebrow { max-width: 20ch; }
+  .connection-status { max-width: 16ch; font-size: .75rem; }
+  .cartoon-room__stage { padding: .75rem; }
+  .cartoon-station-node { font-size: .75rem; padding: .45rem .25rem; }
+  .cartoon-avatar { width: 64px; height: 64px; flex-basis: 64px; }
+  .cartoon-character-row { gap: .6rem; }
+  .cartoon-speech-text { font-size: .85rem; }
+  .scenario-row { grid-template-columns: 48px minmax(0, 1fr); }
+  .scenario-icon { width: 48px; height: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cartoon-stage *, .cartoon-stage *::before, .cartoon-stage *::after { animation: none !important; transition: none !important; }
+}
+
+/* Empty source shells are hidden after their live viewport moves into room 1. */
+.road-workspace--game .road-camera__content { display: none; }
+.intro-details > summary, .case-disclosure > summary { color: var(--control-ink); }
+.cartoon-speaker-name { text-transform: none; letter-spacing: 0; }
+.cartoon-character-row { border: 0; background: transparent; padding: .25rem 0; }
+.workspace-tabs .button[aria-pressed="true"] { box-shadow: none; color: #fff; background: var(--control-blue); }
+@media (max-width: 480px) {
+  .app-header { flex-direction: row; flex-wrap: wrap; }
+  .app-header .connection-status { margin-left: auto; }
+}
+
+.patrol-dispatch-label { margin: 0 0 1rem; font-size: .8rem; color: #445d71; position: relative; z-index: 1; }
+
+.cartoon-station-node:hover { color: var(--control-blue); background: #eef6fc; }
+
+/* Compact top chrome leaves room for the camera and three scenarios. */
+.app-header { padding-block: .45rem; min-height: 48px; }
+.app-header .eyebrow { display: none; }
+.intro-details { margin-top: .4rem; }
+.intro-details > summary { font-size: .82rem; }
+.intro-info { font-size: 1.7rem; }
+.workspace-shell { padding-top: .6rem; }
+.workspace-tabs { margin-bottom: .7rem; }
+.cartoon-stage { gap: .6rem; }
+.cartoon-header { padding: .5rem .85rem; }
+.cartoon-brand__title { font-size: 1rem; }
+.cartoon-brand__subtitle { display: none; }
+.cartoon-top-controls { gap: .35rem; }
+.cartoon-pill-btn { padding: .35rem .65rem; min-height: 36px; }
+.cartoon-station-node { min-height: 46px; padding-block: .45rem; }
+.ticket-journey { padding: .5rem .85rem; }
+.ticket-journey-summary p { margin-top: 0; font-size: .8rem; }
+.ticket-journey-summary span { font-size: .85rem; }
+.cartoon-room__stage { padding: .75rem; gap: .6rem; }
+.cartoon-character-row { margin-bottom: 0; padding: 0; gap: .75rem; }
+.cartoon-avatar { width: 80px; height: 80px; flex-basis: 80px; }
+.cartoon-speech-text { font-size: .9rem; }
+.traffic-screen-wrap { grid-template-columns: minmax(0, 1.55fr) minmax(270px, 1fr); }
+.traffic-control-panel { gap: .45rem; }
+.cartoon-field { gap: .15rem; margin-bottom: 0; font-size: .75rem; }
+.cartoon-select { min-height: 36px; padding: .3rem .45rem; font-size: .82rem; }
+.scenario-row { grid-template-columns: 52px minmax(0, 1fr); }
+.scenario-icon { width: 52px; height: 52px; }
+.cartoon-btn-grid { gap: .4rem; }
+.scenario-note { font-size: .75rem; }
+.room-pagination { padding-block: .4rem; }
+@media (max-width: 850px) { .traffic-screen-wrap { grid-template-columns: 1fr; } }
+@media (max-width: 480px) {
+  .cartoon-avatar { width: 64px; height: 64px; flex-basis: 64px; }
+  .cartoon-header { gap: .4rem; }
+}
+
+.traffic-monitor { gap: .25rem; }
+.traffic-monitor__header { gap: .35rem; flex-wrap: wrap; padding: .15rem .25rem; }
+.traffic-monitor__header .chunky-btn--power { min-height: 36px; padding: .35rem .65rem; font-size: .78rem; }
+@media (min-width: 851px) {
+  #cartoon-feed-mount { max-height: 335px; }
+  #cartoon-feed-mount .road-camera__viewport { height: 100%; }
+  #cartoon-feed-mount .road-camera__frame { object-fit: contain; }
+}
+
+/* Workspace choice belongs in the global header; IDs retain their bindings. */
+.app-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: .6rem 1rem; }
+.app-header .workspace-tabs { margin: 0; justify-content: center; gap: .5rem; }
+.app-header .workspace-tabs .button { min-height: 40px; font-size: .82rem; }
+.app-header .connection-status { font-size: .75rem; max-width: 25ch; }
+@media (max-width: 1000px) {
+  .app-header { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .app-header > .workspace-tabs { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; }
+  .app-header .connection-status { justify-self: end; margin-left: 0; }
+}
+@media (max-width: 480px) {
+  .app-header { gap: .45rem; }
+  .app-header > .workspace-tabs { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .app-header .connection-status { max-width: 15ch; }
+}
+/* Keep the complete dispatch vehicle inside a generous, unclipped scene. */
+.patrol-car-stage { display: grid; justify-items: start; align-items: start; gap: .5rem; min-height: 0; padding: .75rem 1rem; overflow: visible; }
+.patrol-dispatch-label { margin: 0; }
+.patrol-car { position: relative; left: auto; bottom: auto; width: 210px; max-width: 100%; display: block; }
+.patrol-car > img, .patrol-car > svg { display: block; width: 100%; height: auto; max-height: 145px; object-fit: contain; }
+.patrol-car.dispatching { animation: patrolArrive 1.2s ease-out both; }
+.patrol-car-road { bottom: 18px; }
+@keyframes patrolArrive { from { transform: translateX(-8px); opacity: .5; } to { transform: translateX(0); opacity: 1; } }

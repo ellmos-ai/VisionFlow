@@ -1,5 +1,5 @@
 /**
- * FlowVision Emergency Leitstelle – Interactive Browser Game Engine
+ * VisionFlow Emergency Leitstelle – Interactive Browser Game Engine
  * Inspired by Emergency / Bibi Blocksberg / Benjamin Blümchen Rettungszentrale
  * 
  * Manages 4 Rooms:
@@ -13,161 +13,71 @@
  */
 (function (global) {
   "use strict";
-
-  // --- Cartoon SVG Assets (Clean inline SVG Blobs) ---
-  const SVGS = {
-    technicianAlex: `<svg viewBox="0 0 100 100" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="46" fill="#fef08a" stroke="#1e293b" stroke-width="4"/>
-      <!-- Cap -->
-      <path d="M 22 40 Q 50 18 78 40 L 86 44 Q 50 36 14 44 Z" fill="#0284c7" stroke="#1e293b" stroke-width="3"/>
-      <!-- Face -->
-      <circle cx="50" cy="52" r="26" fill="#fed7aa" stroke="#1e293b" stroke-width="3"/>
-      <!-- Eyes & Smile -->
-      <circle cx="42" cy="48" r="3.5" fill="#1e293b"/>
-      <circle cx="58" cy="48" r="3.5" fill="#1e293b"/>
-      <path d="M 44 58 Q 50 64 56 58" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/>
-      <!-- Headset -->
-      <path d="M 28 48 Q 28 32 50 30 Q 72 32 72 48" fill="none" stroke="#334155" stroke-width="4"/>
-      <circle cx="28" cy="48" r="5" fill="#0284c7" stroke="#1e293b" stroke-width="2"/>
-      <path d="M 28 48 Q 38 66 46 62" fill="none" stroke="#334155" stroke-width="3"/>
-      <circle cx="46" cy="62" r="3" fill="#f87171"/>
-      <!-- Safety Vest -->
-      <path d="M 28 78 L 72 78 L 68 96 L 32 96 Z" fill="#eab308" stroke="#1e293b" stroke-width="3"/>
-      <line x1="42" y1="78" x2="40" y2="96" stroke="#ffffff" stroke-width="3"/>
-      <line x1="58" y1="78" x2="60" y2="96" stroke="#ffffff" stroke-width="3"/>
-    </svg>`,
-
-    drKira: `<svg viewBox="0 0 100 100" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="46" fill="#e0f2fe" stroke="#1e293b" stroke-width="4"/>
-      <!-- Hair Bun -->
-      <circle cx="50" cy="24" r="14" fill="#78350f" stroke="#1e293b" stroke-width="3"/>
-      <!-- Hair Base -->
-      <path d="M 24 50 Q 50 24 76 50 Q 80 68 76 74 Q 50 64 24 74 Z" fill="#92400e" stroke="#1e293b" stroke-width="3"/>
-      <!-- Face -->
-      <circle cx="50" cy="52" r="25" fill="#ffedd5" stroke="#1e293b" stroke-width="3"/>
-      <!-- Glasses -->
-      <rect x="34" y="44" width="13" height="10" rx="3" fill="none" stroke="#0284c7" stroke-width="3"/>
-      <rect x="53" y="44" width="13" height="10" rx="3" fill="none" stroke="#0284c7" stroke-width="3"/>
-      <line x1="47" y1="49" x2="53" y2="49" stroke="#0284c7" stroke-width="3"/>
-      <circle cx="40" cy="49" r="2.5" fill="#1e293b"/>
-      <circle cx="60" cy="49" r="2.5" fill="#1e293b"/>
-      <!-- Smile -->
-      <path d="M 45 60 Q 50 65 55 60" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/>
-      <!-- Lab Coat -->
-      <path d="M 28 77 L 72 77 L 68 96 L 32 96 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
-      <path d="M 44 77 L 50 86 L 56 77" fill="#0284c7"/>
-    </svg>`,
-
-    officerSchmidt: `<svg viewBox="0 0 100 100" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="46" fill="#dbeafe" stroke="#1e293b" stroke-width="4"/>
-      <!-- Police Cap -->
-      <path d="M 20 40 Q 50 16 80 40 L 86 46 Q 50 36 14 46 Z" fill="#1e3a8a" stroke="#1e293b" stroke-width="3"/>
-      <polygon points="50,28 54,34 46,34" fill="#fbbf24" stroke="#b45309" stroke-width="1"/>
-      <!-- Face -->
-      <circle cx="50" cy="54" r="26" fill="#fed7aa" stroke="#1e293b" stroke-width="3"/>
-      <!-- Eyes & Friendly Mustache -->
-      <circle cx="42" cy="50" r="3.5" fill="#1e293b"/>
-      <circle cx="58" cy="50" r="3.5" fill="#1e293b"/>
-      <path d="M 38 60 Q 45 56 50 61 Q 55 56 62 60 Q 50 66 38 60 Z" fill="#78350f" stroke="#1e293b" stroke-width="2"/>
-      <!-- Uniform Shirt & Tie -->
-      <path d="M 26 78 L 74 78 L 70 96 L 30 96 Z" fill="#3b82f6" stroke="#1e293b" stroke-width="3"/>
-      <polygon points="50,78 54,92 50,96 46,92" fill="#1e293b"/>
-      <circle cx="36" cy="85" r="3" fill="#fbbf24"/>
-    </svg>`,
-
-    officerWeberEmpty: `<svg viewBox="0 0 100 100" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="46" fill="#fee2e2" stroke="#1e293b" stroke-width="4"/>
-      <!-- Empty Office Chair Backrest -->
-      <rect x="30" y="24" width="40" height="42" rx="8" fill="#475569" stroke="#1e293b" stroke-width="3"/>
-      <line x1="38" y1="36" x2="62" y2="36" stroke="#64748b" stroke-width="2"/>
-      <line x1="38" y1="46" x2="62" y2="46" stroke="#64748b" stroke-width="2"/>
-      <line x1="38" y1="56" x2="62" y2="56" stroke="#64748b" stroke-width="2"/>
-      <!-- Coffee Mug on desk -->
-      <rect x="42" y="70" width="16" height="18" rx="2" fill="#ef4444" stroke="#1e293b" stroke-width="2"/>
-      <path d="M 58 74 Q 65 78 58 84" fill="none" stroke="#1e293b" stroke-width="2"/>
-      <!-- Steam -->
-      <path d="M 46 66 Q 44 60 48 56" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
-      <path d="M 54 66 Q 56 60 52 56" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
-    </svg>`,
-
-    patrolCar: `<svg viewBox="0 0 160 80" width="140" height="70" xmlns="http://www.w3.org/2000/svg">
-      <!-- Car Body -->
-      <path d="M 15 55 L 25 35 L 55 24 L 115 24 L 138 38 L 155 45 L 155 60 L 15 60 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
-      <!-- Police Blue Stripe -->
-      <path d="M 15 48 L 155 48 L 155 58 L 15 58 Z" fill="#0284c7"/>
-      <text x="85" y="56" fill="#ffffff" font-family="system-ui, sans-serif" font-weight="900" font-size="9" text-anchor="middle" letter-spacing="1">POLIZEI</text>
-      <!-- Windows -->
-      <polygon points="56,27 82,27 82,42 42,42" fill="#bae6fd" stroke="#1e293b" stroke-width="2"/>
-      <polygon points="88,27 114,27 132,42 88,42" fill="#bae6fd" stroke="#1e293b" stroke-width="2"/>
-      <!-- Siren on Roof -->
-      <rect x="80" y="16" width="12" height="8" rx="2" fill="#ef4444" stroke="#1e293b" stroke-width="2" class="patrol-car-siren-light"/>
-      <line x1="86" y1="12" x2="86" y2="16" stroke="#fbbf24" stroke-width="2"/>
-      <!-- Wheels -->
-      <circle cx="42" cy="62" r="14" fill="#334155" stroke="#1e293b" stroke-width="3"/>
-      <circle cx="42" cy="62" r="6" fill="#cbd5e1" stroke="#1e293b" stroke-width="2"/>
-      <circle cx="128" cy="62" r="14" fill="#334155" stroke="#1e293b" stroke-width="3"/>
-      <circle cx="128" cy="62" r="6" fill="#cbd5e1" stroke="#1e293b" stroke-width="2"/>
-      <!-- Headlights -->
-      <polygon points="152,47 156,47 156,53 152,53" fill="#fde047" stroke="#1e293b" stroke-width="1.5"/>
-    </svg>`
-  };
-
+  const L = (de, en) => window.VisionFlowI18n ? window.VisionFlowI18n.L(de, en) : en;
 
   // --- Labels -----------------------------------------------------------------
   // Every ticket, verdict, hash, clip and deadline shown by the game comes from
   // the local backend (case snapshots, model exchanges, clip bytes). The game
   // only adds the cartoon presentation around that data.
   const EVENT_LABELS = {
-    wrong_way: "⚠️ Falschfahrer",
-    bird: "🐦 Vogel",
-    leaf: "🍂 Blatt",
+    wrong_way: L("⚠️ Falschfahrer", "⚠️ Wrong-way driver"),
+    bird: L("🐦 Vogel", "🐦 Bird"),
+    leaf: L("🍂 Blatt", "🍂 Leaf"),
   };
   const PHASE_LABELS = {
-    starting: "Fall startet",
-    running: "Analyse läuft",
-    model_review: "Modellprüfung",
-    human_review: "Menschliche Prüfung offen",
-    no_response: "Frist abgelaufen · automatisch gemeldet",
-    reported: "An Behörde gemeldet",
-    dismissed: "Entwarnung durch Modell",
-    rejected: "Als Fehlalarm verworfen",
-    corrected: "Entwarnung nachgesendet",
-    cancelled: "Abgebrochen",
-    normal: "Kein Befund im Beobachtungsfenster",
-    source_ended: "Kameraquelle beendet",
-    failed: "Fehlgeschlagen",
+    starting: L("Fall startet", "Case starting"),
+    running: L("Analyse läuft", "Analysis running"),
+    model_review: L("Modellprüfung", "Model review"),
+    human_review: L("Menschliche Prüfung offen", "Human review pending"),
+    no_response: L("Frist abgelaufen · automatisch gemeldet", "Deadline expired · reported automatically"),
+    reported: L("An Behörde gemeldet", "Reported to authority"),
+    dismissed: L("Entwarnung durch Modell", "All-clear by model"),
+    rejected: L("Als Fehlalarm verworfen", "Dismissed as false alarm"),
+    corrected: L("Entwarnung nachgesendet", "All-clear sent afterwards"),
+    cancelled: L("Abgebrochen", "Cancelled"),
+    normal: L("Kein Befund im Beobachtungsfenster", "No finding in observation window"),
+    source_ended: L("Kameraquelle beendet", "Camera source ended"),
+    failed: L("Fehlgeschlagen", "Failed"),
   };
   const OBJECT_LABELS = {
-    vehicle: "Fahrzeug",
-    bird: "Vogel",
-    leaf: "Blatt",
-    unknown: "unklar",
+    vehicle: L("Fahrzeug", "Vehicle"),
+    bird: L("Vogel", "Bird"),
+    leaf: L("Blatt", "Leaf"),
+    unknown: L("unklar", "unclear"),
   };
   const FIXTURE_PROFILE_LABELS = {
-    pending: "Fahrzeug, Gefahr, Sicherheit 0,80 → menschliche Prüfung",
-    high: "Fahrzeug, Gefahr, Sicherheit 0,99 → automatische Meldung",
-    bird: "Vogel, keine Gefahr (0,99)",
-    leaf: "Blatt, keine Gefahr (0,99)",
-    unclear: "Unklares Ergebnis",
-    followup: "Fordert eine Folgebeobachtung an",
-    error: "Modellfehler",
+    pending: L("Fahrzeug, Gefahr, Sicherheit 0,80 → menschliche Prüfung", "Vehicle, hazard, confidence 0.80 → human review"),
+    high: L("Fahrzeug, Gefahr, Sicherheit 0,99 → automatische Meldung", "Vehicle, hazard, confidence 0.99 → automatic report"),
+    bird: L("Vogel, keine Gefahr (0,99)", "Bird, no hazard (0.99)"),
+    leaf: L("Blatt, keine Gefahr (0,99)", "Leaf, no hazard (0.99)"),
+    unclear: L("Unklares Ergebnis", "Unclear result"),
+    followup: L("Fordert eine Folgebeobachtung an", "Requests a follow-up observation"),
+    error: L("Modellfehler", "Model error"),
   };
   const INJECT_BLOCK_REASONS = {
-    destroyed: "Die Kameraansicht wurde geschlossen.",
-    source_closed: "Die Kamera läuft nicht.",
-    review_locked: "Der aktuelle Fall ist in Prüfung – neue Ereignisse sind bis zur Entscheidung gesperrt.",
-    warming_up: "Die Analyse wärmt sich noch auf (drei echte Startframes).",
-    run_inactive: "Der Analyse-Lauf dieses Falls ist beendet.",
-    source_changed: "Die Kameraquelle wurde inzwischen gewechselt.",
+    destroyed: L("Die Kameraansicht wurde geschlossen.", "The camera view was closed."),
+    source_closed: L("Die Kamera läuft nicht.", "The camera is not running."),
+    warming_up: L("Die Analyse wärmt sich noch auf (drei echte Startframes).", "The analysis is still warming up (three real start frames)."),
+    run_inactive: L("Der Analyse-Lauf dieses Falls ist beendet.", "The analysis run of this case has ended."),
+    source_changed: L("Die Kameraquelle wurde inzwischen gewechselt.", "The camera source has been changed in the meantime."),
   };
   const REVIEW_PHASES = new Set(["model_review", "human_review"]);
   const ACTIVE_PHASES = new Set(["starting", "running", "model_review", "human_review"]);
+  const MONITOR_PHASES = new Set(["starting", "running"]);
+  // Every detection becomes a ticket; it sits in the room that currently handles it:
+  // 2 datacenter (model), 3 dispatch Alpha (human decision), 4 deadline desk.
+  const STATION_OF_PHASE = {
+    model_review: 2, dismissed: 2, failed: 2,
+    human_review: 3, reported: 3, rejected: 3,
+    no_response: 4, corrected: 4,
+  };
+  const OPEN_PHASE_OF_STATION = { 2: "model_review", 3: "human_review", 4: "no_response" };
 
   // --- State ------------------------------------------------------------------
   let env = null; // { roadMount, apiClient, workplace, openCase }
   let mountedHandle = null;
   let currentRoom = 1;
-  let currentLang = "de";
+  let currentLang = window.VisionFlowI18n ? window.VisionFlowI18n.lang : "en";
   let capabilities = null;
   const tickets = new Map(); // caseId -> ticket
   let ticketOrder = []; // newest first
@@ -181,55 +91,55 @@
   // Translation table (static labels; live case data is shown as delivered)
   const I18N = {
     de: {
-      title: "FlowVision – Emergency Einsatzleitstelle",
-      subtitle: "Video-Analyse-Demonstrator · alle Falldaten live vom lokalen Server",
+      title: "VisionFlow · Verkehrsleitstelle",
+      subtitle: "Folge einem Ticket von der Kamera bis zur Entscheidung.",
       soundOn: "🔊 Ton: An",
       soundOff: "🔇 Ton: Aus",
       langToggle: "🌐 EN",
       detailsShow: "🔍 Technische Fallansicht",
       detailsHide: "🔍 Fallansicht ausblenden",
-      room1: "🚦 1. Verkehrsraum",
-      room2: "🏢 2. Rechenzentrum",
-      room3: "🚓 3. Leitstelle Alpha",
-      room4: "🚨 4. Leitstelle Beta (Frist)",
+      room1: "1. Kamera",
+      room2: "2. Einordnung",
+      room3: "3. Entscheidung",
+      room4: "4. Frist & Meldung",
       followCableTo2: "Dem Datenkabel ins Rechenzentrum folgen ➔",
       followCableTo3: "Dem Alarmkabel zur Leitstelle folgen ➔",
       followCableTo4: "Dem Kabel zu Tisch 2 folgen ➔",
-      alexIntro: "Hallo! Ich bin Techniker Alex an B4 Nord. Die Kamera zeigt eine synthetische Verkehrsszene. OpenCV analysiert die echten gerenderten Frames auf Bewegung und Gegenverkehr. Blende mit den Knöpfen ein Ereignis ein – ob daraus ein Befund wird, entscheidet allein die Analyse.",
-      kiraIntro: "Willkommen im Rechenzentrum! Löst die Bildanalyse einen Befund aus, schneidet der Server einen Clip (5 s Vorlauf, 10 s Nachlauf), hasht ihn mit SHA-256 und legt ihn dem Modell vor. Hier siehst du, was das Modell tatsächlich geantwortet hat.",
-      schmidtIntro: "Leitstelle Alpha, Officer Schmidt. Ich prüfe die Fälle, die das Modell an Menschen weitergibt – mit dem echten Beweisclip vom Server.",
+      alexIntro: "Starte die Kamera und blende ein Ereignis ein. Erkennt OpenCV Gegenbewegung, entsteht ein Ticket.",
+      kiraIntro: "Wir ordnen das Ticket ein: Gefahr, Fehlalarm oder menschliche Prüfung?",
+      schmidtIntro: "Sieh dir den Beweisclip an. Bestätige die Gefahr oder gib Entwarnung.",
       schmidtRadio: "📻 Gefahr bestätigen (Einsatz)",
       schmidtFalseAlarm: "❌ Gefahr verneinen",
       schmidtCoffee: "☕ Kaffeepause (niemand entscheidet)",
       schmidtCoffeeAway: "Ich hol mir schnell einen Kaffee! Niemand entscheidet jetzt – an Tisch 2 läuft die echte Frist des Falls weiter.",
       weberSticky: "☕ Bin kurz Kaffee holen – Weber",
-      weberAlert: "Officer Weber ist abwesend. Läuft die Frist eines Falls ohne Entscheidung ab, meldet der Server ihn automatisch an das simulierte Behördenpostfach.",
+      weberAlert: "Weber ist kurz weg. Ohne Entscheidung wird das Ticket bei Fristablauf automatisch gemeldet.",
       weberManual: "🚨 Gefahr manuell bestätigen"
     },
     en: {
-      title: "FlowVision – Emergency Dispatch Mission Control",
-      subtitle: "Video analysis demonstrator · all case data live from the local server",
+      title: "VisionFlow · Traffic control room",
+      subtitle: "Follow a ticket from the camera to the decision.",
       soundOn: "🔊 Sound: ON",
       soundOff: "🔇 Sound: OFF",
       langToggle: "🌐 DE",
       detailsShow: "🔍 Technical case view",
       detailsHide: "🔍 Hide case view",
-      room1: "🚦 1. Traffic Outpost",
-      room2: "🏢 2. Datacenter",
-      room3: "🚓 3. Dispatch Alpha",
-      room4: "🚨 4. Dispatch Beta (Deadline)",
+      room1: "1. Camera",
+      room2: "2. Assessment",
+      room3: "3. Decision",
+      room4: "4. Deadline & report",
       followCableTo2: "Follow Data Cable to Datacenter ➔",
       followCableTo3: "Follow Alert Cable to Dispatch ➔",
       followCableTo4: "Follow Cable to Desk 2 ➔",
-      alexIntro: "Hello! I am technician Alex at B4 North. The camera shows a synthetic traffic scene. OpenCV analyses the real rendered frames for motion and opposing traffic. Inject an event with the buttons – only the analysis decides whether it becomes a finding.",
-      kiraIntro: "Welcome to the datacenter! When the image analysis raises a finding, the server cuts a clip (5 s before, 10 s after), hashes it with SHA-256 and sends it to the model. Here you see what the model actually answered.",
-      schmidtIntro: "Dispatch Alpha, Officer Schmidt. I review the cases the model hands over to humans – with the real evidence clip from the server.",
+      alexIntro: "Start the camera and inject an event. When OpenCV detects opposing motion, it opens a ticket.",
+      kiraIntro: "We assess the ticket: hazard, false alarm or human review?",
+      schmidtIntro: "Watch the evidence clip. Confirm the hazard or give the all-clear.",
       schmidtRadio: "📻 Confirm hazard (dispatch)",
       schmidtFalseAlarm: "❌ Deny hazard",
       schmidtCoffee: "☕ Coffee break (nobody decides)",
       schmidtCoffeeAway: "Grabbing a coffee! Nobody decides now – the case's real deadline keeps running at desk 2.",
       weberSticky: "☕ Grabbing coffee, be right back – Weber",
-      weberAlert: "Officer Weber is away. If a case deadline expires without a decision, the server reports it automatically to the simulated authority inbox.",
+      weberAlert: "Weber is away. Without a decision, the ticket is reported automatically at the deadline.",
       weberManual: "🚨 Confirm hazard manually"
     }
   };
@@ -267,12 +177,12 @@
 
   function setText(id, text) {
     const el = $(id);
-    if (el) el.textContent = text;
+    if (el && el.textContent !== text) el.textContent = text;
   }
 
   function formatDecimal(value, digits = 2) {
     return typeof value === "number" && Number.isFinite(value)
-      ? value.toLocaleString("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits })
+      ? value.toLocaleString(L("de-DE", "en-US"), { minimumFractionDigits: digits, maximumFractionDigits: digits })
       : "–";
   }
 
@@ -305,10 +215,9 @@
   function ticketFor(caseId) {
     let ticket = tickets.get(caseId);
     if (!ticket) {
-      ticketSequence += 1;
       ticket = {
         caseId,
-        number: ticketSequence,
+        number: null, // assigned when the analysis detects something (the ticket is born)
         createdAt: new Date(),
         scenario: [],
         snapshot: null,
@@ -327,11 +236,53 @@
   }
 
   function phaseLabel(phase) {
-    return phase ? PHASE_LABELS[phase] || phase : "Fall startet";
+    return phase ? PHASE_LABELS[phase] || phase : L("Fall startet", "Case starting");
   }
 
-  function focusTicket() {
-    return (selectedCaseId && tickets.get(selectedCaseId)) || (ticketOrder.length ? tickets.get(ticketOrder[0]) : null);
+  function ticketName(ticket) {
+    return ticket && ticket.number ? `Ticket #${ticket.number}` : L("Überwachung", "Monitoring");
+  }
+
+  function isDetection(ticket) {
+    const snapshot = ticket && ticket.snapshot;
+    if (!snapshot) return false;
+    const phase = snapshot.phase;
+    return Boolean(snapshot.clip) || (phase in STATION_OF_PHASE && phase !== "failed");
+  }
+
+  function stationOf(ticket) {
+    return ticket && ticket.number ? STATION_OF_PHASE[phaseOf(ticket)] || 2 : 1;
+  }
+
+  function roomName(station) {
+    return t(`room${station}`).replace(/^\S+\s+/, "");
+  }
+
+  // Tickets currently at a station, open ones first, newest first.
+  function ticketsAt(station) {
+    const list = ticketOrder.map((caseId) => tickets.get(caseId)).filter((item) => item.number && stationOf(item) === station);
+    const open = OPEN_PHASE_OF_STATION[station];
+    return [...list.filter((item) => phaseOf(item) === open), ...list.filter((item) => phaseOf(item) !== open)];
+  }
+
+  function focusAt(station) {
+    const selected = selectedCaseId ? tickets.get(selectedCaseId) : null;
+    if (selected && selected.number) return selected;
+    return newestTicket() || ticketsAt(station)[0] || null;
+  }
+
+  function newestTicket() {
+    for (const caseId of ticketOrder) {
+      const item = tickets.get(caseId);
+      if (item.number) return item;
+    }
+    return null;
+  }
+
+  function onTicketCreated(ticket) {
+    const scenario = ticket.scenario.length ? scenarioText(ticket) : L("ohne eingeblendetes Ereignis", "without an injected event");
+    showBanner(L(`${ticketName(ticket)} erstellt: Die Bildanalyse hat angeschlagen (${scenario}). Clip gesichert → Rechenzentrum`, `${ticketName(ticket)} created: the image analysis triggered (${scenario}). Clip sealed → datacenter`));
+    appendDatacenterLog(L(`[${ticketName(ticket)}] Neues Ticket aus Befund der Bildanalyse`, `[${ticketName(ticket)}] New ticket from an image-analysis finding`));
   }
 
   function latestExchange(ticket) {
@@ -346,20 +297,20 @@
     const modelId = exchange && typeof exchange.model_id === "string" ? exchange.model_id : null;
     if (snapshot.mode === "fixture") {
       const profile = snapshot.fixture_profile || "pending";
-      return `Offline-Testantwort (Profil „${profile}“${modelId ? ", " + modelId : ""})`;
+      return L(`Offline-Testantwort (Profil „${profile}“${modelId ? ", " + modelId : ""})`, `Offline test answer (profile “${profile}”${modelId ? ", " + modelId : ""})`);
     }
     return modelId ? `${modelId} (${snapshot.mode})` : String(snapshot.mode || "–");
   }
 
   function assessmentText(assessment) {
     if (!assessment || typeof assessment !== "object") return null;
-    const object = OBJECT_LABELS[assessment.object_class] || String(assessment.object_class || "unklar");
-    const hazard = assessment.hazard === true ? "Gefahr" : assessment.hazard === false ? "keine Gefahr" : "Gefahr unklar";
-    return `${object} · ${hazard} · Sicherheit ${formatDecimal(assessment.confidence)}`;
+    const object = OBJECT_LABELS[assessment.object_class] || String(assessment.object_class || L("unklar", "unclear"));
+    const hazard = assessment.hazard === true ? L("Gefahr", "Hazard") : assessment.hazard === false ? L("keine Gefahr", "no hazard") : L("Gefahr unklar", "hazard unclear");
+    return L(`${object} · ${hazard} · Sicherheit ${formatDecimal(assessment.confidence)}`, `${object} · ${hazard} · confidence ${formatDecimal(assessment.confidence)}`);
   }
 
   function scenarioText(ticket) {
-    if (!ticket || ticket.scenario.length === 0) return "keine Ereignisse aus dem Spiel eingeblendet";
+    if (!ticket || ticket.scenario.length === 0) return L("keine Ereignisse aus dem Spiel eingeblendet", "no events injected from the game");
     return ticket.scenario.map((entry) => EVENT_LABELS[entry.type] || entry.type).join(" → ");
   }
 
@@ -368,6 +319,11 @@
     const ticket = ticketFor(caseId);
     ticket.snapshot = snapshot;
     if (Array.isArray(exchanges)) ticket.exchanges = exchanges;
+    if (!ticket.number && isDetection(ticket)) {
+      ticketSequence += 1;
+      ticket.number = ticketSequence;
+      onTicketCreated(ticket);
+    }
     const phase = phaseOf(ticket);
     if (phase !== ticket.lastPhase) {
       const previous = ticket.lastPhase;
@@ -378,7 +334,7 @@
 
   // --- Phase transitions (all derived from server snapshots) ------------------
   function onPhaseChange(ticket, previous, phase) {
-    const label = `Fall #${ticket.number}`;
+    const label = ticketName(ticket);
     const snapshot = ticket.snapshot || {};
     appendDatacenterLog(`[${label}] Phase: ${phaseLabel(previous)} → ${phaseLabel(phase)}`);
     if (phase === "model_review" || (REVIEW_PHASES.has(phase) && !REVIEW_PHASES.has(previous))) {
@@ -392,9 +348,9 @@
     const assessment = assessmentText(snapshot.assessment);
     if (assessment && !ticket.loggedAssessment) {
       ticket.loggedAssessment = true;
-      appendDatacenterLog(`[${label}] Modellantwort: ${assessment} · Quelle: ${modelSourceText(ticket)}`);
+      appendDatacenterLog(L(`[${label}] Modellantwort: ${assessment} · Quelle: ${modelSourceText(ticket)}`, `[${label}] Model answer: ${assessment} · Source: ${modelSourceText(ticket)}`));
     }
-    if (snapshot.model_error) appendDatacenterLog(`[${label}] Modellfehler: ${snapshot.model_error}`);
+    if (snapshot.model_error) appendDatacenterLog(L(`[${label}] Modellfehler: ${snapshot.model_error}`, `[${label}] Model error: ${snapshot.model_error}`));
     if (phase === "human_review") {
       setCablePulsing("cable-2-3", true);
       const follow = $("follow-btn-2");
@@ -404,7 +360,7 @@
     if (phase === "no_response" && !ticket.dispatched && snapshot.first_receipt) {
       ticket.dispatched = true;
       dispatchPatrolCar();
-      appendDatacenterLog(`[${label}] Frist abgelaufen – automatische Meldung (Beleg ${snapshot.first_receipt.receipt_id || "–"})`);
+      appendDatacenterLog(L(`[${label}] Frist abgelaufen – automatische Meldung (Beleg ${snapshot.first_receipt.receipt_id || "–"})`, `[${label}] Deadline expired – automatic report (receipt ${snapshot.first_receipt.receipt_id || "–"})`));
     }
     if (phase === "reported" && !ticket.dispatched) {
       ticket.dispatched = true;
@@ -422,7 +378,7 @@
     const ticket = ticketFor(detail.caseId);
     if (detail.case) updateTicket(detail.caseId, detail.case);
     selectedCaseId = ticket.caseId;
-    appendDatacenterLog(`[Fall #${ticket.number}] Neuer Fall auf ${detail.sourceId || "Kamera"} gestartet · ${modelSourceText(ticket)}`);
+    appendDatacenterLog(L(`[${ticketName(ticket)}] Neuer Fall auf ${detail.sourceId || "Kamera"} gestartet · ${modelSourceText(ticket)}`, `[${ticketName(ticket)}] New case started on ${detail.sourceId || "camera"} · ${modelSourceText(ticket)}`));
     render();
   }
 
@@ -452,11 +408,11 @@
         ticket.dispatched = true;
         dispatchPatrolCar();
       }
-      setText("speech-schmidt", `Der Server hat meine Bestätigung für Fall #${ticket.number} angenommen. Die Meldung geht an das simulierte Behördenpostfach – Streife rückt aus!`);
+      setText(currentRoom === 4 ? "speech-weber" : "speech-schmidt", L(`Der Server hat meine Bestätigung für ${ticketName(ticket)} angenommen. Die Meldung geht an das simulierte Behördenpostfach – Streife rückt aus!`, `The server accepted my confirmation for ${ticketName(ticket)}. The report goes to the simulated authority inbox – patrol is on its way!`));
     } else {
-      setText("speech-schmidt", `Der Server hat meine Verneinung für Fall #${ticket.number} angenommen. Kein Einsatz; eine schon gesendete Meldung erhält eine Entwarnung.`);
+      setText(currentRoom === 4 ? "speech-weber" : "speech-schmidt", L(`Der Server hat meine Verneinung für ${ticketName(ticket)} angenommen. Kein Einsatz; eine schon gesendete Meldung erhält eine Entwarnung.`, `The server accepted my denial for ${ticketName(ticket)}. No dispatch; a report already sent receives an all-clear.`));
     }
-    appendDatacenterLog(`[Fall #${ticket.number}] Menschliche Entscheidung angenommen: ${detail.decision === "confirm" ? "Gefahr bestätigt" : "Gefahr verneint"}`);
+    appendDatacenterLog(L(`[${ticketName(ticket)}] Menschliche Entscheidung angenommen: ${detail.decision === "confirm" ? "Gefahr bestätigt" : "Gefahr verneint"}`, `[${ticketName(ticket)}] Human decision accepted: ${detail.decision === "confirm" ? "hazard confirmed" : "hazard denied"}`));
   }
 
   async function loadCapabilities() {
@@ -486,6 +442,7 @@
     if (global.RoadSFX) global.RoadSFX.playSiren();
     const car = $("cartoon-patrol-car");
     if (!car) return;
+    car.closest(".patrol-car-stage").hidden = false;
     car.classList.remove("dispatching");
     void car.offsetWidth; // trigger reflow
     car.classList.add("dispatching");
@@ -493,12 +450,16 @@
 
   // --- Room Switching ---
   function switchRoom(roomNum) {
+    if (![1, 2, 3, 4].includes(roomNum)) return;
     if (global.RoadSFX) global.RoadSFX.playClick();
     currentRoom = roomNum;
     [1, 2, 3, 4].forEach((idx) => {
       const navBtn = $(`nav-node-room-${idx}`);
       const roomEl = $(`cartoon-room-${idx}`);
-      if (navBtn) navBtn.classList.toggle("active", idx === currentRoom);
+      if (navBtn) {
+        navBtn.classList.toggle("active", idx === currentRoom);
+        navBtn.setAttribute("aria-current", idx === currentRoom ? "step" : "false");
+      }
       if (roomEl) roomEl.hidden = idx !== currentRoom;
     });
     render();
@@ -519,12 +480,14 @@
     };
   }
 
-  function startNewCase() {
+  // sameSource: open the next case on the running camera instead of a new source.
+  function startNewCase(sameSource) {
     if (startPromise) return startPromise;
     startPromise = (async () => {
       const mount = env.roadMount;
       if (typeof mount.configureCase === "function") mount.configureCase(selectedModelConfig());
-      await mount.createSource();
+      if (sameSource) await mount.startNextCase();
+      else await mount.createSource();
     })().finally(() => {
       startPromise = null;
     });
@@ -537,14 +500,28 @@
       const state = cameraState();
       if (!state) throw new Error(INJECT_BLOCK_REASONS.destroyed);
       if (!state.injectBlocker) return state;
-      if (state.injectBlocker === "review_locked" || (state.injectBlocker === "run_inactive" && state.warmedUp)) {
+      if (state.injectBlocker === "run_inactive" && state.warmedUp) {
         throw new Error(INJECT_BLOCK_REASONS[state.injectBlocker]);
       }
       if (Date.now() >= deadline) {
-        throw new Error(INJECT_BLOCK_REASONS[state.injectBlocker] || "Die Kamera ist noch nicht bereit.");
+        throw new Error(INJECT_BLOCK_REASONS[state.injectBlocker] || L("Die Kamera ist noch nicht bereit.", "The camera is not ready yet."));
       }
       await wait(200);
     }
+  }
+
+  // True while the camera's current case still observes the scene. Its run can end a
+  // moment before the polled case phase flips, so give the phase a few seconds.
+  async function currentCaseObserving() {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const state = cameraState();
+      if (!state || !state.caseId) return false;
+      const phase = phaseOf(tickets.get(state.caseId));
+      if (phase && !MONITOR_PHASES.has(phase)) return false;
+      if (state.runActive || !state.warmedUp) return true;
+      await wait(250);
+    }
+    return false;
   }
 
   function showBanner(text) {
@@ -574,7 +551,7 @@
   async function triggerEvent(eventType) {
     if (eventBusy) return;
     if (!env || !env.roadMount) {
-      setText("speech-alex", "Die Straßenkamera ist nicht verbunden. Ohne lokalen Server gibt es hier nichts zu analysieren.");
+      setText("speech-alex", L("Die Straßenkamera ist nicht verbunden. Ohne VisionFlow-Server gibt es hier nichts zu analysieren.", "The road camera is not connected. Without the VisionFlow server there is nothing to analyze here."));
       return;
     }
     eventBusy = true;
@@ -583,32 +560,31 @@
     try {
       let state = cameraState();
       if (!state.available) {
-        throw new Error((capabilities && capabilities.message) || "Die Straßenkamera ist nicht verfügbar (FFmpeg mit libx264 erforderlich).");
+        throw new Error((capabilities && capabilities.message) || L("Die Straßenkamera ist nicht verfügbar (FFmpeg mit libx264 erforderlich).", "The road camera is not available (FFmpeg with libx264 required)."));
       }
-      const current = state.caseId ? tickets.get(state.caseId) : null;
-      const phase = phaseOf(current);
-      if (state.sourceOpen && current && REVIEW_PHASES.has(phase)) {
-        throw new Error(`Fall #${current.number} ist in Prüfung (${phaseLabel(phase)}). Entscheide in Raum 3 oder lass die Frist in Raum 4 ablaufen – erst dann startet ein neuer Fall.`);
-      }
-      if (!state.sourceOpen || !state.caseId || (phase && !ACTIVE_PHASES.has(phase))) {
-        setText("speech-alex", "Ich starte eine neue Kameraquelle mit einem neuen Fall und warte, bis die Analyse drei echte Startframes gesehen hat …");
-        await startNewCase();
+      if (!state.sourceOpen) {
+        setText("speech-alex", L("Ich starte die Kamera mit einem neuen Fall und warte, bis die Analyse drei echte Startframes gesehen hat …", "I am starting the camera with a new case and waiting until the analysis has seen three real start frames …"));
+        await startNewCase(false);
+      } else if (!(await currentCaseObserving())) {
+        // The previous case sealed its clip and moved on; the camera keeps running.
+        setText("speech-alex", L("Die Kamera läuft weiter. Ich öffne darauf einen neuen Fall und warte auf drei echte Startframes …", "The camera keeps running. I am opening a new case on it and waiting for three real start frames …"));
+        await startNewCase(true);
       }
       state = await waitForInjectable(20000);
       const result = await env.roadMount.injectScenarioEvent(eventType);
       if (!result || !result.injected) {
-        throw new Error(INJECT_BLOCK_REASONS[result && result.reason] || "Das Ereignis wurde nicht eingeblendet.");
+        throw new Error(INJECT_BLOCK_REASONS[result && result.reason] || L("Das Ereignis wurde nicht eingeblendet.", "The event was not injected."));
       }
       const ticket = ticketFor(result.caseId || state.caseId);
       ticket.scenario.push({ type: eventType, at: new Date() });
       selectedCaseId = ticket.caseId;
       const label = EVENT_LABELS[eventType] || eventType;
-      showBanner(`Szenario eingeblendet: ${label} · Fall #${ticket.number} · OpenCV analysiert jetzt die echten Frames`);
-      setText("speech-alex", `${label} ist jetzt in der Live-Szene. Das ist noch kein Befund: Erst wenn die Bildanalyse auf den echten Frames anschlägt, schneidet der Server einen Clip für Fall #${ticket.number}.`);
-      appendDatacenterLog(`[Fall #${ticket.number}] Szenario eingeblendet: ${label} (Spielaktion, kein Analysebefund)`);
+      showBanner(L(`Szenario eingeblendet: ${label} · OpenCV analysiert jetzt die echten Frames`, `Scenario injected: ${label} · OpenCV is now analyzing the real frames`));
+      setText("speech-alex", L(`${label} ist jetzt in der Live-Szene. Das ist noch kein Befund: Erst wenn die Bildanalyse auf den echten Frames anschlägt, schneidet der Server einen Clip und legt ein Ticket an.`, `${label} is now in the live scene. That is not a finding yet: only when the image analysis triggers on the real frames does the server cut a clip and open a ticket.`));
+      appendDatacenterLog(L(`[${ticketName(ticket)}] Szenario eingeblendet: ${label} (Spielaktion, kein Analysebefund)`, `[${ticketName(ticket)}] Scenario injected: ${label} (game action, not an analysis finding)`));
       render();
     } catch (error) {
-      setText("speech-alex", error && error.message ? error.message : "Das Ereignis konnte nicht eingeblendet werden.");
+      setText("speech-alex", error && error.message ? error.message : L("Das Ereignis konnte nicht eingeblendet werden.", "The event could not be injected."));
     } finally {
       eventBusy = false;
       setEventButtonsDisabled(false);
@@ -623,18 +599,14 @@
     setEventButtonsDisabled(true);
     try {
       if (state.sourceOpen) {
-        const current = state.caseId ? tickets.get(state.caseId) : null;
-        if (current && REVIEW_PHASES.has(phaseOf(current))) {
-          throw new Error(`Fall #${current.number} ist in Prüfung. Stoppen würde die offene Prüfung abbrechen – entscheide zuerst in Raum 3.`);
-        }
         await env.roadMount.stopSource();
-        setText("speech-alex", "Kamera gestoppt. Die Aufnahme wurde als Clip gesichert.");
+        setText("speech-alex", L("Kamera gestoppt. Die Aufnahme wurde als Clip gesichert.", "Camera stopped. The recording was saved as a clip."));
       } else {
-        setText("speech-alex", "Ich starte die Kamera mit einem neuen Fall …");
-        await startNewCase();
+        setText("speech-alex", L("Ich starte die Kamera mit einem neuen Fall …", "I am starting the camera with a new case …"));
+        await startNewCase(false);
       }
     } catch (error) {
-      setText("speech-alex", error && error.message ? error.message : "Die Kamera konnte nicht umgeschaltet werden.");
+      setText("speech-alex", error && error.message ? error.message : L("Die Kamera konnte nicht umgeschaltet werden.", "The camera could not be toggled."));
     } finally {
       eventBusy = false;
       setEventButtonsDisabled(false);
@@ -651,9 +623,9 @@
     const previousMode = modeSelect.value;
     const previousProfile = profileSelect.value;
     modeSelect.replaceChildren();
-    if (modes.includes("fixture")) modeSelect.appendChild(h("option", { value: "fixture", textContent: "Offline-Testantwort (lokal, ohne Netz)" }));
-    if (modes.includes("gemini_video")) modeSelect.appendChild(h("option", { value: "gemini_video", textContent: "Gemini-Video (extern, kostenpflichtig)" }));
-    if (!modeSelect.options.length) modeSelect.appendChild(h("option", { value: "", textContent: "Kein Modellmodus verfügbar" }));
+    if (modes.includes("fixture")) modeSelect.appendChild(h("option", { value: "fixture", textContent: L("Offline-Testantwort (lokal, ohne Netz)", "Offline test answer (local, no network)") }));
+    if (modes.includes("gemini_video")) modeSelect.appendChild(h("option", { value: "gemini_video", textContent: L("Gemini-Video (extern, kostenpflichtig)", "Gemini video (external, paid)") }));
+    if (!modeSelect.options.length) modeSelect.appendChild(h("option", { value: "", textContent: L("Kein Modellmodus verfügbar", "No model mode available") }));
     if ([...modeSelect.options].some((option) => option.value === previousMode)) modeSelect.value = previousMode;
     profileSelect.replaceChildren();
     const ordered = ["pending", "high", "bird", "leaf", "unclear"].filter((name) => profiles.includes(name));
@@ -675,29 +647,49 @@
     consoleEl.scrollTop = consoleEl.scrollHeight;
   }
 
+  // Room 2 explains the model stage of the ticket at hand: a ticket in the
+  // datacenter, else the newest ticket, else the case the camera is watching.
+  function datacenterTicket() {
+    const state = cameraState();
+    const selected = selectedCaseId ? tickets.get(selectedCaseId) : null;
+    return (selected && selected.number ? selected : null) || newestTicket() || selected || (state && state.caseId ? tickets.get(state.caseId) : null);
+  }
+
   function renderTransparency() {
     const nativeEnabled = Boolean(capabilities && capabilities.native_enabled);
-    const ticket = focusTicket();
+    const ticket = datacenterTicket();
     const snapshot = ticket && ticket.snapshot;
     const pill = $("transparency-pill-text");
     const pillBox = $("transparency-pill");
     if (pill) {
       pill.textContent = snapshot && snapshot.mode === "gemini_video"
-        ? "MODELL: GEMINI-VIDEO (EXTERN, KOSTENPFLICHTIG)"
-        : "MODELL: OFFLINE-FIXTURE (FESTE TESTANTWORT)";
+        ? L("Gemini Video · kostenpflichtig", "Gemini Video · paid")
+        : L("Feste Offline-Testantwort", "Fixed offline test answer");
     }
     if (pillBox) pillBox.classList.toggle("fallback", !(snapshot && snapshot.mode === "gemini_video"));
     setText("transparency-profile-val", snapshot
       ? `${snapshot.mode}${snapshot.fixture_profile ? "/" + snapshot.fixture_profile : ""}`
-      : "noch kein Fall");
-    setText("transparency-native-val", nativeEnabled ? "freigegeben (Server mit Kostenfreigabe)" : "nicht freigegeben");
-    setText("transparency-notice", nativeEnabled
-      ? "Ehrlichkeitshinweis: Der Server erlaubt Gemini-Video. Fälle im Modus „gemini_video“ senden den Clip und Belegbilder an Google; Fixture-Fälle bleiben lokal und liefern feste Testantworten."
-      : "Ehrlichkeitshinweis: Kein externes Modell freigegeben (Server ohne --allow-gemini-costs oder ohne GEMINI_API_KEY). Stufe 2 liefert deshalb feste Offline-Testantworten nach dem gewählten Profil – sie bewerten den Bildinhalt nicht. Echt sind die gerenderte Szene, die OpenCV-Analyse der Frames, Clip-Export mit SHA-256, Fristen und das simulierte Behördenpostfach.");
+      : L("noch kein Fall", "no case yet"));
+    setText("transparency-native-val", nativeEnabled ? L("freigegeben (Server mit Kostenfreigabe)", "enabled (server with cost approval)") : L("nicht freigegeben", "not enabled"));
+    setText("transparency-notice", snapshot && snapshot.mode === "gemini_video"
+      ? L("Dieser Fall sendet den Beweisclip an Gemini Video. Meldungen bleiben simuliert.", "This case sends the evidence clip to Gemini Video. Reports remain simulated.")
+      : L("Feste Testantwort, keine Bildbewertung. Bewegungserkennung und Beweisclip sind echt; Meldungen sind simuliert.", "Fixed test answer, no image assessment. Motion detection and evidence clip are real; reports are simulated."));
+  }
+
+  function ticketCard(item, className, detail) {
+    return h("button", {
+      type: "button",
+      className: `${className} ${item.caseId === selectedCaseId ? "active-ticket" : ""}`,
+      onclick: () => selectTicket(item.caseId),
+    }, [
+      h("strong", { textContent: `${ticketName(item)} · ${phaseLabel(phaseOf(item))}` }),
+      h("br"),
+      h("small", { textContent: detail }),
+    ]);
   }
 
   function renderDatacenter() {
-    const ticket = focusTicket();
+    const ticket = datacenterTicket();
     const snapshot = ticket && ticket.snapshot;
     const phase = phaseOf(ticket);
 
@@ -709,20 +701,13 @@
     const listEl = $("datacenter-queue-list");
     if (listEl && listChanged("datacenter-queue-list", ticketSignature())) {
       listEl.replaceChildren();
-      if (ticketOrder.length === 0) listEl.textContent = "Noch keine Fälle. Starte die Kamera in Raum 1.";
-      for (const caseId of ticketOrder.slice(0, 6)) {
-        const item = tickets.get(caseId);
+      const here = ticketsAt(2);
+      if (here.length === 0) listEl.textContent = L("Kein Ticket im Rechenzentrum. Tickets entstehen, wenn die Bildanalyse in Raum 1 anschlägt.", "No ticket in the datacenter. Tickets are created when the image analysis in room 1 triggers.");
+      for (const item of here.slice(0, 4)) {
         const clip = item.snapshot && item.snapshot.clip;
         const hazard = item.snapshot && item.snapshot.assessment && item.snapshot.assessment.hazard === true;
-        listEl.appendChild(h("button", {
-          type: "button",
-          className: `queue-item ${hazard ? "high-risk" : ""} ${caseId === selectedCaseId ? "active-ticket" : ""}`,
-          onclick: () => selectTicket(caseId),
-        }, [
-          h("strong", { textContent: `Fall #${item.number} · ${phaseLabel(phaseOf(item))}` }),
-          h("br"),
-          h("small", { textContent: clip ? `Clip ${String(clip.clip_id).slice(0, 8)} · SHA-256 ${shortHash(clip.sha256)}` : "noch kein Clip" }),
-        ]));
+        listEl.appendChild(ticketCard(item, `queue-item ${hazard ? "high-risk" : ""}`,
+          clip ? `Clip ${String(clip.clip_id).slice(0, 8)} · SHA-256 ${shortHash(clip.sha256)}` : L("noch kein Clip", "no clip yet")));
       }
     }
 
@@ -730,33 +715,36 @@
     if (verdictBox) {
       verdictBox.replaceChildren();
       if (!ticket) {
-        verdictBox.textContent = "Bereit – noch kein Fall.";
+        verdictBox.textContent = L("Starte die Kamera und blende ein Ereignis ein.", "Start the camera and inject an event.");
+        $("datacenter-case-detail")?.replaceChildren();
       } else {
-        let stage1 = "Beobachtet die Szene (Bewegung + Richtung auf echten Frames) …";
-        if (phase === "normal") stage1 = "Kein Befund im Beobachtungsfenster.";
-        else if (phase === "source_ended" || phase === "cancelled") stage1 = "Analyse ohne Befund beendet.";
-        else if (snapshot && snapshot.clip) stage1 = `Befund ausgelöst → Clip ${String(snapshot.clip.clip_id).slice(0, 8)} (SHA-256 ${shortHash(snapshot.clip.sha256)})`;
-        else if (phase && phase !== "running" && phase !== "starting") stage1 = "Befund ausgelöst.";
+        let stage1 = L("Beobachtet die Szene (Bewegung + Richtung auf echten Frames) …", "Observing the scene (motion + direction on real frames) …");
+        if (phase === "normal") stage1 = L("Kein Befund im Beobachtungsfenster.", "No finding in observation window.");
+        else if (phase === "source_ended" || phase === "cancelled") stage1 = L("Analyse ohne Befund beendet.", "Analysis ended without finding.");
+        else if (snapshot && snapshot.clip) stage1 = L(`Befund ausgelöst → Clip ${String(snapshot.clip.clip_id).slice(0, 8)} (SHA-256 ${shortHash(snapshot.clip.sha256)})`, `Finding triggered → clip ${String(snapshot.clip.clip_id).slice(0, 8)} (SHA-256 ${shortHash(snapshot.clip.sha256)})`);
+        else if (phase && phase !== "running" && phase !== "starting") stage1 = L("Befund ausgelöst.", "Finding triggered.");
         const assessment = assessmentText(snapshot && snapshot.assessment);
-        let stage2 = "wartet auf einen Befund aus Stufe 1";
+        let stage2 = L("wartet auf einen Befund aus Stufe 1", "waiting for a finding from stage 1");
         if (assessment) stage2 = assessment;
-        else if (snapshot && snapshot.model_error) stage2 = `Modellfehler: ${snapshot.model_error}`;
-        else if (phase === "model_review") stage2 = "Modell prüft den Clip …";
+        else if (snapshot && snapshot.model_error) stage2 = L(`Modellfehler: ${snapshot.model_error}`, `Model error: ${snapshot.model_error}`);
+        else if (phase === "model_review") stage2 = L("Modell prüft den Clip …", "Model is reviewing the clip …");
         const hazard = snapshot && snapshot.assessment ? snapshot.assessment.hazard : null;
         const fixture = snapshot && snapshot.mode === "fixture";
-        verdictBox.append(h("div", { className: "stage-breakdown" }, [
-          h("span", { className: "stage-badge", textContent: `Fall #${ticket.number} · ${phaseLabel(phase)}` }),
-          h("small", { className: "inference-interface-hint", textContent: `Eingeblendetes Szenario: ${scenarioText(ticket)}` }),
-          h("span", { className: "stage-badge", textContent: `Stufe 1 (OpenCV): ${stage1}` }),
-          h("span", {
-            className: `verdict-badge ${hazard === true ? "danger" : hazard === false ? "safe" : ""}`,
-            textContent: `Stufe 2 (Modell): ${stage2}`,
-          }),
-          h("small", { className: "inference-interface-hint", textContent: `Quelle: ${modelSourceText(ticket)}` }),
-          fixture && assessment
-            ? h("small", { className: "inference-interface-hint", textContent: "Hinweis: Fixture-Antworten sind fest vorgegeben und hängen nicht vom eingeblendeten Szenario ab." })
-            : null,
-        ].filter(Boolean)));
+        verdictBox.append(
+          h("h3", { textContent: ticketName(ticket) }),
+          h("p", { className: "case-result", textContent: assessment || (snapshot && snapshot.model_error ? L("Bewertung nicht verfügbar", "Assessment unavailable") : stage2) }),
+          h("p", { className: "case-status", textContent: phaseLabel(phase) }),
+          h("p", { className: "case-next", textContent: nextStep(ticket) }),
+        );
+        const detail = $("datacenter-case-detail");
+        if (detail) detail.replaceChildren(
+          h("p", { textContent: L(`Stufe 1 (OpenCV): ${stage1}`, `Stage 1 (OpenCV): ${stage1}`) }),
+          h("p", { textContent: L(`Stufe 2 (Modell): ${stage2}`, `Stage 2 (model): ${stage2}`) }),
+          h("p", { textContent: L(`Eingeblendetes Szenario: ${scenarioText(ticket)}`, `Injected scenario: ${scenarioText(ticket)}`) }),
+          h("p", { textContent: L(`Quelle: ${modelSourceText(ticket)}`, `Source: ${modelSourceText(ticket)}`) }),
+          h("p", { textContent: L(`Fall-ID: ${ticket.caseId}`, `Case ID: ${ticket.caseId}`) }),
+          h("p", { textContent: snapshot && snapshot.clip ? `SHA-256: ${snapshot.clip.sha256}` : L("Noch kein Clip", "No clip yet") }),
+        );
       }
     }
 
@@ -764,15 +752,15 @@
     if (speech && ticket && snapshot) {
       const assessment = snapshot.assessment;
       if (assessment && assessment.hazard === true) {
-        speech.textContent = `Fall #${ticket.number}: Das Modell meldet Gefahr (Sicherheit ${formatDecimal(assessment.confidence)}). ${phase === "human_review" ? "Ein Mensch muss jetzt entscheiden – ab in die Leitstelle!" : phaseLabel(phase) + "."}`;
+        speech.textContent = L(`${ticketName(ticket)}: Das Modell meldet Gefahr (Sicherheit ${formatDecimal(assessment.confidence)}). ${phase === "human_review" ? "Ein Mensch muss jetzt entscheiden – ab in die Leitstelle!" : phaseLabel(phase) + "."}`, `${ticketName(ticket)}: the model reports a hazard (confidence ${formatDecimal(assessment.confidence)}). ${phase === "human_review" ? "A human must decide now – off to dispatch!" : phaseLabel(phase) + "."}`);
       } else if (assessment && assessment.hazard === false) {
-        speech.textContent = `Fall #${ticket.number}: Das Modell meldet keine Gefahr (${OBJECT_LABELS[assessment.object_class] || assessment.object_class}). Kein Einsatz.`;
+        speech.textContent = L(`${ticketName(ticket)}: Das Modell meldet keine Gefahr (${OBJECT_LABELS[assessment.object_class] || assessment.object_class}). Kein Einsatz.`, `${ticketName(ticket)}: the model reports no hazard (${OBJECT_LABELS[assessment.object_class] || assessment.object_class}). No dispatch.`);
       } else if (phase === "model_review") {
-        speech.textContent = `Fall #${ticket.number}: Der Clip liegt dem Modell vor …`;
+        speech.textContent = L(`${ticketName(ticket)}: Der Clip liegt dem Modell vor …`, `${ticketName(ticket)}: the clip is with the model …`);
       } else if (phase === "running" || phase === "starting") {
-        speech.textContent = `Fall #${ticket.number}: Noch kein Befund – die Bildanalyse beobachtet die Szene.`;
+        speech.textContent = L(`${ticketName(ticket)}: Noch kein Befund – die Bildanalyse beobachtet die Szene.`, `${ticketName(ticket)}: no finding yet – the image analysis is observing the scene.`);
       } else {
-        speech.textContent = `Fall #${ticket.number}: ${phaseLabel(phase)}.`;
+        speech.textContent = L(`${ticketName(ticket)}: ${phaseLabel(phase)}.`, `${ticketName(ticket)}: ${phaseLabel(phase)}.`);
       }
     }
     renderTransparency();
@@ -784,6 +772,18 @@
     selectedCaseId = caseId;
     if (env && typeof env.openCase === "function") env.openCase(caseId);
     render();
+  }
+
+  // The review workplace holds one case at a time; open the one shown in this room.
+  let requestedOpenCaseId = null;
+  function ensureOpen(ticket, state) {
+    if (!ticket || !env || typeof env.openCase !== "function") return;
+    if (state.open) {
+      requestedOpenCaseId = null;
+    } else if (requestedOpenCaseId !== ticket.caseId) {
+      requestedOpenCaseId = ticket.caseId;
+      env.openCase(ticket.caseId);
+    }
   }
 
   function decisionState(ticket) {
@@ -808,7 +808,7 @@
         clipView.caseId = ticket ? ticket.caseId : null;
         box.replaceChildren(h("p", {
           className: "review-clip-meta",
-          textContent: ticket ? `Fall #${ticket.number}: noch kein Beweisclip (${phaseLabel(phaseOf(ticket))}).` : "Kein Fall ausgewählt.",
+          textContent: ticket ? L(`${ticketName(ticket)}: noch kein Beweisclip (${phaseLabel(phaseOf(ticket))}).`, `${ticketName(ticket)}: no evidence clip yet (${phaseLabel(phaseOf(ticket))}).`) : L("Kein Fall ausgewählt.", "No case selected."),
         }));
       }
       return;
@@ -818,7 +818,7 @@
     const generation = clipView.generation;
     clipView.caseId = ticket.caseId;
     clipView.clipId = clip.clip_id;
-    box.replaceChildren(h("p", { className: "review-clip-meta", textContent: `Lade Beweisclip ${clip.clip_id.slice(0, 8)} vom Server …` }));
+    box.replaceChildren(h("p", { className: "review-clip-meta", textContent: L(`Lade Beweisclip ${clip.clip_id.slice(0, 8)} vom Server …`, `Loading evidence clip ${clip.clip_id.slice(0, 8)} from the server …`) }));
     env.apiClient.getClip(`/road/clips/${encodeURIComponent(clip.clip_id)}`)
       .then(({ blob, sha256 }) => {
         if (generation !== clipView.generation) return;
@@ -833,9 +833,9 @@
         video.playsInline = true;
         box.replaceChildren(
           h("p", { className: "review-clip-meta" }, [
-            h("span", { className: "proof-badge", textContent: `Beweisclip ${clip.clip_id.slice(0, 8)} · ${formatDecimal(clip.start_seconds, 1)}–${formatDecimal(clip.end_seconds, 1)} s` }),
+            h("span", { className: "proof-badge", textContent: L(`Beweisclip ${clip.clip_id.slice(0, 8)} · ${formatDecimal(clip.start_seconds, 1)}–${formatDecimal(clip.end_seconds, 1)} s`, `Evidence clip ${clip.clip_id.slice(0, 8)} · ${formatDecimal(clip.start_seconds, 1)}–${formatDecimal(clip.end_seconds, 1)} s`) }),
             h("br"),
-            h("small", { textContent: `SHA-256 ${shortHash(clip.sha256)} · ${verified ? "Prüfsumme vom Server bestätigt" : "Prüfsumme weicht ab!"}` }),
+            h("small", { textContent: L(`SHA-256 ${shortHash(clip.sha256)} · ${verified ? "Prüfsumme vom Server bestätigt" : "Prüfsumme weicht ab!"}`, `SHA-256 ${shortHash(clip.sha256)} · ${verified ? "checksum confirmed by server" : "checksum mismatch!"}`) }),
           ]),
           video,
         );
@@ -843,20 +843,21 @@
       })
       .catch((error) => {
         if (generation !== clipView.generation) return;
-        box.replaceChildren(h("p", { className: "review-clip-meta", textContent: `Clip konnte nicht geladen werden: ${error && error.message ? error.message : "unbekannter Fehler"}` }));
+        box.replaceChildren(h("p", { className: "review-clip-meta", textContent: L(`Clip konnte nicht geladen werden: ${error && error.message ? error.message : "unbekannter Fehler"}`, `Clip could not be loaded: ${error && error.message ? error.message : "unknown error"}`) }));
       });
   }
 
   function renderSchmidt() {
-    const ticket = focusTicket();
+    const ticket = focusAt(3);
     const inboxList = $("schmidt-ticket-list");
     if (inboxList && listChanged("schmidt-ticket-list", ticketSignature())) {
       inboxList.replaceChildren();
-      if (ticketOrder.length === 0) {
-        inboxList.appendChild(h("p", { className: "hint", textContent: "Noch keine Fälle. Starte in Raum 1 die Kamera und blende ein Ereignis ein." }));
+      const here = ticketsAt(3);
+      if (here.length === 0) {
+        inboxList.appendChild(h("p", { className: "hint", textContent: L("Kein Ticket wartet auf eine menschliche Entscheidung.", "No ticket is waiting for a human decision.") }));
       }
-      for (const caseId of ticketOrder) {
-        const item = tickets.get(caseId);
+      for (const item of here.slice(0, 5)) {
+        const caseId = item.caseId;
         const snapshot = item.snapshot || {};
         const hazard = snapshot.assessment ? snapshot.assessment.hazard : null;
         const badge = snapshot.assessment
@@ -868,74 +869,78 @@
           onclick: () => selectTicket(caseId),
         }, [
           h("div", { className: "ticket-header" }, [
-            h("strong", { textContent: `Fall #${item.number}` }),
+            h("strong", { textContent: L(`${ticketName(item)}`, `${ticketName(item)}`) }),
             h("span", { className: `ticket-badge ${hazard === true ? "danger" : "safe"}`, textContent: badge }),
           ]),
-          h("span", { className: "ticket-clip-title", textContent: `${phaseLabel(phaseOf(item))} · ${item.createdAt.toLocaleTimeString()} · Szenario: ${scenarioText(item)}` }),
+          h("span", { className: "ticket-clip-title", textContent: L(`${phaseLabel(phaseOf(item))} · ${item.createdAt.toLocaleTimeString()}`, `${phaseLabel(phaseOf(item))} · ${item.createdAt.toLocaleTimeString()}`) }),
         ]));
       }
     }
 
     renderReviewMonitor(ticket);
+    const humanDeadline = ticket && ticket.snapshot && ticket.snapshot.phase === "human_review" && ticket.snapshot.deadline_at;
+    const humanRemaining = humanDeadline ? Math.max(0, Math.ceil((Date.parse(humanDeadline) - Date.now()) / 1000)) : null;
+    setText("schmidt-countdown", humanRemaining !== null && Number.isFinite(humanRemaining)
+      ? L(`Noch ${humanRemaining} s für deine Entscheidung`, `${humanRemaining} s left to decide`) : "");
 
     const state = decisionState(ticket);
+    if (currentRoom === 3) ensureOpen(ticket, state);
     const radio = $("btn-schmidt-radio");
     const reject = $("btn-schmidt-reject");
-    const manual = $("btn-manual-dispatch");
     if (radio) radio.disabled = !state.canConfirm;
-    if (manual) manual.disabled = !state.canConfirm;
-    if (reject) {
-      reject.disabled = !state.canReject;
-      reject.textContent = state.canReject && /Entwarnung/.test(state.rejectLabel || "")
-        ? "❌ Gefahr verneinen + Entwarnung senden"
-        : t("schmidtFalseAlarm");
-    }
+    setRejectButton(reject, state);
     const status = $("schmidt-decision-status");
     if (status) {
-      if (!ticket) status.textContent = "Kein Fall ausgewählt.";
-      else if (!state.open) status.textContent = `Fall #${ticket.number} wird in der Prüfansicht geladen …`;
-      else if (state.operationState === "in_flight") status.textContent = "Entscheidung wird an den Server gesendet …";
+      if (!ticket) status.textContent = L("Kein Ticket in dieser Leitstelle.", "No ticket at this dispatch desk.");
+      else if (!state.open) status.textContent = L(`${ticketName(ticket)} wird in der Prüfansicht geladen …`, `${ticketName(ticket)} is loading in the review view …`);
+      else if (state.operationState === "in_flight") status.textContent = L("Entscheidung wird an den Server gesendet …", "Decision is being sent to the server …");
       else if (state.operationMessage) status.textContent = state.operationMessage;
-      else if (state.canConfirm || state.canReject) status.textContent = `Fall #${ticket.number}: Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`;
-      else status.textContent = `Fall #${ticket.number}: keine Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`;
+      else if (state.canConfirm || state.canReject) status.textContent = L(`${ticketName(ticket)}: Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`, `${ticketName(ticket)}: decision possible (${phaseLabel(phaseOf(ticket))}).`);
+      else status.textContent = L(`${ticketName(ticket)}: keine Entscheidung möglich (${phaseLabel(phaseOf(ticket))}).`, `${ticketName(ticket)}: no decision possible (${phaseLabel(phaseOf(ticket))}).`);
     }
   }
 
-  function decideSelected(decision) {
-    const ticket = focusTicket();
+  function setRejectButton(button, state) {
+    if (!button) return;
+    button.disabled = !state.canReject;
+    button.textContent = state.canReject && /Entwarnung|all-clear/i.test(state.rejectLabel || "")
+      ? L("❌ Gefahr verneinen + Entwarnung senden", "❌ Deny hazard + send all-clear")
+      : t("schmidtFalseAlarm");
+  }
+
+  function decideTicket(ticket, decision, speechId) {
     if (!ticket || !env || !env.workplace || typeof env.workplace.decide !== "function") return;
     const result = env.workplace.decide(ticket.caseId, decision);
     if (!result.started) {
       const reasons = {
-        case_not_open: "Dieser Fall ist in der Prüfansicht noch nicht geladen. Einen Moment …",
-        not_allowed: `Für Fall #${ticket.number} ist diese Entscheidung gerade nicht möglich (${phaseLabel(phaseOf(ticket))}).`,
+        case_not_open: L("Dieser Fall ist in der Prüfansicht noch nicht geladen. Einen Moment …", "This case is not yet loaded in the review view. One moment …"),
+        not_allowed: L(`Für ${ticketName(ticket)} ist diese Entscheidung gerade nicht möglich (${phaseLabel(phaseOf(ticket))}).`, `This decision is currently not possible for ${ticketName(ticket)} (${phaseLabel(phaseOf(ticket))}).`),
       };
-      setText("speech-schmidt", reasons[result.reason] || "Die Entscheidung konnte nicht gestartet werden.");
+      setText(speechId, reasons[result.reason] || L("Die Entscheidung konnte nicht gestartet werden.", "The decision could not be started."));
       if (result.reason === "case_not_open" && typeof env.openCase === "function") env.openCase(ticket.caseId);
       return;
     }
     if (global.RoadSFX) global.RoadSFX.playRadio();
-    setText("speech-schmidt", `Entscheidung für Fall #${ticket.number} an den lokalen Server gesendet …`);
+    setText(speechId, L(`Entscheidung für ${ticketName(ticket)} an den VisionFlow-Server gesendet …`, `Decision for ${ticketName(ticket)} sent to the VisionFlow server …`));
     render();
   }
 
   function onSchmidtCoffee() {
     if (global.RoadSFX) global.RoadSFX.playCoffee();
     setText("speech-schmidt", t("schmidtCoffeeAway"));
+    const away = $("schmidt-away");
+    if (away) away.hidden = false;
     setCablePulsing("cable-3-4", true);
     const followBtn3 = $("follow-btn-3");
     if (followBtn3) followBtn3.hidden = false;
   }
 
   // --- Room 4: real deadline of the open case ---------------------------------------
+  // Desk 2 watches the deadline of the ticket waiting in dispatch Alpha; when it
+  // expires unanswered, the ticket lands here.
   function deadlineTicket() {
-    const focus = focusTicket();
-    if (focus && phaseOf(focus) === "human_review") return focus;
-    for (const caseId of ticketOrder) {
-      const item = tickets.get(caseId);
-      if (phaseOf(item) === "human_review") return item;
-    }
-    return focus;
+    const ticket = datacenterTicket();
+    return ticket && ticket.number ? ticket : null;
   }
 
   function renderBeta() {
@@ -954,13 +959,33 @@
     }
     if (caption) {
       caption.textContent = ticket
-        ? `Fall #${ticket.number} · ${phaseLabel(phaseOf(ticket))}`
-        : "Kein Fall mit offener Frist.";
+        ? `${ticketName(ticket)} · ${phaseLabel(phaseOf(ticket))}${stationOf(ticket) === 3 ? L(" · wartet in Leitstelle Alpha", " · waiting at dispatch Alpha") : ""}`
+        : L("Kein Ticket mit offener Frist.", "No ticket with an open deadline.");
     }
+    const list = $("beta-ticket-list");
+    if (list && listChanged("beta-ticket-list", ticketSignature())) {
+      list.replaceChildren();
+      for (const item of ticketsAt(4).slice(0, 4)) {
+        const receipt = item.snapshot && item.snapshot.first_receipt;
+        list.appendChild(ticketCard(item, "queue-item high-risk", receipt ? L("Meldung gespeichert", "Report recorded") : ""));
+      }
+    }
+    const receiptDetail = $("beta-receipt-detail");
+    if (receiptDetail) {
+      const receipt = snapshot && snapshot.first_receipt;
+      receiptDetail.textContent = receipt
+        ? L(`Meldungs-ID: ${receipt.receipt_id || "–"} · Fall-ID: ${ticket.caseId}`, `Report ID: ${receipt.receipt_id || "–"} · Case ID: ${ticket.caseId}`)
+        : L("Noch keine Meldung für dieses Ticket.", "No report for this ticket yet.");
+    }
+    const state = decisionState(ticket);
+    if (currentRoom === 4) ensureOpen(ticket, state);
+    const manual = $("btn-manual-dispatch");
+    if (manual) manual.disabled = !state.canConfirm;
+    setRejectButton($("btn-weber-reject"), state);
     if (alertBanner) {
       const receipt = snapshot && snapshot.first_receipt;
       if (snapshot && snapshot.phase === "no_response" && receipt) {
-        alertBanner.textContent = `Frist abgelaufen ohne Entscheidung: Der Server hat Fall #${ticket.number} automatisch an das simulierte Behördenpostfach gemeldet (Beleg ${receipt.receipt_id || "–"}). Eine Entwarnung ist in Raum 3 weiterhin möglich.`;
+        alertBanner.textContent = L(`${ticketName(ticket)}: automatisch gemeldet. Du kannst weiterhin Entwarnung senden.`, `${ticketName(ticket)}: reported automatically. You can still send an all-clear.`);
         alertBanner.hidden = false;
       } else {
         alertBanner.hidden = true;
@@ -974,324 +999,163 @@
     if (!mountedHandle) return;
     const state = cameraState();
     setText("cartoon-cam-status", state && state.sourceOpen
-      ? (state.runActive ? "[● LIVE · ANALYSE LÄUFT]" : "[● LIVE]")
+      ? (state.runActive ? L("[● LIVE · ANALYSE LÄUFT]", "[● LIVE · ANALYSIS RUNNING]") : "[● LIVE]")
       : "[● STANDBY]");
     renderDatacenter();
     renderSchmidt();
     renderBeta();
+    renderTicketJourney();
+    for (const station of [2, 3, 4]) {
+      const badge = $(`nav-badge-${station}`);
+      if (!badge) continue;
+      const open = ticketsAt(station).filter((item) => phaseOf(item) === OPEN_PHASE_OF_STATION[station]).length;
+      badge.hidden = open === 0;
+      badge.textContent = String(open);
+      badge.title = L(`${open} offene(s) Ticket(s)`, `${open} open ticket(s)`);
+    }
   }
 
   // --- Build Full Cartoon Interface ---
+  function nextStep(ticket) {
+    const phase = phaseOf(ticket);
+    if (phase === "human_review") return L("Nächster Schritt: Beweisclip prüfen und entscheiden.", "Next: review the evidence clip and decide.");
+    if (phase === "no_response" || phase === "reported") return L("Meldung im simulierten Postfach. Entwarnung weiterhin möglich.", "Report in the simulated inbox. An all-clear is still possible.");
+    if (["dismissed", "rejected", "corrected"].includes(phase)) return L("Fall abgeschlossen. Kein weiterer Einsatz nötig.", "Case closed. No further dispatch needed.");
+    if (["cancelled", "failed", "source_ended", "normal"].includes(phase)) return L("Starte einen neuen Fall an der Kamera.", "Start a new case at the camera.");
+    return L("Die Analyse läuft. Warte auf das Ergebnis.", "Analysis is running. Wait for the result.");
+  }
+
+  function renderTicketJourney() {
+    const ticket = datacenterTicket();
+    setText("journey-ticket-title", ticket ? ticketName(ticket) : L("Noch kein Ticket", "No ticket yet"));
+    setText("journey-ticket-status", ticket ? phaseLabel(phaseOf(ticket)) : L("Beginne an der Kamera.", "Start at the camera."));
+    setText("journey-ticket-next", ticket ? nextStep(ticket) : L("Kamera starten, Ereignis einblenden, Ticket verfolgen.", "Start the camera, inject an event, follow the ticket."));
+    const select = $("journey-ticket-select");
+    const numbered = ticketOrder.map(id => tickets.get(id)).filter(item => item.number);
+    if (select && listChanged("journey-ticket-select", ticketSignature())) {
+      select.replaceChildren(...numbered.map(item => h("option", { value: item.caseId, textContent: `${ticketName(item)} · ${phaseLabel(phaseOf(item))}` })));
+      select.value = ticket && ticket.number ? ticket.caseId : "";
+      select.disabled = numbered.length === 0;
+      select.closest(".ticket-picker").hidden = numbered.length < 2;
+    }
+    for (const station of [1, 2, 3, 4]) {
+      const node = $(`nav-node-room-${station}`);
+      if (node) node.classList.toggle("ticket-location", Boolean(ticket && ticket.number && stationOf(ticket) === station));
+    }
+  }
+
   function buildCartoonDOM(container) {
     const root = h("div", { className: "cartoon-stage road-cartoon-stage" });
+    const details = (title, children, className = "case-disclosure") => h("details", { className }, [h("summary", { textContent: title }), ...children]);
+    const avatar = (name, alt) => h("div", { className: "cartoon-avatar" }, [h("img", { src: `/assets/${name}.png`, alt, width: "96", height: "96" })]);
+    const person = (name, alt, title, speechId, copy) => h("div", { className: "cartoon-character-row" }, [
+      avatar(name, alt),
+      h("div", { className: "cartoon-speech-bubble" }, [h("div", { className: "cartoon-speaker-name", textContent: title }), h("p", { id: speechId, className: "cartoon-speech-text", "aria-live": "polite", textContent: copy })]),
+    ]);
+    const action = (id, copy, handler, variant = "", disabled = false) => h("button", { id, type: "button", className: `chunky-btn ${variant}`, textContent: copy, onclick: handler, disabled });
+    const coffee = (id, hidden = false) => h("div", { id, className: "coffee-away", hidden }, [
+      h("span", { className: "coffee-away-icon", "aria-hidden": "true", textContent: "☕" }),
+      h("div", {}, [h("strong", { textContent: L("Ich bin kurz weg", "Be right back") }), h("p", { textContent: L("Die Frist läuft weiter.", "The deadline keeps running.") })]),
+      h("span", { "aria-hidden": "true", textContent: "→" }),
+    ]);
+    const roomNav = (idx) => h("nav", { className: "room-pagination", "aria-label": L("Station wechseln", "Change station") }, [
+      h("button", { id: `room-back-${idx}`, type: "button", className: "room-arrow", textContent: "←", "aria-label": L("Vorherige Station", "Previous station"), disabled: idx === 1, onclick: () => switchRoom(idx - 1) }),
+      h("span", { className: "room-pagination-caption", textContent: `${idx} / 4` }),
+      h("button", { id: `room-next-${idx}`, type: "button", className: "room-arrow", textContent: "→", "aria-label": L("Nächste Station", "Next station"), disabled: idx === 4, onclick: () => switchRoom(idx + 1) }),
+    ]);
+    const room = (idx, children) => root.appendChild(h("section", { id: `cartoon-room-${idx}`, className: "cartoon-room", hidden: idx !== 1, "aria-label": t(`room${idx}`) }, [h("div", { className: "cartoon-room__stage" }, children), roomNav(idx)]));
 
-    // 1. Header with Title & Toggles
-    const header = h("header", { className: "cartoon-header" }, [
-      h("div", { className: "cartoon-brand" }, [
-        h("span", { className: "cartoon-brand__badge", textContent: "🚨" }),
-        h("div", {}, [
-          h("h2", { id: "cartoon-title", className: "cartoon-brand__title", textContent: t("title") }),
-          h("p", { id: "cartoon-subtitle", className: "cartoon-brand__subtitle", textContent: t("subtitle") })
-        ])
-      ]),
+    root.appendChild(h("header", { className: "cartoon-header" }, [
+      h("div", { className: "cartoon-brand" }, [h("div", {}, [h("h2", { id: "cartoon-title", className: "cartoon-brand__title", textContent: t("title") }), h("p", { id: "cartoon-subtitle", className: "cartoon-brand__subtitle", textContent: t("subtitle") })])]),
       h("div", { className: "cartoon-top-controls" }, [
-        h("button", {
-          id: "cartoon-details-btn",
-          className: "cartoon-pill-btn",
-          type: "button",
-          textContent: t("detailsShow"),
-          onclick: () => {
-            const open = container.classList.toggle("road-workspace--details");
-            setText("cartoon-details-btn", open ? t("detailsHide") : t("detailsShow"));
-          }
-        }),
-        h("button", {
-          id: "cartoon-sound-btn",
-          className: "cartoon-pill-btn",
-          type: "button",
-          textContent: global.RoadSFX && global.RoadSFX.getMuted() ? t("soundOff") : t("soundOn"),
-          onclick: () => {
-            if (!global.RoadSFX) return;
-            const next = !global.RoadSFX.getMuted();
-            global.RoadSFX.setMuted(next);
-            setText("cartoon-sound-btn", next ? t("soundOff") : t("soundOn"));
-          }
-        }),
-        h("button", {
-          id: "cartoon-lang-btn",
-          className: "cartoon-pill-btn",
-          type: "button",
-          textContent: t("langToggle"),
-          onclick: () => {
-            currentLang = currentLang === "de" ? "en" : "de";
-            refreshI18n();
-          }
-        })
-      ])
+        h("button", { id: "cartoon-details-btn", className: "cartoon-pill-btn", type: "button", "aria-expanded": "false", textContent: t("detailsShow"), onclick: () => {
+          const open = container.classList.toggle("road-workspace--details");
+          setText("cartoon-details-btn", open ? t("detailsHide") : t("detailsShow"));
+          $("cartoon-details-btn").setAttribute("aria-expanded", String(open));
+        } }),
+        h("button", { id: "cartoon-sound-btn", className: "cartoon-pill-btn", type: "button", textContent: global.RoadSFX && global.RoadSFX.getMuted() ? t("soundOff") : t("soundOn"), onclick: () => {
+          if (!global.RoadSFX) return;
+          const next = !global.RoadSFX.getMuted(); global.RoadSFX.setMuted(next); setText("cartoon-sound-btn", next ? t("soundOff") : t("soundOn"));
+        } }),
+        h("button", { id: "cartoon-lang-btn", className: "cartoon-pill-btn", type: "button", textContent: t("langToggle"), onclick: () => window.VisionFlowI18n?.setLang(currentLang === "de" ? "en" : "de") }),
+      ]),
+    ]));
+
+    const navNode = (idx) => h("button", { id: `nav-node-room-${idx}`, type: "button", className: `cartoon-station-node ${idx === 1 ? "active" : ""}`, "aria-current": idx === 1 ? "step" : "false", onclick: () => switchRoom(idx) }, [
+      h("span", { id: `nav-text-${idx}`, textContent: t(`room${idx}`) }), h("span", { id: `nav-badge-${idx}`, className: "cartoon-station-badge", hidden: true }),
     ]);
-    root.appendChild(header);
-
-    // 2. Conduit Navigation Bar (Rooms + Cables)
-    const navNode = (idx, icon) => h("button", {
-      id: `nav-node-room-${idx}`,
-      type: "button",
-      className: `cartoon-station-node ${idx === 1 ? "active" : ""}`,
-      onclick: () => switchRoom(idx)
-    }, [
-      h("span", { className: "cartoon-station-icon", textContent: icon }),
-      h("span", { id: `nav-text-${idx}`, textContent: t(`room${idx}`) })
+    root.appendChild(h("nav", { className: "cartoon-conduit-nav", "aria-label": L("Der Weg des Tickets", "The ticket journey") }, [navNode(1), navNode(2), navNode(3), navNode(4)]));
+    root.appendChild(h("div", { className: "ticket-journey", "aria-live": "polite" }, [
+      h("div", { className: "ticket-journey-summary" }, [h("strong", { id: "journey-ticket-title" }), h("span", { id: "journey-ticket-status" }), h("p", { id: "journey-ticket-next" })]),
+      h("label", { className: "ticket-picker" }, [h("span", { textContent: L("Ticket auswählen", "Choose a ticket") }), h("select", { id: "journey-ticket-select", className: "cartoon-select", disabled: true })]),
+    ]));
+    const inject = (event, id, image, copy, variant) => h("div", { className: "scenario-row" }, [
+      h("img", { className: "scenario-icon", src: `/assets/${image}.png`, alt: "", width: "64", height: "64" }),
+      action(id, copy, () => void triggerEvent(event), variant),
     ]);
-    root.appendChild(h("nav", { className: "cartoon-conduit-nav", "aria-label": "Rettungszentrale Räume" }, [
-      navNode(1, "🚦"),
-      h("div", { id: "cable-1-2", className: "cartoon-cable-segment" }),
-      navNode(2, "🏢"),
-      h("div", { id: "cable-2-3", className: "cartoon-cable-segment" }),
-      navNode(3, "🚓"),
-      h("div", { id: "cable-3-4", className: "cartoon-cable-segment" }),
-      navNode(4, "🚨")
-    ]));
-
-    // 3. Room 1: Verkehrsraumüberwachung (Roadside Station B4 Nord)
-    root.appendChild(h("section", { id: "cartoon-room-1", className: "cartoon-room" }, [
-      h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.technicianAlex }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Alex · Techniker B4 Nord" }),
-            h("p", { id: "speech-alex", className: "cartoon-speech-text", "aria-live": "polite", textContent: t("alexIntro") })
-          ])
+    room(1, [
+      person("alex", L("Comicporträt von Alex", "Comic portrait of Alex"), L("Alex · Techniker B4 Nord", "Alex · Technician B4 North"), "speech-alex", t("alexIntro")),
+      h("div", { className: "traffic-screen-wrap" }, [
+        h("div", { className: "traffic-monitor" }, [
+          h("div", { className: "traffic-monitor__header" }, [h("span", { textContent: L("B4 Nord · synthetische Straße", "B4 North · synthetic road") }), h("span", { id: "cartoon-cam-status", textContent: "[● STANDBY]" }), action("btn-toggle-cam", L("Kamera ein / aus", "Camera on / off"), () => void toggleCamera(), "chunky-btn--power")]),
+          h("div", { id: "cartoon-feed-mount", className: "traffic-feed-box" }),
         ]),
-        h("div", { className: "traffic-screen-wrap" }, [
-          h("div", { className: "traffic-monitor" }, [
-            h("div", { className: "traffic-monitor__header" }, [
-              h("span", { textContent: "CAM-01 · B4 NORD · SYNTHETISCHE SZENE" }),
-              h("span", { id: "cartoon-cam-status", textContent: "[● STANDBY]" })
-            ]),
-            h("div", { id: "cartoon-feed-mount", className: "traffic-feed-box" })
+        h("div", { className: "traffic-control-panel" }, [
+          h("h3", { textContent: L("Ereignis einblenden", "Inject an event") }),
+          h("label", { className: "cartoon-field" }, [h("span", { textContent: L("Modell für den nächsten Fall", "Model for the next case") }), h("select", { id: "cartoon-model-mode", className: "cartoon-select" })]),
+          h("label", { className: "cartoon-field" }, [h("span", { textContent: L("Feste Offline-Testantwort (Profil)", "Fixed offline test answer (profile)") }), h("select", { id: "cartoon-fixture-profile", className: "cartoon-select" })]),
+          h("div", { className: "cartoon-btn-grid" }, [
+            inject("wrong_way", "btn-sim-wrongway", "wrong-way", L("Falschfahrer einblenden", "Inject wrong-way driver"), "chunky-btn--wrongway"),
+            inject("bird", "btn-sim-bird", "bird", L("Vogel einblenden", "Inject bird"), "chunky-btn--bird"),
+            inject("leaf", "btn-sim-leaf", "leaf", L("Blatt einblenden", "Inject leaf"), "chunky-btn--leaf"),
           ]),
-          h("div", { className: "traffic-control-panel" }, [
-            h("h3", { textContent: "Ereignis-Pult (Szenario einblenden)" }),
-            h("label", { className: "cartoon-field" }, [
-              h("span", { textContent: "Modell für den nächsten Fall" }),
-              h("select", { id: "cartoon-model-mode", className: "cartoon-select" })
-            ]),
-            h("label", { className: "cartoon-field" }, [
-              h("span", { textContent: "Feste Offline-Testantwort (Profil)" }),
-              h("select", { id: "cartoon-fixture-profile", className: "cartoon-select" })
-            ]),
-            h("div", { className: "cartoon-btn-grid" }, [
-              h("button", {
-                id: "btn-toggle-cam",
-                type: "button",
-                className: "chunky-btn chunky-btn--power",
-                textContent: "📷 Kamera AN / AUS",
-                onclick: () => void toggleCamera()
-              }),
-              h("button", {
-                id: "btn-sim-leaf",
-                type: "button",
-                className: "chunky-btn chunky-btn--leaf",
-                textContent: "🍂 Blatt einblenden",
-                onclick: () => void triggerEvent("leaf")
-              }),
-              h("button", {
-                id: "btn-sim-bird",
-                type: "button",
-                className: "chunky-btn chunky-btn--bird",
-                textContent: "🐦 Vogel einblenden",
-                onclick: () => void triggerEvent("bird")
-              }),
-              h("button", {
-                id: "btn-sim-wrongway",
-                type: "button",
-                className: "chunky-btn chunky-btn--wrongway",
-                textContent: "⚠️ Falschfahrer einblenden!",
-                onclick: () => void triggerEvent("wrong_way")
-              })
-            ]),
-            h("button", {
-              id: "follow-btn-1",
-              type: "button",
-              className: "cable-follow-btn",
-              textContent: t("followCableTo2"),
-              hidden: true,
-              onclick: () => switchRoom(2)
-            })
-          ])
-        ])
-      ])
-    ]));
-
-    // 4. Room 2: AI-Rechenzentrum (Serverraum & Dr. Kira)
-    root.appendChild(h("section", { id: "cartoon-room-2", className: "cartoon-room", hidden: true }, [
-      h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.drKira }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Dr. Kira · Vision-Analyse" }),
-            h("p", { id: "speech-kira", className: "cartoon-speech-text", "aria-live": "polite", textContent: t("kiraIntro") })
-          ])
+          h("p", { className: "scenario-note", textContent: L("Ein Ereignis verändert die Szene. Erst die Bildanalyse erstellt ein Ticket.", "An event changes the scene. Only the image analysis creates a ticket.") }),
         ]),
-        h("div", { className: "pipeline-flow-banner" }, [
-          h("div", { id: "stage-chip-1", className: "pipeline-stage-chip" }, [
-            h("span", { className: "stage-badge", textContent: "STUFE 1 (OpenCV)" }),
-            h("span", { textContent: "📹 Bewegung (Differenzbild) + Richtung (Graustufen-Patchabgleich) auf echten Frames" })
-          ]),
-          h("span", { className: "pipeline-arrow", textContent: "➔" }),
-          h("div", { id: "stage-chip-2", className: "pipeline-stage-chip" }, [
-            h("span", { className: "stage-badge", textContent: "STUFE 2 (Video-Modell)" }),
-            h("span", { textContent: "🧠 Bewertung des geschnittenen Clips" })
-          ])
+      ]),
+    ]);
+    room(2, [
+      person("kira", L("Comicporträt von Dr. Kira", "Comic portrait of Dr. Kira"), L("Dr. Kira · Einordnung", "Dr. Kira · Assessment"), "speech-kira", t("kiraIntro")),
+      h("div", { className: "inference-transparency-card" }, [
+        h("div", { id: "transparency-pill", className: "transparency-pill" }, [h("span", { id: "transparency-pill-text" })]),
+        h("p", { id: "transparency-notice", className: "transparency-notice" }),
+      ]),
+      h("div", { id: "datacenter-verdict-box", className: "datacenter-verdict" }),
+      details(L("Analyse, Belege und Ereignisprotokoll", "Analysis, evidence and event log"), [
+        h("div", { className: "pipeline-flow-banner" }, [h("div", { id: "stage-chip-1", textContent: L("Stufe 1 · OpenCV: Bewegung und Richtung", "Stage 1 · OpenCV: motion and direction") }), h("div", { id: "stage-chip-2", textContent: L("Stufe 2 · Modell: Einordnung des Clips", "Stage 2 · Model: clip assessment") })]),
+        h("div", { className: "transparency-grid" }, [
+          h("div", { className: "transparency-item" }, [h("span", { className: "label", textContent: L("Modus / Profil", "Mode / profile") }), h("span", { id: "transparency-profile-val", className: "value" })]),
+          h("div", { className: "transparency-item" }, [h("span", { className: "label", textContent: L("Externes Modell", "External model") }), h("span", { id: "transparency-native-val", className: "value" })]),
         ]),
-        h("div", { className: "inference-transparency-card" }, [
-          h("div", { className: "transparency-header" }, [
-            h("div", { id: "transparency-pill", className: "transparency-pill fallback" }, [
-              h("span", { className: "dot" }),
-              h("span", { id: "transparency-pill-text", textContent: "MODELL: OFFLINE-FIXTURE (FESTE TESTANTWORT)" })
-            ]),
-            h("span", { className: "transparency-sub", textContent: "Werte live vom lokalen Server" })
-          ]),
-          h("div", { className: "transparency-grid" }, [
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Modus / Profil des Falls" }),
-              h("span", { className: "value", id: "transparency-profile-val", textContent: "noch kein Fall" })
-            ]),
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Externes Modell" }),
-              h("span", { className: "value", id: "transparency-native-val", textContent: "–" })
-            ]),
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Ausführung" }),
-              h("span", { className: "value", textContent: "Lokaler VisionFlow-Server (nur Loopback)" })
-            ]),
-            h("div", { className: "transparency-item" }, [
-              h("span", { className: "label", textContent: "Beweisclip" }),
-              h("span", { className: "value", textContent: "5 s Vorlauf + 10 s Nachlauf · H.264 (libx264) · SHA-256" })
-            ])
-          ]),
-          h("p", { id: "transparency-notice", className: "transparency-notice", textContent: "" })
+        h("div", { id: "datacenter-case-detail", className: "case-technical-data" }),
+        h("h4", { textContent: L("Tickets in der Einordnung", "Tickets at assessment") }), h("div", { id: "datacenter-queue-list", className: "datacenter-queue-list" }),
+        h("h4", { textContent: L("Ereignisprotokoll", "Event log") }), h("div", { id: "datacenter-console", className: "datacenter-console" }),
+      ]),
+    ]);
+    room(3, [
+      person("schmidt", L("Comicporträt von Officer Schmidt", "Comic portrait of Officer Schmidt"), L("Officer Schmidt · Leitstelle Alpha", "Officer Schmidt · Dispatch Alpha"), "speech-schmidt", t("schmidtIntro")),
+      h("div", { className: "dispatch-grid" }, [
+        h("div", { id: "schmidt-video-mount", className: "traffic-monitor" }, [h("div", { className: "traffic-monitor__header", textContent: L("Derselbe Beweisclip", "The same evidence clip") }), h("div", { id: "cartoon-review-video-box", className: "traffic-feed-box" }), details(L("Weitere Tickets an diesem Tisch", "Other tickets at this desk"), [h("div", { id: "schmidt-ticket-list", className: "schmidt-ticket-list" })])]),
+        h("div", { className: "dispatch-desk" }, [
+          h("h3", { textContent: L("Deine Entscheidung", "Your decision") }), h("p", { id: "schmidt-decision-status", className: "decision-status", "aria-live": "polite" }),
+          h("p", { id: "schmidt-countdown", className: "decision-time", "aria-live": "off" }),
+          h("div", { className: "dispatch-actions" }, [action("btn-schmidt-radio", t("schmidtRadio"), () => decideTicket(focusAt(3), "confirm", "speech-schmidt"), "chunky-btn--radio", true), action("btn-schmidt-reject", t("schmidtFalseAlarm"), () => decideTicket(focusAt(3), "reject", "speech-schmidt"), "", true), action("btn-schmidt-coffee", t("schmidtCoffee"), onSchmidtCoffee, "chunky-btn--coffee")]),
+          coffee("schmidt-away", true),
         ]),
-        h("div", { className: "datacenter-layout" }, [
-          h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: "Fälle" }),
-            h("div", { id: "datacenter-queue-list", className: "datacenter-queue-list", textContent: "Noch keine Fälle." })
-          ]),
-          h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: "Ereignisprotokoll (Server-Zustände)" }),
-            h("div", { id: "datacenter-console", className: "datacenter-console" })
-          ]),
-          h("div", { className: "datacenter-card" }, [
-            h("h4", { className: "datacenter-card__title", textContent: "Modellantwort" }),
-            h("div", { id: "datacenter-verdict-box", className: "datacenter-verdict", textContent: "Bereit – noch kein Fall." })
-          ])
-        ]),
-        h("button", {
-          id: "follow-btn-2",
-          type: "button",
-          className: "cable-follow-btn",
-          textContent: t("followCableTo3"),
-          hidden: true,
-          onclick: () => switchRoom(3)
-        })
-      ])
-    ]));
-
-    // 5. Room 3: Leitstelle Alpha (Officer Schmidt)
-    root.appendChild(h("section", { id: "cartoon-room-3", className: "cartoon-room", hidden: true }, [
-      h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.officerSchmidt }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Officer Schmidt · Leitstelle Alpha" }),
-            h("p", { id: "speech-schmidt", className: "cartoon-speech-text", "aria-live": "polite", textContent: t("schmidtIntro") })
-          ])
-        ]),
-        h("div", { className: "dispatch-grid" }, [
-          h("div", { id: "schmidt-video-mount", className: "traffic-monitor" }, [
-            h("div", { className: "traffic-monitor__header", textContent: "Beweisclip vom Server" }),
-            h("div", { id: "cartoon-review-video-box", className: "traffic-feed-box" }),
-            h("div", { className: "schmidt-ticket-inbox" }, [
-              h("div", { className: "schmidt-ticket-inbox__title" }, [
-                h("span", { textContent: "Fälle" }),
-                h("small", { textContent: "Klick zum Prüfen" })
-              ]),
-              h("div", { id: "schmidt-ticket-list", className: "schmidt-ticket-list" })
-            ])
-          ]),
-          h("div", { className: "dispatch-desk" }, [
-            h("h3", { textContent: "Einsatzentscheidung" }),
-            h("p", { id: "schmidt-decision-status", className: "decision-status", "aria-live": "polite", textContent: "Kein Fall ausgewählt." }),
-            h("div", { className: "dispatch-actions" }, [
-              h("button", {
-                id: "btn-schmidt-radio",
-                type: "button",
-                className: "chunky-btn chunky-btn--radio",
-                textContent: t("schmidtRadio"),
-                disabled: true,
-                onclick: () => decideSelected("confirm")
-              }),
-              h("button", {
-                id: "btn-schmidt-reject",
-                type: "button",
-                className: "chunky-btn",
-                textContent: t("schmidtFalseAlarm"),
-                disabled: true,
-                onclick: () => decideSelected("reject")
-              }),
-              h("button", {
-                id: "btn-schmidt-coffee",
-                type: "button",
-                className: "chunky-btn chunky-btn--coffee",
-                textContent: t("schmidtCoffee"),
-                onclick: onSchmidtCoffee
-              })
-            ]),
-            h("button", {
-              id: "follow-btn-3",
-              type: "button",
-              className: "cable-follow-btn",
-              textContent: t("followCableTo4"),
-              hidden: true,
-              onclick: () => switchRoom(4)
-            })
-          ])
-        ])
-      ])
-    ]));
-
-    // 6. Room 4: Leitstelle Beta (real deadline of the open case)
-    root.appendChild(h("section", { id: "cartoon-room-4", className: "cartoon-room", hidden: true }, [
-      h("div", { className: "cartoon-room__stage" }, [
-        h("div", { className: "cartoon-character-row" }, [
-          h("div", { className: "cartoon-avatar", innerHTML: SVGS.officerWeberEmpty }),
-          h("div", { className: "cartoon-speech-bubble" }, [
-            h("div", { className: "cartoon-speaker-name", textContent: "Officer Weber · Leitstelle Beta (Abwesend)" }),
-            h("p", { id: "speech-weber", className: "cartoon-speech-text", textContent: t("weberAlert") })
-          ])
-        ]),
-        h("div", { className: "beta-alert-box" }, [
-          h("div", { id: "weber-sticky", className: "sticky-note", textContent: t("weberSticky") }),
-          h("div", { id: "beta-countdown-clock", className: "beta-countdown-display", textContent: "–" }),
-          h("p", { id: "beta-countdown-caption", className: "cartoon-countdown-caption", textContent: "Kein Fall mit offener Frist." }),
-          h("button", {
-            id: "btn-manual-dispatch",
-            type: "button",
-            className: "chunky-btn chunky-btn--wrongway",
-            textContent: t("weberManual"),
-            disabled: true,
-            onclick: () => decideSelected("confirm")
-          }),
-          h("div", { id: "beta-alert-msg", className: "verdict-badge danger", textContent: "", hidden: true })
-        ])
-      ])
-    ]));
-
-    // 7. Bottom Patrol Car Track
-    root.appendChild(h("div", { className: "patrol-car-stage" }, [
-      h("div", { className: "patrol-car-road" }),
-      h("div", { id: "cartoon-patrol-car", className: "patrol-car", innerHTML: SVGS.patrolCar })
-    ]));
-
+      ]),
+    ]);
+    room(4, [
+      person("weber", L("Comicporträt von Officer Weber", "Comic portrait of Officer Weber"), L("Officer Weber · Leitstelle Beta", "Officer Weber · Dispatch Beta"), "speech-weber", t("weberAlert")),
+      h("div", { className: "beta-alert-box" }, [
+        coffee("weber-sticky"),
+        h("div", { id: "beta-countdown-clock", className: "beta-countdown-display", textContent: "–" }),
+        h("p", { id: "beta-countdown-caption", className: "cartoon-countdown-caption" }),
+        h("div", { id: "beta-alert-msg", className: "case-report-message", "aria-live": "polite", hidden: true }),
+        h("div", { className: "dispatch-actions" }, [action("btn-manual-dispatch", t("weberManual"), () => decideTicket(deadlineTicket(), "confirm", "speech-weber"), "chunky-btn--radio", true), action("btn-weber-reject", t("schmidtFalseAlarm"), () => decideTicket(deadlineTicket(), "reject", "speech-weber"), "", true)]),
+        details(L("Meldungsbeleg und weitere Tickets", "Report receipt and other tickets"), [h("p", { id: "beta-receipt-detail", className: "case-technical-data" }), h("div", { id: "beta-ticket-list", className: "beta-ticket-list" })]),
+      ]),
+    ]);
+    root.appendChild(h("div", { className: "patrol-car-stage", hidden: true, "aria-label": L("Simulierter Einsatz", "Simulated dispatch") }, [h("p", { className: "patrol-dispatch-label", textContent: L("Meldung an simuliertes Behördenpostfach gesendet", "Report sent to simulated authority inbox") }), h("div", { className: "patrol-car-road" }), h("div", { id: "cartoon-patrol-car", className: "patrol-car" }, [h("img", { src: "/assets/patrol.png", alt: L("Spielzeug-Polizeiauto für den simulierten Einsatz", "Toy police car for the simulated dispatch"), width: "210", height: "145" })])]));
+    root.querySelector("#journey-ticket-select").addEventListener("change", event => selectTicket(event.target.value));
     return root;
   }
 
@@ -1309,7 +1173,7 @@
     setText("btn-schmidt-radio", t("schmidtRadio"));
     setText("btn-schmidt-coffee", t("schmidtCoffee"));
     setText("btn-manual-dispatch", t("weberManual"));
-    setText("weber-sticky", t("weberSticky"));
+
     setText("speech-weber", t("weberAlert"));
     render();
   }

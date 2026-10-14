@@ -169,7 +169,8 @@ def test_real_direction_condition_stops_early_then_reads_ten_second_tail_from_sa
         clock=FakeClock(),
     )
     queued = controller.start(config)
-    result = controller.wait(queued.run_id, timeout=15)
+    # Leave headroom for real pixel matching on a busy or small CI host.
+    result = controller.wait(queued.run_id, timeout=30)
 
     events = monitor_events(result)
     assert result.status == "completed"

@@ -1,39 +1,142 @@
 # VisionFlow technical report
 
-Updated 2026-10-08. Product source revision: `e65ef914b4a27727481ad604ee3384ee13f5b27c`. This describes the implemented local system, measured synthetic checks and the prepared AWS acceptance path. The independently reviewed product merge is `06d141fe3fbef9b2254dd5313b1071e5c184764b`, whose complete tree is identical to the tested revision. It is not a completed contest submission.
+OpenCV AI Competition 2026, powered by AWS · Track: Agentic Vision with OpenCV 5 ·
+Author: Lukas Geiger (solo).
 
-## Problem and implementation
+## 1. Problem
 
-VisionFlow reuses a bounded computer-vision workflow across Python API, CLI and a local web interface. A configurable directed acyclic workflow connects analysis, branching, model questions, observation, input replacement, reporting and human approval. The controller accounts for frame, observation-time and model-call budgets. Decisions cannot authorize new media sources or output destinations.
+Many vision tasks end with "and then a human has to look at it": a traffic camera sees
+something moving the wrong way, a scanned form is too blurry, a video shows movement where
+there should be none. Pixel measurements are fast and cheap, but they are not meaning. If every
+hit raises an alarm, operators drown in false alarms; if hits are ignored, the rare real event is
+missed. What is missing is a **controlled loop** between measurement and action.
 
-OpenCV 5 performs pixel processing: image decoding, sharpness variance, contours, motion detection, video cursor operations, generated synthetic media and evidence-frame encoding. The road demonstrator adds bounded native-resolution grayscale patch matching across frames and immutable H.264 clip export through FFmpeg. Source corners have an eight-pixel minimum spacing and a maximum of 240 per lane. Each 21×21 patch searches at most ±80 pixels per axis; NCC must be at least 0.80 and exceed a spatially separate peak by 0.05. Reverse matching must return within 1.5 pixels, and current endpoints need local corner support. Tracks require three actual source IDs, a maximum 0.75-second gap and an 80-pixel association bound. Matching scores are not probabilities; these development settings do not classify vehicles. These are substantive vision operations, not just a version import.
+VisionFlow is that loop as reusable software: OpenCV 5 tools measure; the measurement decides
+what the workflow does next (observe more, ask for a new input, open a case, ask a model, ask a
+human, act); every step is bounded, logged and bound to the evidence it was based on.
 
-## Functional demonstrations
+## 2. Users
 
-Document quality: a generated blurred image is measured; a workflow branch pauses for a replacement; a generated sharper image is supplied and analyzed. The result preserves findings and real evidence paths. Laplace variance is a measurement for this synthetic fixture, not a calibrated universal document-quality threshold, OCR result or completeness guarantee.
+* **Operators in control rooms** (traffic, facilities, inspection) who need fewer, better-founded
+  alerts with the evidence attached, and a deadline-driven fallback when nobody answers.
+* **Developers and integrators** who want to configure such loops for new use cases in JSON
+  instead of writing a new application each time.
 
-Motion observation: generated video is read at native media positions, a fixture requests bounded follow-up, and the same media cursor continues. Tests check actual frame IDs, budgets, trace events and stored frame files. The fixture requests `observe` and then `report`; it is deterministic scripted decision logic, not evidence of real LLM reasoning.
+## 3. Architecture
 
-Road review: synthetic traffic events feed OpenCV direction analysis, recording, fixture review, a server deadline and content-bound user decisions. Timed notifications and later all-clears appear in a simulated local inbox. This does not establish safety performance on real roads.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the component, agent-workflow and deployment
+diagrams. In short:
 
-## AWS component and reproducibility
+* A **bounded workflow controller** executes a DAG of `analyze`, `observe`, `branch`,
+  `ask_model`, `request_input`, `approve`, `output` and `report` nodes. Each run has frame,
+  observation-time and model-call budgets.
+* An **OpenCV 5 tool registry** provides `quality` (Laplacian sharpness, brightness), `motion`
+  (difference images, contours) and `direction` (patch tracks against lane vectors).
+* The **road case service** adds recording (immutable H.264 clips with SHA-256), a model router
+  (offline profiles or Gemini video), a decision policy with deadlines, and a simulated
+  authority inbox.
+* The same core is reachable through the Python API, the CLI and a browser interface served by a
+  loopback-only HTTP server with session cookies and CSRF tokens.
 
-The prepared CodeBuild recipe uploads an allowlisted ZIP from one committed revision to private S3, installs the pinned dependencies, executes the full test suite and runs the document and motion workflows. AWS compute therefore executes the full OpenCV workflow, including real synthetic media decoding and trace/evidence generation. This is the intended meaningful AWS component; storage alone is not presented as the contribution.
+## 4. OpenCV 5 implementation
 
-An exact source ZIP SHA-256, per-file source hashes, source commit, test log/JUnit, dependency versions, demo traces, evidence-frame hashes and a run receipt make the run reproducible. The source is pinned to an S3 object version with an independently returned full-object SHA-256 checksum. Cloud acceptance requires the original evidence ZIP, matching AWS artifact SHA-256 and a byte-exact extracted file set including its manifest. Independently saved stack/start/upload/head responses and the terminal build readback must agree on account, region, project, source location, source version, buildspec and artifact destination. Hashes establish artifact integrity, not provider authenticity by themselves. See [AWS acceptance procedure](AWS_ACCEPTANCE.md).
+* Image decoding, Laplacian variance, grayscale statistics, difference images, contour and
+  region extraction, video cursor handling and evidence-frame encoding use OpenCV 5.0.0.
+* **Direction analysis** (`src/visionflow/tools/direction.py`): Shi–Tomasi corners
+  (`goodFeaturesToTrack`, eight-pixel spacing, at most 240 per lane) on the previous frame;
+  21×21 native-resolution grayscale patches searched within ±80 px with `matchTemplate`
+  (`TM_CCOEFF_NORMED`); a match needs NCC ≥ 0.80 and a 0.05 gap to any distinct second peak; a
+  reverse match must return within 1.5 px; the end point needs local corner support
+  (`cornerMinEigenVal`). Features are clustered into tracks that need three distinct frames, at
+  most 0.75 s and 80 px between observations. A track is *opposing* when its motion has a cosine
+  of at most −0.75 with the configured lane vector. Scenario labels never reach the detector.
+* Patch matches run on a small shared thread pool; `matchTemplate` releases the GIL. Each match is
+  independent, so results are identical; median per-frame analysis time on a loaded laptop
+  dropped from 484 ms to 243 ms.
+* The **synthetic road** (`road_scene.py`) is rendered with OpenCV drawing primitives:
+  perspective road, lanes, cars with shading and lights, a bird and a leaf as distractors. Static
+  scenery is rendered once and kept smooth so it does not compete with moving cars for the
+  per-lane corner budget.
+* The recorder encodes evidence clips (5 s before, 10 s after a finding) with FFmpeg/libx264 and
+  binds their SHA-256 to the case; model and human see the same bytes.
 
-The evidence checker validates both completed scenarios, the document input replacement and its measured sharpness gain, the motion observe/report ordering and forward frame cursor. Referenced PNG bytes are decoded and compared with the referenced source image or video frames. Core evidence uses `.bin` filenames; file extensions are not accepted as proof of image contents.
+## 5. Agentic loop: how visual results change what happens next
 
-## Evaluation status and limitations
+1. The road workflow observes the camera at 5 frames per second. As long as the direction tool
+   reports no opposing track, the observation simply continues.
+2. An opposing track stops the observation (`stop_when`), selects the candidate branch and
+   triggers the clip export.
+3. The model stage receives the hash-bound clip and evidence frames (at most two calls per case).
+   Its typed answer (`object_class`, `hazard`, `confidence`) is validated.
+4. The decision policy acts on it: `hazard = false` dismisses the case; a vehicle hazard with
+   confidence ≥ 0.90, OpenCV confirmation and a valid clip is reported at once; everything else,
+   including model errors and timeouts, goes to a human with a 60-second server deadline. No
+   decision means an automatic report; a later rejection sends a linked all-clear.
+5. Every transition is in the trace and the case journal; the browser shows the same server
+   state in four rooms.
 
-The exact tested product revision passed all 549 pytest checks in 101.46 seconds on an isolated Mac with Python 3.14.7, OpenCV 5.0.0 and NumPy 2.5.3. Terminal child exit was zero; JUnit records zero failures, errors and skips. Pre-run imports selected this revision and the working tree stayed clean. Independent review checked the source, original runtime receipts and frozen evaluation artifacts. Earlier cloud acceptance checks and tampering probes remain valid for the unchanged cloud code.
+Model output can never add a media source or an output destination. All notifications go to a
+simulated inbox.
 
-Separate actual Windows/Microsoft Edge and Mac/Playwright Chromium runs on this revision each passed all three complete road cases and eleven checks, including server clip identity, human confirmation, real deadline expiry and later correction, without browser errors or external requests. The three existing 90-second waits and twelve Python assertions were unchanged. The Windows server used Python 3.12.10, OpenCV 5.0.0 and NumPy 2.5.3. Two immutable development regressions contain three original JPEGs and seven original PNGs; manually reviewed spatial references are withheld from the detector.
+## 6. AWS deployment
 
-Earlier Windows full-suite timing failures and browser timeouts remain preserved. The intermediate patch matcher retained current vehicle observations but 42 of 74 analyzed intervals exceeded the unchanged 0.75-second track bound. Increasing source-corner spacing reduced overlapping patch work; the new full browser result is evidence for the recorded run, not a throughput guarantee. An earlier Mac browser attempt had two audio-device/renderer messages; the final revision's original harness passed without error filtering or audio flags. Hosted GitHub jobs did not start because of account payment/spending restrictions. Personal GUI and physical audio-device acceptance remain separate.
+* **Public demo** (`cloud/demo/demo-stack.yaml`, `cloud/demo/deploy_demo.py`): an AWS Graviton
+  (arm64) t4g.small instance running Ubuntu 24.04 serves `visionflow serve --public-demo` on
+  loopback behind nginx; Amazon CloudFront provides HTTPS and adds a secret origin header that
+  nginx checks; the security group only admits the CloudFront origin-facing prefix list; there is
+  no SSH (SSM only). The public-demo mode only reads the synthetic road simulation, rejects
+  uploads and runs at most four live road sessions; nginx rate
+  limits session creation and uploads; systemd restarts the service with an empty data
+  directory every 24 hours.
+* **Cloud acceptance** (`cloud/template.json`, `cloud/buildspec.yml`, `cloud/acceptance.py`):
+  an allowlisted ZIP of the committed source with per-file SHA-256 goes to a private, versioned
+  S3 bucket; AWS CodeBuild installs the pinned dependencies, runs the complete pytest suite and
+  both OpenCV demos, and returns an evidence ZIP with a receipt that is verified against the
+  source hashes ([procedure](AWS_ACCEPTANCE.md)).
 
-The original evaluation protocol declared generators, seeds, sequence ground truth, metrics and comparison methods before execution; those evaluation rules and all 1,430 original input/ground-truth PNG bytes stayed fixed for this rerun. Product parameters were developed after earlier results were available, so this is not a blinded holdout. All failure cases remain in the results. Frames within a sequence are dependent; no confidence interval treats them as independent samples. The declared blur ordering and geometric translations are ground truth for generated pixels, not labels for document readability, vehicle semantics or real traffic safety. [Final synthetic measurements](SYNTHETIC_EVALUATION.md) describe the comparison results, failure cases and reproducibility boundaries. A separate readback verified 1,452 original artifact hashes and reconstructed pixel ground truth; the sanitized jury artifact set retains the full dataset.
+<!-- AWS_RESULTS -->
 
-Genuine provider feedback, AWS execution, jury-access agreement and personal GUI acceptance remain separate evidence requirements until completed. The current Gemini transport sends whole inline video and trigger images, with at most two requests per road case, a 20 MiB request bound and a 30-second client deadline. It currently uses provider generation defaults rather than a configurable output-token limit. A fixture response is not evidence of model reasoning. No cloud timings, model accuracy, real-camera reliability or dataset generalization are claimed.
+## 7. Evaluation
 
-The proposed cloud run uses no LLM provider and no credentials embedded in source. The local web service binds only to loopback and permits server-account-readable local media; use it only with trusted local accounts. Camera access is explicitly mapped. The cloud package provides batch compute rather than a publicly reachable jury demo.
+Full details: [SYNTHETIC_EVALUATION.md](SYNTHETIC_EVALUATION.md).
+
+* **Known blur** (three generated pages, 18 dependent pairs): sharpness ordering correct 18/18.
+* **Known horizontal direction** (36 generated sequences): TP 9, FP 0, TN 24, FN 3; all misses
+  are untextured negative translations.
+* **RoadWorld** (seeds 17, 18, 101, 102; normal, wrong-way, bird, leaf; 24 frames at 5 fps):
+  direction candidates normal 0/4, wrong-way 4/4, bird 4/4, leaf 4/4. Read as a wrong-way-vehicle
+  detector: TP 4, FP 8, TN 4, FN 0. The pixel stage finds opposing motion; telling vehicles from
+  distractors is the job of the model and human stages. The protocol is reproducible with
+  `evaluation/roadworld_eval.py`, which reproduces the frozen 2026-10-08 results exactly; the
+  re-rendered scene of 2026-10-13 gives the same counts (bird and leaf for seed 18 now trigger at
+  frame 2 instead of 3 and 9). Results: `evaluation/results/`.
+* **Live model test** (Gemini video, 13 October 2026): five real requests against the
+  Interactions API; three cases failed with HTTP 503 ("high demand"), one direct check confirmed
+  the 503, one case exceeded the 30-second client bound. In every case the policy fell back to
+  human review and the deadline path, as designed. No model accuracy is claimed.
+* **Software tests**: On Windows 11 with Python 3.12.10, OpenCV 5.0.0 and NumPy 2.5.3 the suite reports **560 passed, 1 skipped** (the directory-symlink test needs a Windows privilege), 0 failed (2026-10-13, commit bde0e67). Browser acceptance (Playwright with Microsoft Edge):
+  multi-event control-room run, camera phase and review phase passed on the integrated tree with
+  no browser errors and no external requests.
+
+## 8. Limitations
+
+* All traffic is synthetic and deterministic per seed. The detector parameters were tuned on
+  known sequences; there is no blinded holdout and no claim about real roads or cameras.
+* The direction stage flags birds and leaves too. The public demo uses fixed offline model
+  profiles that do not look at the image; live Gemini review exists but could not be shown
+  succeeding during the test window because of provider overload.
+* Analysis speed depends on CPU; under heavy load the gap between analysed frames can exceed the
+  0.75-second track bound, in which case nothing is detected (a miss, not a false alarm).
+* Notifications are simulated; there is no integration with a real authority.
+
+## 9. Responsible use
+
+* VisionFlow is decision support. A human or an explicit, documented policy is responsible for
+  every escalation; deadlines and fallbacks are visible and logged.
+* Evidence is bound by hash, so the model and the human judge the same clip; corrections are
+  linked, not overwritten.
+* The server binds to loopback only. Local mode may read files the server account can read; the
+  hosted demo uses `--public-demo`. Cameras need an explicit mapping. Provider calls need an
+  explicit cost opt-in; keys are never stored in source or logs.
+* No personal data is processed in the demo; real deployments with cameras need a privacy
+  assessment, retention limits and signage according to local law.

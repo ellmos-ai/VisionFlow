@@ -1,0 +1,2 @@
+cloud/demo/*.yaml text eol=lf
+*.sh text eol=lf

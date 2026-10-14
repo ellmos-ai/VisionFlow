@@ -1,0 +1,3148 @@
+[
+  {
+    "step": "create",
+    "result": {
+      "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+      "accepted": true
+    }
+  },
+  {
+    "step": "case_start",
+    "result": {
+      "case_id": "f78700d052714a8f95c74e1184fdc916",
+      "run_id": "fbdbea82ae2b4a13901323e5c4d761a3",
+      "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+      "mode": "gemini_video",
+      "fixture_profile": null,
+      "phase": "running",
+      "controller_status": "running",
+      "perception_trace": [
+        {
+          "type": "state_change",
+          "state": "queued"
+        },
+        {
+          "type": "state_change",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "direction",
+          "state": "running"
+        }
+      ],
+      "exchange_ids": [],
+      "clip": null,
+      "decision": null,
+      "version": null,
+      "content_hash": null,
+      "assessment": null,
+      "deadline_at": null,
+      "remaining_seconds": 0.0,
+      "journal": [],
+      "first_receipt": null,
+      "correction_receipt": null,
+      "model_error": null,
+      "stopped_reason": null
+    }
+  },
+  {
+    "step": "inject",
+    "result": {
+      "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+      "accepted": true
+    }
+  },
+  {
+    "step": "status",
+    "t": 325615.5,
+    "result": {
+      "case_id": "f78700d052714a8f95c74e1184fdc916",
+      "run_id": "fbdbea82ae2b4a13901323e5c4d761a3",
+      "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+      "mode": "gemini_video",
+      "fixture_profile": null,
+      "phase": "running",
+      "controller_status": "observing",
+      "perception_trace": [
+        {
+          "type": "state_change",
+          "state": "queued"
+        },
+        {
+          "type": "state_change",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "direction",
+          "state": "running"
+        },
+        {
+          "type": "frame_analyzed",
+          "node_id": "direction",
+          "state": "running",
+          "evidence_id": "frame-000001"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "direction",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "monitor",
+          "state": "running"
+        },
+        {
+          "type": "state_change",
+          "node_id": "monitor",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 1,
+              "observation_seconds": 0.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 399,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000002"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000003"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000004"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000005"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000006"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000007"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000008"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000009"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000010"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000011"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000012"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000013"
+        }
+      ],
+      "exchange_ids": [],
+      "clip": null,
+      "decision": null,
+      "version": null,
+      "content_hash": null,
+      "assessment": null,
+      "deadline_at": null,
+      "remaining_seconds": 0.0,
+      "journal": [],
+      "first_receipt": null,
+      "correction_receipt": null,
+      "model_error": null,
+      "stopped_reason": null
+    }
+  },
+  {
+    "step": "status",
+    "t": 325640.7,
+    "result": {
+      "case_id": "f78700d052714a8f95c74e1184fdc916",
+      "run_id": "fbdbea82ae2b4a13901323e5c4d761a3",
+      "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+      "mode": "gemini_video",
+      "fixture_profile": null,
+      "phase": "human_review",
+      "controller_status": "failed",
+      "perception_trace": [
+        {
+          "type": "state_change",
+          "state": "queued"
+        },
+        {
+          "type": "state_change",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "direction",
+          "state": "running"
+        },
+        {
+          "type": "frame_analyzed",
+          "node_id": "direction",
+          "state": "running",
+          "evidence_id": "frame-000001"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "direction",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "monitor",
+          "state": "running"
+        },
+        {
+          "type": "state_change",
+          "node_id": "monitor",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 1,
+              "observation_seconds": 0.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 399,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000002"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000003"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000004"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000005"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000006"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000007"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000008"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000009"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000010"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000011"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000012"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000013"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000014"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000015"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000016"
+        },
+        {
+          "type": "monitor_stopped",
+          "node_id": "monitor",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "reason": "condition",
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:86"
+          ],
+          "source_times": [
+            7.217999999993481,
+            7.342999999993481,
+            7.561999999976251,
+            7.795999999972992,
+            8.0,
+            8.35899999999674,
+            8.65600000001723,
+            9.15600000001723,
+            9.436999999976251,
+            9.65600000001723,
+            10.09299999999348,
+            10.35899999999674,
+            10.59299999999348,
+            11.0,
+            11.125
+          ],
+          "duration_seconds": 60.0,
+          "budget": {
+            "used": {
+              "frames": 16,
+              "observation_seconds": 60.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 384,
+              "observation_seconds": 15.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "observation_completed",
+          "node_id": "monitor",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 16,
+              "observation_seconds": 60.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 384,
+              "observation_seconds": 15.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "state_change",
+          "node_id": "monitor",
+          "state": "running"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "monitor",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "candidate",
+          "state": "running"
+        },
+        {
+          "type": "branch_selected",
+          "node_id": "candidate",
+          "state": "tail"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "candidate",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "tail",
+          "state": "running"
+        },
+        {
+          "type": "state_change",
+          "node_id": "tail",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 16,
+              "observation_seconds": 60.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 384,
+              "observation_seconds": 15.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000017"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000018"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000019"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000020"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000021"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000022"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000023"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000024"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000025"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000026"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000027"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000028"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000029"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000030"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000031"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000032"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000033"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000034"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000035"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000036"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000037"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000038"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000039"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000040"
+        },
+        {
+          "type": "monitor_stopped",
+          "node_id": "tail",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "reason": "duration",
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:121"
+          ],
+          "source_times": [
+            11.26500000001397,
+            11.39000000001397,
+            11.53100000001723,
+            11.73399999999674,
+            11.875,
+            12.186999999976251,
+            12.920999999972992,
+            13.452999999979511,
+            14.686999999976251,
+            15.21799999999348,
+            15.625,
+            15.811999999976251,
+            16.01500000001397,
+            16.46799999999348,
+            16.93699999997625,
+            17.40600000001723,
+            17.54599999997299,
+            18.25,
+            18.60899999999674,
+            19.03100000001723,
+            19.42099999997299,
+            19.70299999997951,
+            20.29599999997299,
+            20.46799999999348
+          ],
+          "duration_seconds": 10.0,
+          "budget": {
+            "used": {
+              "frames": 40,
+              "observation_seconds": 70.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 360,
+              "observation_seconds": 5.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "observation_completed",
+          "node_id": "tail",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 40,
+              "observation_seconds": 70.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 360,
+              "observation_seconds": 5.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "state_change",
+          "node_id": "tail",
+          "state": "running"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "tail",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "review",
+          "state": "running"
+        },
+        {
+          "type": "model_mode",
+          "model_mode": "video"
+        },
+        {
+          "type": "model_call",
+          "node_id": "review",
+          "state": "running",
+          "budget": {
+            "used": {
+              "frames": 40,
+              "observation_seconds": 70.0,
+              "llm_calls": 1
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 360,
+              "observation_seconds": 5.0,
+              "llm_calls": 1
+            }
+          }
+        },
+        {
+          "type": "state_change",
+          "state": "failed",
+          "error_type": "VideoTransportError"
+        }
+      ],
+      "exchange_ids": [
+        "edbe83fce516452cb9ab72560c0dde4a"
+      ],
+      "clip": {
+        "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+        "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+        "version": 1,
+        "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+        "start_seconds": 6.170999999972992,
+        "end_seconds": 21.23399999999674,
+        "frame_ids": [
+          "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+        ],
+        "source_fps": 7.092198581396326,
+        "available_preroll": 4.954000000027008
+      },
+      "decision": {
+        "case_id": "f78700d052714a8f95c74e1184fdc916",
+        "run_id": "fbdbea82ae2b4a13901323e5c4d761a3",
+        "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+        "version": 2,
+        "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+        "phase": "human_review",
+        "deadline_at": "2026-10-13T13:40:49.886655Z",
+        "remaining_seconds": 17.030999999959022,
+        "assessment": null,
+        "model_error": "provider_failed",
+        "clip": {
+          "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "version": 1,
+          "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+          "start_seconds": 6.170999999972992,
+          "end_seconds": 21.23399999999674,
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+          ],
+          "source_fps": 7.092198581396326,
+          "available_preroll": 4.954000000027008
+        },
+        "journal": [
+          {
+            "version": 1,
+            "event": "case_opened",
+            "at": "2026-10-13T13:40:29.887030Z"
+          },
+          {
+            "version": 2,
+            "event": "human_review_started",
+            "at": "2026-10-13T13:40:29.887030Z"
+          }
+        ],
+        "first_receipt": null,
+        "correction_receipt": null
+      },
+      "version": 2,
+      "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+      "assessment": null,
+      "deadline_at": "2026-10-13T13:40:49.886655Z",
+      "remaining_seconds": 17.030999999959022,
+      "journal": [
+        {
+          "version": 1,
+          "event": "case_opened",
+          "at": "2026-10-13T13:40:29.887030Z"
+        },
+        {
+          "version": 2,
+          "event": "human_review_started",
+          "at": "2026-10-13T13:40:29.887030Z"
+        }
+      ],
+      "first_receipt": null,
+      "correction_receipt": null,
+      "model_error": "provider_failed",
+      "stopped_reason": null
+    }
+  },
+  {
+    "step": "status",
+    "t": 325660.1,
+    "result": {
+      "case_id": "f78700d052714a8f95c74e1184fdc916",
+      "run_id": "fbdbea82ae2b4a13901323e5c4d761a3",
+      "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+      "mode": "gemini_video",
+      "fixture_profile": null,
+      "phase": "no_response",
+      "controller_status": "failed",
+      "perception_trace": [
+        {
+          "type": "state_change",
+          "state": "queued"
+        },
+        {
+          "type": "state_change",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "direction",
+          "state": "running"
+        },
+        {
+          "type": "frame_analyzed",
+          "node_id": "direction",
+          "state": "running",
+          "evidence_id": "frame-000001"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "direction",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "monitor",
+          "state": "running"
+        },
+        {
+          "type": "state_change",
+          "node_id": "monitor",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 1,
+              "observation_seconds": 0.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 399,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000002"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000003"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000004"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000005"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000006"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000007"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000008"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000009"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000010"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000011"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000012"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000013"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000014"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000015"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000016"
+        },
+        {
+          "type": "monitor_stopped",
+          "node_id": "monitor",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "reason": "condition",
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:86"
+          ],
+          "source_times": [
+            7.217999999993481,
+            7.342999999993481,
+            7.561999999976251,
+            7.795999999972992,
+            8.0,
+            8.35899999999674,
+            8.65600000001723,
+            9.15600000001723,
+            9.436999999976251,
+            9.65600000001723,
+            10.09299999999348,
+            10.35899999999674,
+            10.59299999999348,
+            11.0,
+            11.125
+          ],
+          "duration_seconds": 60.0,
+          "budget": {
+            "used": {
+              "frames": 16,
+              "observation_seconds": 60.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 384,
+              "observation_seconds": 15.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "observation_completed",
+          "node_id": "monitor",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 16,
+              "observation_seconds": 60.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 384,
+              "observation_seconds": 15.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "state_change",
+          "node_id": "monitor",
+          "state": "running"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "monitor",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "candidate",
+          "state": "running"
+        },
+        {
+          "type": "branch_selected",
+          "node_id": "candidate",
+          "state": "tail"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "candidate",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "tail",
+          "state": "running"
+        },
+        {
+          "type": "state_change",
+          "node_id": "tail",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 16,
+              "observation_seconds": 60.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 384,
+              "observation_seconds": 15.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000017"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000018"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000019"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000020"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000021"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000022"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000023"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000024"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000025"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000026"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000027"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000028"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000029"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000030"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000031"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000032"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000033"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000034"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000035"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000036"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000037"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000038"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000039"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000040"
+        },
+        {
+          "type": "monitor_stopped",
+          "node_id": "tail",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "reason": "duration",
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:121"
+          ],
+          "source_times": [
+            11.26500000001397,
+            11.39000000001397,
+            11.53100000001723,
+            11.73399999999674,
+            11.875,
+            12.186999999976251,
+            12.920999999972992,
+            13.452999999979511,
+            14.686999999976251,
+            15.21799999999348,
+            15.625,
+            15.811999999976251,
+            16.01500000001397,
+            16.46799999999348,
+            16.93699999997625,
+            17.40600000001723,
+            17.54599999997299,
+            18.25,
+            18.60899999999674,
+            19.03100000001723,
+            19.42099999997299,
+            19.70299999997951,
+            20.29599999997299,
+            20.46799999999348
+          ],
+          "duration_seconds": 10.0,
+          "budget": {
+            "used": {
+              "frames": 40,
+              "observation_seconds": 70.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 360,
+              "observation_seconds": 5.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "observation_completed",
+          "node_id": "tail",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 40,
+              "observation_seconds": 70.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 360,
+              "observation_seconds": 5.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "state_change",
+          "node_id": "tail",
+          "state": "running"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "tail",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "review",
+          "state": "running"
+        },
+        {
+          "type": "model_mode",
+          "model_mode": "video"
+        },
+        {
+          "type": "model_call",
+          "node_id": "review",
+          "state": "running",
+          "budget": {
+            "used": {
+              "frames": 40,
+              "observation_seconds": 70.0,
+              "llm_calls": 1
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 360,
+              "observation_seconds": 5.0,
+              "llm_calls": 1
+            }
+          }
+        },
+        {
+          "type": "state_change",
+          "state": "failed",
+          "error_type": "VideoTransportError"
+        }
+      ],
+      "exchange_ids": [
+        "edbe83fce516452cb9ab72560c0dde4a"
+      ],
+      "clip": {
+        "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+        "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+        "version": 1,
+        "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+        "start_seconds": 6.170999999972992,
+        "end_seconds": 21.23399999999674,
+        "frame_ids": [
+          "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+        ],
+        "source_fps": 7.092198581396326,
+        "available_preroll": 4.954000000027008
+      },
+      "decision": {
+        "case_id": "f78700d052714a8f95c74e1184fdc916",
+        "run_id": "fbdbea82ae2b4a13901323e5c4d761a3",
+        "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+        "version": 3,
+        "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+        "phase": "no_response",
+        "deadline_at": "2026-10-13T13:40:49.886655Z",
+        "remaining_seconds": 0.0,
+        "assessment": null,
+        "model_error": "provider_failed",
+        "clip": {
+          "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "version": 1,
+          "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+          "start_seconds": 6.170999999972992,
+          "end_seconds": 21.23399999999674,
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+          ],
+          "source_fps": 7.092198581396326,
+          "available_preroll": 4.954000000027008
+        },
+        "journal": [
+          {
+            "version": 1,
+            "event": "case_opened",
+            "at": "2026-10-13T13:40:29.887030Z"
+          },
+          {
+            "version": 2,
+            "event": "human_review_started",
+            "at": "2026-10-13T13:40:29.887030Z"
+          },
+          {
+            "version": 3,
+            "event": "first_report_sent",
+            "at": "2026-10-13T13:40:49.912529Z",
+            "reason": "no_response",
+            "receipt_id": "report_jwmdeWBrBiP4k8XVWHCGvN3X"
+          }
+        ],
+        "first_receipt": {
+          "kind": "first_report",
+          "receipt_id": "report_jwmdeWBrBiP4k8XVWHCGvN3X",
+          "case_id": "f78700d052714a8f95c74e1184fdc916",
+          "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+          "reason": "no_response",
+          "human_confirmed": false,
+          "clip": {
+            "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+            "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+            "version": 1,
+            "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+            "start_seconds": 6.170999999972992,
+            "end_seconds": 21.23399999999674,
+            "frame_ids": [
+              "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+            ],
+            "source_fps": 7.092198581396326,
+            "available_preroll": 4.954000000027008
+          },
+          "assessment": null
+        },
+        "correction_receipt": null
+      },
+      "version": 3,
+      "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+      "assessment": null,
+      "deadline_at": "2026-10-13T13:40:49.886655Z",
+      "remaining_seconds": 0.0,
+      "journal": [
+        {
+          "version": 1,
+          "event": "case_opened",
+          "at": "2026-10-13T13:40:29.887030Z"
+        },
+        {
+          "version": 2,
+          "event": "human_review_started",
+          "at": "2026-10-13T13:40:29.887030Z"
+        },
+        {
+          "version": 3,
+          "event": "first_report_sent",
+          "at": "2026-10-13T13:40:49.912529Z",
+          "reason": "no_response",
+          "receipt_id": "report_jwmdeWBrBiP4k8XVWHCGvN3X"
+        }
+      ],
+      "first_receipt": {
+        "kind": "first_report",
+        "receipt_id": "report_jwmdeWBrBiP4k8XVWHCGvN3X",
+        "case_id": "f78700d052714a8f95c74e1184fdc916",
+        "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+        "reason": "no_response",
+        "human_confirmed": false,
+        "clip": {
+          "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "version": 1,
+          "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+          "start_seconds": 6.170999999972992,
+          "end_seconds": 21.23399999999674,
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+          ],
+          "source_fps": 7.092198581396326,
+          "available_preroll": 4.954000000027008
+        },
+        "assessment": null
+      },
+      "correction_receipt": null,
+      "model_error": "provider_failed",
+      "stopped_reason": null
+    }
+  },
+  {
+    "step": "final",
+    "result": {
+      "case_id": "f78700d052714a8f95c74e1184fdc916",
+      "run_id": "fbdbea82ae2b4a13901323e5c4d761a3",
+      "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+      "mode": "gemini_video",
+      "fixture_profile": null,
+      "phase": "no_response",
+      "controller_status": "failed",
+      "perception_trace": [
+        {
+          "type": "state_change",
+          "state": "queued"
+        },
+        {
+          "type": "state_change",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "direction",
+          "state": "running"
+        },
+        {
+          "type": "frame_analyzed",
+          "node_id": "direction",
+          "state": "running",
+          "evidence_id": "frame-000001"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "direction",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "monitor",
+          "state": "running"
+        },
+        {
+          "type": "state_change",
+          "node_id": "monitor",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 1,
+              "observation_seconds": 0.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 399,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000002"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000003"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000004"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000005"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000006"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000007"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000008"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000009"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000010"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000011"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000012"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000013"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000014"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000015"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "monitor",
+          "state": "observing",
+          "evidence_id": "frame-000016"
+        },
+        {
+          "type": "monitor_stopped",
+          "node_id": "monitor",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "reason": "condition",
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:86"
+          ],
+          "source_times": [
+            7.217999999993481,
+            7.342999999993481,
+            7.561999999976251,
+            7.795999999972992,
+            8.0,
+            8.35899999999674,
+            8.65600000001723,
+            9.15600000001723,
+            9.436999999976251,
+            9.65600000001723,
+            10.09299999999348,
+            10.35899999999674,
+            10.59299999999348,
+            11.0,
+            11.125
+          ],
+          "duration_seconds": 60.0,
+          "budget": {
+            "used": {
+              "frames": 16,
+              "observation_seconds": 60.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 384,
+              "observation_seconds": 15.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "observation_completed",
+          "node_id": "monitor",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 16,
+              "observation_seconds": 60.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 384,
+              "observation_seconds": 15.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "state_change",
+          "node_id": "monitor",
+          "state": "running"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "monitor",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "candidate",
+          "state": "running"
+        },
+        {
+          "type": "branch_selected",
+          "node_id": "candidate",
+          "state": "tail"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "candidate",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "tail",
+          "state": "running"
+        },
+        {
+          "type": "state_change",
+          "node_id": "tail",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 16,
+              "observation_seconds": 60.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 384,
+              "observation_seconds": 15.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000017"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000018"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000019"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000020"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000021"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000022"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000023"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000024"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000025"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000026"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000027"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000028"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000029"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000030"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000031"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000032"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000033"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000034"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000035"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000036"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000037"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000038"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000039"
+        },
+        {
+          "type": "frame_observed",
+          "node_id": "tail",
+          "state": "observing",
+          "evidence_id": "frame-000040"
+        },
+        {
+          "type": "monitor_stopped",
+          "node_id": "tail",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "reason": "duration",
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:121"
+          ],
+          "source_times": [
+            11.26500000001397,
+            11.39000000001397,
+            11.53100000001723,
+            11.73399999999674,
+            11.875,
+            12.186999999976251,
+            12.920999999972992,
+            13.452999999979511,
+            14.686999999976251,
+            15.21799999999348,
+            15.625,
+            15.811999999976251,
+            16.01500000001397,
+            16.46799999999348,
+            16.93699999997625,
+            17.40600000001723,
+            17.54599999997299,
+            18.25,
+            18.60899999999674,
+            19.03100000001723,
+            19.42099999997299,
+            19.70299999997951,
+            20.29599999997299,
+            20.46799999999348
+          ],
+          "duration_seconds": 10.0,
+          "budget": {
+            "used": {
+              "frames": 40,
+              "observation_seconds": 70.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 360,
+              "observation_seconds": 5.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "observation_completed",
+          "node_id": "tail",
+          "state": "observing",
+          "budget": {
+            "used": {
+              "frames": 40,
+              "observation_seconds": 70.0,
+              "llm_calls": 0
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 360,
+              "observation_seconds": 5.0,
+              "llm_calls": 2
+            }
+          }
+        },
+        {
+          "type": "state_change",
+          "node_id": "tail",
+          "state": "running"
+        },
+        {
+          "type": "node_completed",
+          "node_id": "tail",
+          "state": "running"
+        },
+        {
+          "type": "node_started",
+          "node_id": "review",
+          "state": "running"
+        },
+        {
+          "type": "model_mode",
+          "model_mode": "video"
+        },
+        {
+          "type": "model_call",
+          "node_id": "review",
+          "state": "running",
+          "budget": {
+            "used": {
+              "frames": 40,
+              "observation_seconds": 70.0,
+              "llm_calls": 1
+            },
+            "limits": {
+              "frames": 400,
+              "observation_seconds": 75.0,
+              "llm_calls": 2
+            },
+            "remaining": {
+              "frames": 360,
+              "observation_seconds": 5.0,
+              "llm_calls": 1
+            }
+          }
+        },
+        {
+          "type": "state_change",
+          "state": "failed",
+          "error_type": "VideoTransportError"
+        }
+      ],
+      "exchange_ids": [
+        "edbe83fce516452cb9ab72560c0dde4a"
+      ],
+      "clip": {
+        "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+        "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+        "version": 1,
+        "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+        "start_seconds": 6.170999999972992,
+        "end_seconds": 21.23399999999674,
+        "frame_ids": [
+          "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+          "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+        ],
+        "source_fps": 7.092198581396326,
+        "available_preroll": 4.954000000027008
+      },
+      "decision": {
+        "case_id": "f78700d052714a8f95c74e1184fdc916",
+        "run_id": "fbdbea82ae2b4a13901323e5c4d761a3",
+        "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+        "version": 3,
+        "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+        "phase": "no_response",
+        "deadline_at": "2026-10-13T13:40:49.886655Z",
+        "remaining_seconds": 0.0,
+        "assessment": null,
+        "model_error": "provider_failed",
+        "clip": {
+          "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "version": 1,
+          "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+          "start_seconds": 6.170999999972992,
+          "end_seconds": 21.23399999999674,
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+          ],
+          "source_fps": 7.092198581396326,
+          "available_preroll": 4.954000000027008
+        },
+        "journal": [
+          {
+            "version": 1,
+            "event": "case_opened",
+            "at": "2026-10-13T13:40:29.887030Z"
+          },
+          {
+            "version": 2,
+            "event": "human_review_started",
+            "at": "2026-10-13T13:40:29.887030Z"
+          },
+          {
+            "version": 3,
+            "event": "first_report_sent",
+            "at": "2026-10-13T13:40:49.912529Z",
+            "reason": "no_response",
+            "receipt_id": "report_jwmdeWBrBiP4k8XVWHCGvN3X"
+          }
+        ],
+        "first_receipt": {
+          "kind": "first_report",
+          "receipt_id": "report_jwmdeWBrBiP4k8XVWHCGvN3X",
+          "case_id": "f78700d052714a8f95c74e1184fdc916",
+          "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+          "reason": "no_response",
+          "human_confirmed": false,
+          "clip": {
+            "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+            "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+            "version": 1,
+            "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+            "start_seconds": 6.170999999972992,
+            "end_seconds": 21.23399999999674,
+            "frame_ids": [
+              "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+              "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+            ],
+            "source_fps": 7.092198581396326,
+            "available_preroll": 4.954000000027008
+          },
+          "assessment": null
+        },
+        "correction_receipt": null
+      },
+      "version": 3,
+      "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+      "assessment": null,
+      "deadline_at": "2026-10-13T13:40:49.886655Z",
+      "remaining_seconds": 0.0,
+      "journal": [
+        {
+          "version": 1,
+          "event": "case_opened",
+          "at": "2026-10-13T13:40:29.887030Z"
+        },
+        {
+          "version": 2,
+          "event": "human_review_started",
+          "at": "2026-10-13T13:40:29.887030Z"
+        },
+        {
+          "version": 3,
+          "event": "first_report_sent",
+          "at": "2026-10-13T13:40:49.912529Z",
+          "reason": "no_response",
+          "receipt_id": "report_jwmdeWBrBiP4k8XVWHCGvN3X"
+        }
+      ],
+      "first_receipt": {
+        "kind": "first_report",
+        "receipt_id": "report_jwmdeWBrBiP4k8XVWHCGvN3X",
+        "case_id": "f78700d052714a8f95c74e1184fdc916",
+        "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+        "reason": "no_response",
+        "human_confirmed": false,
+        "clip": {
+          "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "version": 1,
+          "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+          "start_seconds": 6.170999999972992,
+          "end_seconds": 21.23399999999674,
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+          ],
+          "source_fps": 7.092198581396326,
+          "available_preroll": 4.954000000027008
+        },
+        "assessment": null
+      },
+      "correction_receipt": null,
+      "model_error": "provider_failed",
+      "stopped_reason": null
+    }
+  },
+  {
+    "step": "inbox",
+    "result": [
+      {
+        "kind": "first_report",
+        "receipt_id": "report_jwmdeWBrBiP4k8XVWHCGvN3X",
+        "case_id": "f78700d052714a8f95c74e1184fdc916",
+        "content_hash": "sha256:727ad6554e197b3db9dc2ce2ddb621d5355bf8c0d1f8d13a0cf2bf5ea2b3d61c",
+        "reason": "no_response",
+        "human_confirmed": false,
+        "clip": {
+          "clip_id": "b63932eea68f4d29a7bed2c36f1788ed",
+          "source_id": "road-sim-27ab510962a148cf8845683efae8d2c1",
+          "version": 1,
+          "sha256": "ecfe321019ceb407a16ef6870ce68a0e397bfd0d373da9de733809018003bec1",
+          "start_seconds": 6.170999999972992,
+          "end_seconds": 21.23399999999674,
+          "frame_ids": [
+            "road-sim-27ab510962a148cf8845683efae8d2c1:47",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:48",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:49",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:50",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:51",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:52",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:53",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:54",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:55",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:56",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:57",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:58",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:59",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:60",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:61",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:62",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:63",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:64",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:65",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:66",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:67",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:68",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:69",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:70",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:71",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:72",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:73",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:74",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:75",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:76",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:77",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:78",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:79",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:80",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:81",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:82",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:83",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:84",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:85",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:86",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:87",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:88",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:89",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:90",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:91",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:92",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:93",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:94",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:95",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:96",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:97",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:98",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:99",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:100",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:101",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:102",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:103",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:104",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:105",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:106",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:107",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:108",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:109",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:110",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:111",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:112",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:113",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:114",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:115",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:116",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:117",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:118",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:119",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:120",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:121",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:122",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:123",
+            "road-sim-27ab510962a148cf8845683efae8d2c1:124"
+          ],
+          "source_fps": 7.092198581396326,
+          "available_preroll": 4.954000000027008
+        },
+        "assessment": null
+      }
+    ]
+  }
+]

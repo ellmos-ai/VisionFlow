@@ -148,6 +148,7 @@ def test_package_exposes_cli_and_includes_web_assets():
         "web/*.html",
         "web/*.js",
         "web/*.css",
+        "web/assets/*.png",
     ]
 
 

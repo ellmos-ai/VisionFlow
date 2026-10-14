@@ -1,31 +1,32 @@
+const L = (de, en) => window.VisionFlowI18n ? window.VisionFlowI18n.L(de, en) : en;
 const PHASE_LABELS = Object.freeze({
-  initializing: "Fall wird vorbereitet",
-  starting: "Fallstart läuft",
-  running: "Verkehr wird ausgewertet",
-  model_review: "Modellprüfung läuft",
-  normal: "Keine Auffälligkeit festgestellt",
-  source_ended: "Quelle beendet",
-  human_review: "Menschliche Prüfung erforderlich",
-  no_response: "Keine Antwort bis zum Fristende",
-  reported: "Erstmeldung gesendet",
-  corrected: "Entwarnung gesendet",
-  rejected: "Gefahr verneint",
-  dismissed: "Kein Gefahrverdacht",
-  cancelled: "Fall abgebrochen",
+  initializing: L("Fall wird vorbereitet", "Case is being prepared"),
+  starting: L("Fallstart läuft", "Case start in progress"),
+  running: L("Verkehr wird ausgewertet", "Traffic is being analyzed"),
+  model_review: L("Modellprüfung läuft", "Model review in progress"),
+  normal: L("Keine Auffälligkeit festgestellt", "No anomaly detected"),
+  source_ended: L("Quelle beendet", "Source ended"),
+  human_review: L("Menschliche Prüfung erforderlich", "Human review required"),
+  no_response: L("Keine Antwort bis zum Fristende", "No answer by the deadline"),
+  reported: L("Erstmeldung gesendet", "First report sent"),
+  corrected: L("Entwarnung gesendet", "All-clear sent"),
+  rejected: L("Gefahr verneint", "Hazard denied"),
+  dismissed: L("Kein Gefahrverdacht", "No suspected hazard"),
+  cancelled: L("Fall abgebrochen", "Case cancelled"),
 });
 
 const REASON_LABELS = Object.freeze({
-  high_confidence: "Automatische Erstmeldung nach bestätigter hoher Sicherheit und Belegen",
-  human_confirmed: "Erstmeldung nach menschlicher Bestätigung",
-  no_response: "Erstmeldung nach Ablauf der serverseitigen Prüfzeit ohne Antwort",
+  high_confidence: L("Automatische Erstmeldung nach bestätigter hoher Sicherheit und Belegen", "Automatic first report after confirmed high confidence and evidence"),
+  human_confirmed: L("Erstmeldung nach menschlicher Bestätigung", "First report after human confirmation"),
+  no_response: L("Erstmeldung nach Ablauf der serverseitigen Prüfzeit ohne Antwort", "First report after the server-side review time expired without an answer"),
 });
 
 const ERROR_LABELS = Object.freeze({
-  model_timeout: "Die Modellanfrage hat das Zeitlimit erreicht.",
-  invalid_json: "Die Modellantwort ließ sich nicht als gültige Bewertung lesen.",
-  invalid_evidence: "Die Modellantwort verwies auf ungültige Belege.",
-  stale_version: "Der Fall wurde inzwischen geändert. Bitte aktualisiere ihn und prüfe die Entscheidung erneut.",
-  stale_content_hash: "Der Fallinhalt wurde inzwischen geändert. Bitte aktualisiere ihn und prüfe die Entscheidung erneut.",
+  model_timeout: L("Die Modellanfrage hat das Zeitlimit erreicht.", "The model request reached its time limit."),
+  invalid_json: L("Die Modellantwort ließ sich nicht als gültige Bewertung lesen.", "The model answer could not be read as a valid assessment."),
+  invalid_evidence: L("Die Modellantwort verwies auf ungültige Belege.", "The model answer referred to invalid evidence."),
+  stale_version: L("Der Fall wurde inzwischen geändert. Bitte aktualisiere ihn und prüfe die Entscheidung erneut.", "The case has been changed in the meantime. Please refresh it and review the decision again."),
+  stale_content_hash: L("Der Fallinhalt wurde inzwischen geändert. Bitte aktualisiere ihn und prüfe die Entscheidung erneut.", "The case content has been changed in the meantime. Please refresh it and review the decision again."),
 });
 
 function element(tagName, className, text) {
@@ -43,7 +44,7 @@ function setHidden(node, hidden) {
   node.hidden = Boolean(hidden);
 }
 
-function valueText(value, fallback = "Nicht angegeben") {
+function valueText(value, fallback = L("Nicht angegeben", "Not specified")) {
   if (!hasValue(value)) return fallback;
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -55,22 +56,22 @@ function valueText(value, fallback = "Nicht angegeben") {
 }
 
 function hazardLabel(hazard) {
-  if (hazard === true) return "Ja";
-  if (hazard === false) return "Nein";
-  return "Unklar";
+  if (hazard === true) return L("Ja", "Yes");
+  if (hazard === false) return L("Nein", "No");
+  return L("Unklar", "Unclear");
 }
 
 function phaseLabel(phase) {
-  return PHASE_LABELS[phase] || (hasValue(phase) ? `Unbekannter Fallstatus (${valueText(phase)})` : "Fallstatus nicht angegeben");
+  return PHASE_LABELS[phase] || (hasValue(phase) ? L(`Unbekannter Fallstatus (${valueText(phase)})`, `Unknown case status (${valueText(phase)})`) : L("Fallstatus nicht angegeben", "Case status not specified"));
 }
 
 function errorLabel(error) {
   const code = typeof error === "string" ? error : error?.code;
   if (hasValue(code) && ERROR_LABELS[code]) return ERROR_LABELS[code];
   const status = Number(error?.status);
-  if (status === 409) return "Der Fall wurde inzwischen geändert. Bitte aktualisiere ihn und prüfe die Entscheidung erneut.";
-  if (status >= 400 && status < 500) return "Der Server hat die Entscheidung abgelehnt. Bitte aktualisiere den Fall und prüfe ihn erneut.";
-  return "Die Antwort des Servers ist nicht angekommen. Der gleiche Antrag kann mit derselben Kennung erneut gesendet werden.";
+  if (status === 409) return L("Der Fall wurde inzwischen geändert. Bitte aktualisiere ihn und prüfe die Entscheidung erneut.", "The case has been changed in the meantime. Please refresh it and review the decision again.");
+  if (status >= 400 && status < 500) return L("Der Server hat die Entscheidung abgelehnt. Bitte aktualisiere den Fall und prüfe ihn erneut.", "The server rejected the decision. Please refresh the case and review it again.");
+  return L("Die Antwort des Servers ist nicht angekommen. Der gleiche Antrag kann mit derselben Kennung erneut gesendet werden.", "The server's response did not arrive. The same request can be sent again with the same identifier.");
 }
 
 function isConflict(error) {
@@ -163,45 +164,45 @@ export function mountRoadWorkplace(container, apiClient) {
   const inboxEntries = new Map();
 
   const header = element("header", "road-panel-header");
-  const title = element("h2", "road-panel-title", "Menschlicher Arbeitsplatz und Demo-Postfach");
-  const caseBadge = element("span", "road-panel-meta", "Kein offener Fall");
+  const title = element("h2", "road-panel-title", L("Menschlicher Arbeitsplatz und Demo-Postfach", "Human workplace and demo inbox"));
+  const caseBadge = element("span", "road-panel-meta", L("Kein offener Fall", "No open case"));
   caseBadge.setAttribute("role", "status");
   caseBadge.setAttribute("aria-live", "polite");
   header.append(title, caseBadge);
 
   const office = element("section", "road-office-scene");
-  office.setAttribute("aria-label", "Büroarbeitsplatz mit Laptop");
-  const deskCaption = element("p", "road-office-decor", "Schreibtisch – menschliche Fallprüfung");
+  office.setAttribute("aria-label", L("Büroarbeitsplatz mit Laptop", "Office workplace with laptop"));
+  const deskCaption = element("p", "road-office-decor", L("Schreibtisch – menschliche Fallprüfung", "Desk – human case review"));
   const laptopWrapper = element("div", "road-laptop-wrapper");
   const screenFrame = element("div", "road-laptop-screen-frame");
   const screen = element("section", "road-laptop-screen-content");
   screen.setAttribute("role", "region");
-  screen.setAttribute("aria-label", "Einsatz-Arbeitsplatz auf dem Laptop");
+  screen.setAttribute("aria-label", L("Einsatz-Arbeitsplatz auf dem Laptop", "Dispatch workplace on the laptop"));
 
   const notification = element("div", "road-countdown-banner");
   notification.setAttribute("role", "status");
   notification.setAttribute("aria-live", "polite");
-  notification.textContent = "Noch keine Benachrichtigung für eine menschliche Prüfung.";
+  notification.textContent = L("Noch keine Benachrichtigung für eine menschliche Prüfung.", "No notification for a human review yet.");
   screen.appendChild(notification);
 
-  const emptyWorkplaceState = element("p", "road-empty-state", "Warten auf einen Fall zur menschlichen Prüfung.");
+  const emptyWorkplaceState = element("p", "road-empty-state", L("Warten auf einen Fall zur menschlichen Prüfung.", "Waiting for a case for human review."));
   screen.appendChild(emptyWorkplaceState);
 
   const caseContainer = element("div", "road-case-container");
   setHidden(caseContainer, true);
   const caseHeader = element("header", "road-panel-header");
-  const caseTitle = element("h3", "road-panel-title", "Fallzusammenfassung");
-  const phaseBadge = element("span", "road-badge", "Fallstatus nicht angegeben");
+  const caseTitle = element("h3", "road-panel-title", L("Fallzusammenfassung", "Case summary"));
+  const phaseBadge = element("span", "road-badge", L("Fallstatus nicht angegeben", "Case status not specified"));
   phaseBadge.setAttribute("role", "status");
   phaseBadge.setAttribute("aria-live", "polite");
   caseHeader.append(caseTitle, phaseBadge);
   caseContainer.appendChild(caseHeader);
 
   const countdown = element("div", "road-countdown-banner road-case-countdown");
-  const countdownTitle = element("strong", "road-countdown-title", "Serverfrist für die menschliche Prüfung");
+  const countdownTitle = element("strong", "road-countdown-title", L("Serverfrist für die menschliche Prüfung", "Server deadline for the human review"));
   const countdownClock = element("span", "road-countdown-clock", "-- s");
   countdownClock.setAttribute("aria-live", "off");
-  const deadline = element("span", "road-case-deadline", "Frist: im Snapshot nicht angegeben");
+  const deadline = element("span", "road-case-deadline", L("Frist: im Snapshot nicht angegeben", "Deadline: not specified in the snapshot"));
   countdown.append(countdownTitle, countdownClock, deadline);
   caseContainer.appendChild(countdown);
 
@@ -211,11 +212,11 @@ export function mountRoadWorkplace(container, apiClient) {
   activeVideo.controls = true;
   activeVideo.playsInline = true;
   activeVideo.preload = "metadata";
-  activeVideo.setAttribute("aria-label", "Vollständiger Ereignisclip zur menschlichen Fallprüfung");
+  activeVideo.setAttribute("aria-label", L("Vollständiger Ereignisclip zur menschlichen Fallprüfung", "Full event clip for the human case review"));
   activeVideoContainer.appendChild(activeVideo);
-  const activeClipStatus = element("p", "road-model-clip-status", "Kein Clip im Snapshot vorhanden.");
+  const activeClipStatus = element("p", "road-model-clip-status", L("Kein Clip im Snapshot vorhanden.", "No clip in the snapshot."));
   activeClipStatus.setAttribute("role", "status");
-  const retryActiveClip = element("button", "road-btn road-btn-secondary", "Clip erneut laden");
+  const retryActiveClip = element("button", "road-btn road-btn-secondary", L("Clip erneut laden", "Reload clip"));
   retryActiveClip.type = "button";
   retryActiveClip.dataset.roadAction = "retry-active-clip";
   setHidden(retryActiveClip, true);
@@ -230,23 +231,23 @@ export function mountRoadWorkplace(container, apiClient) {
   setHidden(decisionFeedback, true);
   caseContainer.appendChild(decisionFeedback);
   const decisionActions = element("div", "road-btn-group road-decision-actions");
-  const confirmButton = element("button", "road-btn road-btn-danger", "Gefahr bestätigen und Behörden informieren");
+  const confirmButton = element("button", "road-btn road-btn-danger", L("Gefahr bestätigen und Behörden informieren", "Confirm hazard and notify authorities"));
   confirmButton.type = "button";
   confirmButton.id = "btn-operator-confirm";
   confirmButton.disabled = true;
-  const denyButton = element("button", "road-btn road-btn-secondary", "Gefahr verneinen");
+  const denyButton = element("button", "road-btn road-btn-secondary", L("Gefahr verneinen", "Deny hazard"));
   denyButton.type = "button";
   denyButton.id = "btn-operator-deny";
   denyButton.disabled = true;
   decisionActions.append(confirmButton, denyButton);
   caseContainer.appendChild(decisionActions);
 
-  const retryDecisionButton = element("button", "road-btn road-btn-secondary", "Gleiche Entscheidung erneut senden");
+  const retryDecisionButton = element("button", "road-btn road-btn-secondary", L("Gleiche Entscheidung erneut senden", "Resend the same decision"));
   retryDecisionButton.type = "button";
   retryDecisionButton.dataset.roadAction = "retry-decision";
   setHidden(retryDecisionButton, true);
   caseContainer.appendChild(retryDecisionButton);
-  const refreshCaseButton = element("button", "road-btn road-btn-secondary", "Fall aktualisieren");
+  const refreshCaseButton = element("button", "road-btn road-btn-secondary", L("Fall aktualisieren", "Refresh case"));
   refreshCaseButton.type = "button";
   refreshCaseButton.dataset.roadAction = "refresh-case";
   setHidden(refreshCaseButton, true);
@@ -261,17 +262,17 @@ export function mountRoadWorkplace(container, apiClient) {
   office.append(deskCaption, laptopWrapper);
 
   const inboxSection = element("section", "road-inbox-container");
-  inboxSection.setAttribute("aria-label", "Simulierter Behördeneingang");
-  const inboxTitle = element("h3", "road-panel-title", "Demo-Postfach des Behördenempfängers");
+  inboxSection.setAttribute("aria-label", L("Simulierter Behördeneingang", "Simulated authority inbox"));
+  const inboxTitle = element("h3", "road-panel-title", L("Demo-Postfach des Behördenempfängers", "Demo inbox of the authority recipient"));
   const disclaimer = element(
     "p",
     "road-simulation-disclaimer",
-    "Simulierter Empfänger: Meldungen bleiben in dieser lokalen Demo. Es wird keine Behörde kontaktiert.",
+    L("Simulierter Empfänger: Meldungen bleiben in dieser lokalen Demo. Es wird keine Behörde kontaktiert.", "Simulated recipient: reports stay in this local demo. No authority is contacted."),
   );
   const inboxList = element("div", "road-inbox-list");
   inboxList.setAttribute("role", "list");
-  inboxList.setAttribute("aria-label", "Erstmeldungen und Entwarnungen");
-  const emptyInbox = element("p", "road-empty-state", "Im Demo-Postfach ist noch keine Meldung eingegangen.");
+  inboxList.setAttribute("aria-label", L("Erstmeldungen und Entwarnungen", "First reports and all-clears"));
+  const emptyInbox = element("p", "road-empty-state", L("Im Demo-Postfach ist noch keine Meldung eingegangen.", "No report has arrived in the demo inbox yet."));
   inboxList.appendChild(emptyInbox);
   inboxSection.append(inboxTitle, disclaimer, inboxList);
   container.replaceChildren(header, office, inboxSection);
@@ -299,7 +300,7 @@ export function mountRoadWorkplace(container, apiClient) {
     const path = `/road/clips/${encodeURIComponent(clip.clip_id)}`;
     const request = Promise.resolve().then(() => apiClient.getBytes(path));
     const guarded = request.then((blob) => {
-      if (!(blob instanceof Blob)) throw new TypeError("Die Cliproute lieferte keine Blob-Daten.");
+      if (!(blob instanceof Blob)) throw new TypeError(L("Die Cliproute lieferte keine Blob-Daten.", "The clip route returned no blob data."));
       return blob;
     }).catch((error) => {
       if (blobRequests.get(key) === guarded) blobRequests.delete(key);
@@ -335,7 +336,7 @@ export function mountRoadWorkplace(container, apiClient) {
     entry.retryButton.disabled = destroyed;
   }
 
-  function clearClip(entry, message = "Kein Clip im Snapshot vorhanden.") {
+  function clearClip(entry, message = L("Kein Clip im Snapshot vorhanden.", "No clip in the snapshot.")) {
     cancelClipWork(entry);
     detachMedia(entry);
     entry.clipIdentity = null;
@@ -349,7 +350,7 @@ export function mountRoadWorkplace(container, apiClient) {
   function requestClip(entry, clip, sourceRecord, force = false) {
     if (!validClipRecord(clip)) {
       if (entry.clipIdentity !== null || entry.objectUrl || entry.clipPending) clearClip(entry);
-      else setClipMessage(entry, "Kein Clip im Snapshot vorhanden.");
+      else setClipMessage(entry, L("Kein Clip im Snapshot vorhanden.", "No clip in the snapshot."));
       return;
     }
     const identity = clipIdentity(clip, sourceRecord.case_id || sourceRecord.receipt_id || "record");
@@ -380,8 +381,8 @@ export function mountRoadWorkplace(container, apiClient) {
     entry.abortController = abortController;
     entry.video.dataset.clipId = valueText(clip.clip_id);
     entry.video.dataset.clipHash = valueText(clip.sha256, "");
-    entry.video.setAttribute("aria-label", `Vollständiger Ereignisclip ${valueText(clip.clip_id)} zur menschlichen Prüfung`);
-    setClipMessage(entry, "Authentifizierter Ereignisclip wird geladen.");
+    entry.video.setAttribute("aria-label", L(`Vollständiger Ereignisclip ${valueText(clip.clip_id)} zur menschlichen Prüfung`, `Full event clip ${valueText(clip.clip_id)} for human review`));
+    setClipMessage(entry, L("Authentifizierter Ereignisclip wird geladen.", "Authenticated event clip is loading."));
 
     getBlob(clip).then((blob) => {
       if (
@@ -407,12 +408,12 @@ export function mountRoadWorkplace(container, apiClient) {
             // Some native media sources are not seekable even after metadata loads.
           }
         }
-        setClipMessage(entry, "Clip geladen. Native Videosteuerung ist verfügbar.");
+        setClipMessage(entry, L("Clip geladen. Native Videosteuerung ist verfügbar.", "Clip loaded. Native video controls are available."));
       };
       const onError = () => {
         if (destroyed || entry.clipGeneration !== generation) return;
         entry.failedIdentity = identity;
-        setClipMessage(entry, "Der Ereignisclip konnte nicht geöffnet werden.", true);
+        setClipMessage(entry, L("Der Ereignisclip konnte nicht geöffnet werden.", "The event clip could not be opened."), true);
       };
       entry.metadataListener = onMetadata;
       entry.errorListener = onError;
@@ -426,7 +427,7 @@ export function mountRoadWorkplace(container, apiClient) {
       entry.clipPending = false;
       entry.abortController = null;
       entry.failedIdentity = identity;
-      setClipMessage(entry, "Der authentifizierte Ereignisclip konnte nicht geladen werden.", true);
+      setClipMessage(entry, L("Der authentifizierte Ereignisclip konnte nicht geladen werden.", "The authenticated event clip could not be loaded."), true);
     });
   }
 
@@ -465,8 +466,8 @@ export function mountRoadWorkplace(container, apiClient) {
     confirmButton.disabled = destroyed || !bindingValid || !canConfirm || blocked || confirmOperation?.state === "succeeded";
     denyButton.disabled = destroyed || !bindingValid || !canReject || blocked || denyOperation?.state === "succeeded";
     denyButton.textContent = hasFirstReceipt
-      ? "Gefahr verneinen und Entwarnung an Behörden senden"
-      : "Gefahr verneinen";
+      ? L("Gefahr verneinen und Entwarnung an Behörden senden", "Deny hazard and send all-clear to authorities")
+      : L("Gefahr verneinen", "Deny hazard");
   }
 
   function setFeedback(message, visible = true) {
@@ -491,21 +492,21 @@ export function mountRoadWorkplace(container, apiClient) {
       return;
     }
     if (operation.state === "in_flight") {
-      setFeedback("Die Entscheidung wird übertragen. Weitere Entscheidungen bleiben bis zur Antwort gesperrt.");
+      setFeedback(L("Die Entscheidung wird übertragen. Weitere Entscheidungen bleiben bis zur Antwort gesperrt.", "The decision is being transmitted. Further decisions stay locked until the response arrives."));
     } else if (operation.state === "retryable") {
-      setFeedback("Die Antwort ist nicht angekommen. Es ist unklar, ob der Server den Antrag gespeichert hat. Du kannst exakt denselben Antrag mit derselben Kennung erneut senden.");
+      setFeedback(L("Die Antwort ist nicht angekommen. Es ist unklar, ob der Server den Antrag gespeichert hat. Du kannst exakt denselben Antrag mit derselben Kennung erneut senden.", "The response did not arrive. It is unclear whether the server stored the request. You can resend exactly the same request with the same identifier."));
       setHidden(retryDecisionButton, false);
       retryDecisionButton.disabled = false;
     } else if (operation.state === "conflict") {
-      setFeedback("Der Fall wurde inzwischen geändert. Bitte aktualisiere ihn und prüfe die Entscheidung erneut.");
+      setFeedback(L("Der Fall wurde inzwischen geändert. Bitte aktualisiere ihn und prüfe die Entscheidung erneut.", "The case has been changed in the meantime. Please refresh it and review the decision again."));
       setHidden(refreshCaseButton, false);
       refreshCaseButton.disabled = false;
     } else if (operation.state === "failed") {
-      setFeedback(operation.message || "Der Server hat die Entscheidung abgelehnt. Bitte aktualisiere den Fall und prüfe ihn erneut.");
+      setFeedback(operation.message || L("Der Server hat die Entscheidung abgelehnt. Bitte aktualisiere den Fall und prüfe ihn erneut.", "The server rejected the decision. Please refresh the case and review it again."));
       setHidden(refreshCaseButton, false);
       refreshCaseButton.disabled = false;
     } else {
-      setFeedback(operation.message || "Entscheidung vom Server angenommen.");
+      setFeedback(operation.message || L("Entscheidung vom Server angenommen.", "Decision accepted by the server."));
     }
     updateButtons();
   }
@@ -519,34 +520,34 @@ export function mountRoadWorkplace(container, apiClient) {
 
   function renderCaseDetails(fields) {
     caseDetails.replaceChildren();
-    setField(caseDetails, "Fall-ID", valueText(fields.caseId));
-    setField(caseDetails, "Fallversion", hasValue(fields.version) ? String(fields.version) : "Nicht angegeben");
-    setField(caseDetails, "Inhaltshash", valueText(fields.contentHash));
-    setField(caseDetails, "Fallphase", phaseLabel(fields.phase));
+    setField(caseDetails, L("Fall-ID", "Case ID"), valueText(fields.caseId));
+    setField(caseDetails, L("Fallversion", "Case version"), hasValue(fields.version) ? String(fields.version) : L("Nicht angegeben", "Not specified"));
+    setField(caseDetails, L("Inhaltshash", "Content hash"), valueText(fields.contentHash));
+    setField(caseDetails, L("Fallphase", "Case phase"), phaseLabel(fields.phase));
     if (fields.assessment && typeof fields.assessment === "object") {
-      setField(caseDetails, "Objektklasse", valueText(fields.assessment.object_class));
-      setField(caseDetails, "Gefahrenstatus", hazardLabel(fields.assessment.hazard));
+      setField(caseDetails, L("Objektklasse", "Object class"), valueText(fields.assessment.object_class));
+      setField(caseDetails, L("Gefahrenstatus", "Hazard status"), hazardLabel(fields.assessment.hazard));
       if (typeof fields.assessment.confidence === "number" && Number.isFinite(fields.assessment.confidence)) {
-        setField(caseDetails, "Vom Modell angegebene Sicherheit", String(fields.assessment.confidence));
+        setField(caseDetails, L("Vom Modell angegebene Sicherheit", "Confidence reported by the model"), String(fields.assessment.confidence));
       }
-      setField(caseDetails, "Zusammenfassung", valueText(fields.assessment.summary));
+      setField(caseDetails, L("Zusammenfassung", "Summary"), valueText(fields.assessment.summary));
       const evidenceIds = Array.isArray(fields.assessment.evidence_frame_ids) ? fields.assessment.evidence_frame_ids : [];
-      setField(caseDetails, "Belegte Frame-IDs", evidenceIds.length ? evidenceIds.map((item) => valueText(item)).join(", ") : "Keine Frame-IDs im Snapshot vorhanden");
+      setField(caseDetails, L("Belegte Frame-IDs", "Evidenced frame IDs"), evidenceIds.length ? evidenceIds.map((item) => valueText(item)).join(", ") : L("Keine Frame-IDs im Snapshot vorhanden", "No frame IDs in the snapshot"));
     } else if (hasValue(fields.modelError)) {
-      setField(caseDetails, "Modellprüfung", ERROR_LABELS[fields.modelError] || `Modellfehler (${valueText(fields.modelError)}).`);
+      setField(caseDetails, L("Modellprüfung", "Model review"), ERROR_LABELS[fields.modelError] || L(`Modellfehler (${valueText(fields.modelError)}).`, `Model error (${valueText(fields.modelError)}).`));
     }
     if (fields.clip && typeof fields.clip === "object") {
-      setField(caseDetails, "Clip-ID", valueText(fields.clip.clip_id));
-      setField(caseDetails, "Clipversion", hasValue(fields.clip.version) ? `v${valueText(fields.clip.version)}` : "Nicht angegeben");
-      setField(caseDetails, "Clip-Hash", valueText(fields.clip.sha256));
+      setField(caseDetails, L("Clip-ID", "Clip ID"), valueText(fields.clip.clip_id));
+      setField(caseDetails, L("Clipversion", "Clip version"), hasValue(fields.clip.version) ? `v${valueText(fields.clip.version)}` : L("Nicht angegeben", "Not specified"));
+      setField(caseDetails, L("Clip-Hash", "Clip hash"), valueText(fields.clip.sha256));
     }
     if (fields.firstReceipt && typeof fields.firstReceipt === "object") {
-      setField(caseDetails, "Erstmeldung", valueText(fields.firstReceipt.receipt_id));
-      setField(caseDetails, "Meldungsgrund", REASON_LABELS[fields.firstReceipt.reason] || "Meldungsgrund nicht übersetzt");
+      setField(caseDetails, L("Erstmeldung", "First report"), valueText(fields.firstReceipt.receipt_id));
+      setField(caseDetails, L("Meldungsgrund", "Report reason"), REASON_LABELS[fields.firstReceipt.reason] || L("Meldungsgrund nicht übersetzt", "Report reason not translated"));
     }
     if (fields.correctionReceipt && typeof fields.correctionReceipt === "object") {
-      setField(caseDetails, "Entwarnung", valueText(fields.correctionReceipt.receipt_id));
-      setField(caseDetails, "Verknüpft mit Erstmeldung", valueText(fields.correctionReceipt.original_receipt_id));
+      setField(caseDetails, L("Entwarnung", "All-clear"), valueText(fields.correctionReceipt.receipt_id));
+      setField(caseDetails, L("Verknüpft mit Erstmeldung", "Linked to first report"), valueText(fields.correctionReceipt.original_receipt_id));
     }
   }
 
@@ -574,11 +575,11 @@ export function mountRoadWorkplace(container, apiClient) {
       setHidden(caseContainer, true);
       setHidden(emptyWorkplaceState, false);
       phaseAnnouncement = "";
-      caseBadge.textContent = "Kein offener Fall";
-      notification.textContent = "Noch keine Benachrichtigung für eine menschliche Prüfung.";
-      phaseBadge.textContent = "Fallstatus nicht angegeben";
+      caseBadge.textContent = L("Kein offener Fall", "No open case");
+      notification.textContent = L("Noch keine Benachrichtigung für eine menschliche Prüfung.", "No notification for a human review yet.");
+      phaseBadge.textContent = L("Fallstatus nicht angegeben", "Case status not specified");
       countdownClock.textContent = "-- s";
-      deadline.textContent = "Frist: im Snapshot nicht angegeben";
+      deadline.textContent = L("Frist: im Snapshot nicht angegeben", "Deadline: not specified in the snapshot");
       caseDetails.replaceChildren();
       setFeedback("", false);
       clearClip(activeClip);
@@ -610,16 +611,16 @@ export function mountRoadWorkplace(container, apiClient) {
     setHidden(emptyWorkplaceState, true);
     const translatedPhase = phaseLabel(fields.phase);
     phaseBadge.textContent = translatedPhase;
-    caseBadge.textContent = `Fall ${valueText(fields.caseId)} · ${translatedPhase}`;
+    caseBadge.textContent = L(`Fall ${valueText(fields.caseId)} · ${translatedPhase}`, `Case ${valueText(fields.caseId)} · ${translatedPhase}`);
 
     if (fields.phase === "human_review") {
-      announcePhase("Benachrichtigung: Ein Fall wartet auf deine menschliche Prüfung.");
+      announcePhase(L("Benachrichtigung: Ein Fall wartet auf deine menschliche Prüfung.", "Notification: a case is waiting for your human review."));
     } else if (fields.phase === "no_response") {
-      announcePhase("Benachrichtigung: Die serverseitige Frist endete ohne Antwort; eine Erstmeldung liegt vor.");
+      announcePhase(L("Benachrichtigung: Die serverseitige Frist endete ohne Antwort; eine Erstmeldung liegt vor.", "Notification: the server-side deadline ended without an answer; a first report exists."));
     } else if (fields.phase === "reported") {
-      announcePhase("Benachrichtigung: Die Erstmeldung wurde an den simulierten Empfänger gesendet.");
+      announcePhase(L("Benachrichtigung: Die Erstmeldung wurde an den simulierten Empfänger gesendet.", "Notification: the first report was sent to the simulated recipient."));
     } else {
-      announcePhase(`Fallphase: ${translatedPhase}`);
+      announcePhase(L(`Fallphase: ${translatedPhase}`, `Case phase: ${translatedPhase}`));
     }
 
     const remaining = fields.remainingSeconds;
@@ -627,8 +628,8 @@ export function mountRoadWorkplace(container, apiClient) {
     remainingAtPerformance = performance.now();
     updateCountdown();
     deadline.textContent = hasValue(fields.deadlineAt)
-      ? `Serverfrist endet: ${valueText(fields.deadlineAt)}`
-      : "Serverfrist: im Snapshot nicht angegeben";
+      ? L(`Serverfrist endet: ${valueText(fields.deadlineAt)}`, `Server deadline ends: ${valueText(fields.deadlineAt)}`)
+      : L("Serverfrist: im Snapshot nicht angegeben", "Server deadline: not specified in the snapshot");
     renderCaseDetails(fields);
     requestClip(activeClip, fields.clip, {
       case_id: fields.caseId,
@@ -651,7 +652,7 @@ export function mountRoadWorkplace(container, apiClient) {
       operation.errorCode = hasValue(error?.code) ? valueText(error.code) : null;
     } else {
       operation.state = "succeeded";
-      operation.message = "Entscheidung vom Server angenommen.";
+      operation.message = L("Entscheidung vom Server angenommen.", "Decision accepted by the server.");
     }
   }
 
@@ -718,7 +719,7 @@ export function mountRoadWorkplace(container, apiClient) {
     try {
       key = idempotencyKey();
     } catch {
-      setFeedback("Für diese Entscheidung konnte keine sichere Kennung erstellt werden. Bitte lade den Fall erneut.");
+      setFeedback(L("Für diese Entscheidung konnte keine sichere Kennung erstellt werden. Bitte lade den Fall erneut.", "No secure identifier could be created for this decision. Please reload the case."));
       setHidden(refreshCaseButton, false);
       return;
     }
@@ -750,7 +751,7 @@ export function mountRoadWorkplace(container, apiClient) {
     const generation = activeViewGeneration;
     const requestGeneration = ++refreshGeneration;
     refreshCaseButton.disabled = true;
-    setFeedback("Der aktuelle Fall wird vom Server neu geladen.");
+    setFeedback(L("Der aktuelle Fall wird vom Server neu geladen.", "The current case is being reloaded from the server."));
     try {
       const fresh = await apiClient.request("GET", `/road/cases/${encodeURIComponent(caseId)}`);
       if (
@@ -775,13 +776,13 @@ export function mountRoadWorkplace(container, apiClient) {
     } catch {
       if (!destroyed && activeCaseId === caseId) {
         refreshCaseButton.disabled = false;
-        setFeedback("Der Fall konnte nicht aktualisiert werden. Bitte versuche es erneut.");
+        setFeedback(L("Der Fall konnte nicht aktualisiert werden. Bitte versuche es erneut.", "The case could not be refreshed. Please try again."));
       }
     }
   }
 
   function reasonText(record) {
-    return REASON_LABELS[record.reason] || "Meldungsgrund im Snapshot nicht übersetzt";
+    return REASON_LABELS[record.reason] || L("Meldungsgrund im Snapshot nicht übersetzt", "Report reason not translated in the snapshot");
   }
 
   function buildInboxEntry(key, record) {
@@ -803,13 +804,13 @@ export function mountRoadWorkplace(container, apiClient) {
     video.playsInline = true;
     video.preload = "metadata";
     clipShell.appendChild(video);
-    const clipStatus = element("p", "road-model-clip-status", "Kein Clip in der Meldung vorhanden.");
+    const clipStatus = element("p", "road-model-clip-status", L("Kein Clip in der Meldung vorhanden.", "No clip in the report."));
     clipStatus.setAttribute("role", "status");
-    const retryButton = element("button", "road-btn road-btn-secondary", "Clip erneut laden");
+    const retryButton = element("button", "road-btn road-btn-secondary", L("Clip erneut laden", "Reload clip"));
     retryButton.type = "button";
     retryButton.dataset.roadAction = "retry-inbox-clip";
     setHidden(retryButton, true);
-    const openCaseButton = element("button", "road-btn road-btn-primary", "Fall öffnen");
+    const openCaseButton = element("button", "road-btn road-btn-primary", L("Fall öffnen", "Open case"));
     openCaseButton.type = "button";
     openCaseButton.dataset.roadAction = "open-case";
     const clipEntry = {
@@ -867,25 +868,25 @@ export function mountRoadWorkplace(container, apiClient) {
     entry.card.dataset.kind = correction ? "correction" : "first_report";
     entry.card.classList.toggle("correction", correction);
     entry.title.textContent = correction
-      ? `Entwarnung zu Fall ${valueText(record.case_id)}`
-      : `Erstmeldung zu Fall ${valueText(record.case_id)}`;
-    entry.receipt.textContent = hasValue(record.receipt_id) ? `Meldungs-ID: ${valueText(record.receipt_id)}` : "Meldung";
+      ? L(`Entwarnung zu Fall ${valueText(record.case_id)}`, `All-clear for case ${valueText(record.case_id)}`)
+      : L(`Erstmeldung zu Fall ${valueText(record.case_id)}`, `First report for case ${valueText(record.case_id)}`);
+    entry.receipt.textContent = hasValue(record.receipt_id) ? L(`Meldungs-ID: ${valueText(record.receipt_id)}`, `Report ID: ${valueText(record.receipt_id)}`) : L("Meldung", "Report");
     entry.reason.textContent = correction
-      ? "Grund: Der Fall wurde nach der Erstmeldung menschlich korrigiert."
-      : `Grund: ${reasonText(record)}`;
+      ? L("Grund: Der Fall wurde nach der Erstmeldung menschlich korrigiert.", "Reason: the case was corrected by a human after the first report.")
+      : L(`Grund: ${reasonText(record)}`, `Reason: ${reasonText(record)}`);
     entry.receiptLink.textContent = correction && hasValue(record.original_receipt_id)
-      ? `Verknüpft mit ursprünglicher Erstmeldung ${valueText(record.original_receipt_id)}.`
+      ? L(`Verknüpft mit ursprünglicher Erstmeldung ${valueText(record.original_receipt_id)}.`, `Linked to the original first report ${valueText(record.original_receipt_id)}.`)
       : "";
     setHidden(entry.receiptLink, !(correction && hasValue(record.original_receipt_id)));
-    entry.hash.textContent = hasValue(record.content_hash) ? `Gebundener Fallinhalt: ${valueText(record.content_hash)}` : "Fallinhaltshash nicht angegeben.";
+    entry.hash.textContent = hasValue(record.content_hash) ? L(`Gebundener Fallinhalt: ${valueText(record.content_hash)}`, `Bound case content: ${valueText(record.content_hash)}`) : L("Fallinhaltshash nicht angegeben.", "Case content hash not specified.");
     entry.assessment.replaceChildren();
     if (record.assessment && typeof record.assessment === "object") {
-      setField(entry.assessment, "Objektklasse", valueText(record.assessment.object_class));
-      setField(entry.assessment, "Gefahrenstatus", hazardLabel(record.assessment.hazard));
+      setField(entry.assessment, L("Objektklasse", "Object class"), valueText(record.assessment.object_class));
+      setField(entry.assessment, L("Gefahrenstatus", "Hazard status"), hazardLabel(record.assessment.hazard));
       if (typeof record.assessment.confidence === "number" && Number.isFinite(record.assessment.confidence)) {
-        setField(entry.assessment, "Vom Modell angegebene Sicherheit", String(record.assessment.confidence));
+        setField(entry.assessment, L("Vom Modell angegebene Sicherheit", "Confidence reported by the model"), String(record.assessment.confidence));
       }
-      setField(entry.assessment, "Zusammenfassung", valueText(record.assessment.summary));
+      setField(entry.assessment, L("Zusammenfassung", "Summary"), valueText(record.assessment.summary));
     }
 
     const isFirstReport = record.kind === "first_report" && !correction;
@@ -896,7 +897,7 @@ export function mountRoadWorkplace(container, apiClient) {
     entry.openCaseButton.disabled = !isFirstReport || !hasValue(record.case_id);
     entry.openCaseButton.dataset.caseId = isFirstReport ? valueText(record.case_id, "") : "";
     if (isFirstReport) requestClip(entry.clipEntry, record.clip, record);
-    else clearClip(entry.clipEntry, "Für diese Korrektur gibt es keinen eigenen Clip.");
+    else clearClip(entry.clipEntry, L("Für diese Korrektur gibt es keinen eigenen Clip.", "This correction has no clip of its own."));
   }
 
   function updateInbox(inbox) {

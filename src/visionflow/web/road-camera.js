@@ -1,5 +1,7 @@
 "use strict";
 
+const L = (de, en) => (window.VisionFlowI18n ? window.VisionFlowI18n.L(de, en) : en);
+
 let mountSequence = 0;
 
 const CAMERA_STANDBY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360">
@@ -18,8 +20,8 @@ const CAMERA_STANDBY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
   <line x1="320" y1="130" x2="320" y2="360" stroke="#f59e0b" stroke-width="3" stroke-dasharray="16,12" opacity="0.6"/>
   <circle cx="320" cy="115" r="30" fill="#131b2e" stroke="#38bdf8" stroke-width="2" />
   <path d="M310,107 L328,107 L328,123 L310,123 Z M328,111 L336,107 L336,123 L328,119 Z" fill="#38bdf8"/>
-  <text x="320" y="195" fill="#f8fafc" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="700" text-anchor="middle">Kamera im Bereitschaftsmodus</text>
-  <text x="320" y="222" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="12" text-anchor="middle">Sitzung starten oder ⚡ 1-Klick Demo aktivieren</text>
+  <text x="320" y="195" fill="#f8fafc" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="700" text-anchor="middle">${L("Kamera im Bereitschaftsmodus", "Camera in standby mode")}</text>
+  <text x="320" y="222" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="12" text-anchor="middle">${L("Kamera einschalten, um die Straße zu beobachten", "Turn on the camera to watch the road")}</text>
 </svg>`;
 
 let standbyBlobUrl = null;
@@ -34,23 +36,23 @@ const ACTIVE_RUN_STATES = new Set([
   "queued", "running", "observing", "waiting_for_input", "waiting_for_approval",
 ]);
 const RUN_LABELS = {
-  queued: "Wartet",
-  running: "Läuft",
-  observing: "Beobachtet",
-  waiting_for_input: "Eingabe erforderlich",
-  waiting_for_approval: "Freigabe erforderlich",
-  completed: "Abgeschlossen",
-  failed: "Fehlgeschlagen",
-  cancelled: "Abgebrochen",
+  queued: L("Wartet", "Waiting"),
+  running: L("Läuft", "Running"),
+  observing: L("Beobachtet", "Observing"),
+  waiting_for_input: L("Eingabe erforderlich", "Input required"),
+  waiting_for_approval: L("Freigabe erforderlich", "Approval required"),
+  completed: L("Abgeschlossen", "Completed"),
+  failed: L("Fehlgeschlagen", "Failed"),
+  cancelled: L("Abgebrochen", "Cancelled"),
 };
 const FIXTURE_PROFILE_LABELS = {
-  pending: "Offline-Testantwort · menschliche Prüfung (Sicherheit 0,80)",
-  high: "Offline-Testantwort · hohe Sicherheit (0,99)",
-  bird: "Offline-Testantwort · Vogel, keine Gefahr (0,99)",
-  leaf: "Offline-Testantwort · Blatt, keine Gefahr (0,99)",
-  followup: "Offline-Testantwort · Folgebeobachtung",
-  unclear: "Offline-Testantwort · unklar",
-  error: "Offline-Testantwort · Modellfehler",
+  pending: L("Offline-Testantwort · menschliche Prüfung (Sicherheit 0,80)", "Offline test answer · human review (confidence 0.80)"),
+  high: L("Offline-Testantwort · hohe Sicherheit (0,99)", "Offline test answer · high confidence (0.99)"),
+  bird: L("Offline-Testantwort · Vogel, keine Gefahr (0,99)", "Offline test answer · bird, no hazard (0.99)"),
+  leaf: L("Offline-Testantwort · Blatt, keine Gefahr (0,99)", "Offline test answer · leaf, no hazard (0.99)"),
+  followup: L("Offline-Testantwort · Folgebeobachtung", "Offline test answer · follow-up observation"),
+  unclear: L("Offline-Testantwort · unklar", "Offline test answer · unclear"),
+  error: L("Offline-Testantwort · Modellfehler", "Offline test answer · model error"),
 };
 const LOCKED_CASE_PHASES = new Set(["model_review", "human_review", "no_response"]);
 
@@ -69,7 +71,7 @@ function button(text, className = "button secondary") {
 
 function formatNumber(value, digits = 1) {
   return typeof value === "number" && Number.isFinite(value)
-    ? value.toLocaleString("de-DE", { maximumFractionDigits: digits })
+    ? value.toLocaleString(L("de-DE", "en-US"), { maximumFractionDigits: digits })
     : "–";
 }
 
@@ -91,7 +93,6 @@ export function mountRoadCamera(container, apiClient) {
   let sourceGeneration = 0;
   let viewGeneration = 0;
   let clipSelectionGeneration = 0;
-  let locked = false;
   let operationQueue = Promise.resolve();
   const queuedOperations = new Map();
   const clips = new Map();
@@ -117,130 +118,130 @@ export function mountRoadCamera(container, apiClient) {
   root.setAttribute("aria-labelledby", `road-camera-title-${instanceId}`);
 
   const heading = element("div", "road-camera__heading");
-  const title = element("h2", "", "Straßenkamera-Demo");
+  const title = element("h2", "", L("Straßenkamera-Demo", "Road camera demo"));
   title.id = `road-camera-title-${instanceId}`;
   heading.append(title);
   heading.append(element(
     "p",
     "road-camera__intro",
-    "Eine lokale synthetische Verkehrsszene liefert echte Bildpixel für die freigegebenen OpenCV-Werkzeuge.",
+    L("Eine lokale synthetische Verkehrsszene liefert echte Bildpixel für die freigegebenen OpenCV-Werkzeuge.", "A local synthetic traffic scene provides real image pixels for the approved OpenCV tools."),
   ));
 
   const caseOptions = element("div", "road-camera__case-options");
-  const modeLabel = element("label", "", "Modellmodus");
+  const modeLabel = element("label", "", L("Modellmodus", "Model mode"));
   modeLabel.htmlFor = "road-model-mode";
   const modeSelect = element("select", "road-camera__mode-select");
   modeSelect.id = "road-model-mode";
-  const profileLabel = element("label", "", "Offline-Testantwort");
+  const profileLabel = element("label", "", L("Offline-Testantwort", "Offline test answer"));
   profileLabel.htmlFor = "road-fixture-profile";
   const profileSelect = element("select", "road-camera__profile-select");
   profileSelect.id = "road-fixture-profile";
   caseOptions.append(modeLabel, modeSelect, profileLabel, profileSelect);
 
   const toolbar = element("div", "road-camera__toolbar");
-  const quickDemoButton = button("⚡ 1-Klick Demo (Falschfahrer)", "button road-quick-demo-btn");
+  const quickDemoButton = button(L("⚡ 1-Klick Demo (Falschfahrer)", "⚡ 1-click demo (wrong-way driver)"), "button road-quick-demo-btn");
   quickDemoButton.id = "road-camera-quick-demo";
-  quickDemoButton.title = "Startet automatisch Quelle & Analyse und blendet nach 3 Startframes den Falschfahrer ein.";
-  const createButton = button("Neue Sitzung starten", "button primary");
+  quickDemoButton.title = L("Startet automatisch Quelle & Analyse und blendet nach 3 Startframes den Falschfahrer ein.", "Automatically starts the source and analysis and injects the wrong-way driver after 3 start frames.");
+  const createButton = button(L("Neue Sitzung starten", "Start new session"), "button primary");
   createButton.id = "road-camera-create";
-  createButton.setAttribute("aria-label", "Neue Straßenkamera-Sitzung starten");
+  createButton.setAttribute("aria-label", L("Neue Straßenkamera-Sitzung starten", "Start new road camera session"));
   createButton.disabled = true;
-  const stopButton = button("Aufnahme beenden", "button danger");
+  const stopButton = button(L("Aufnahme beenden", "End recording"), "button danger");
   stopButton.id = "road-camera-stop";
-  const resetButton = button("Zurücksetzen", "button secondary");
+  const resetButton = button(L("Zurücksetzen", "Reset"), "button secondary");
   resetButton.id = "road-camera-reset";
   stopButton.disabled = true;
   resetButton.disabled = true;
   toolbar.append(quickDemoButton, createButton, stopButton, resetButton);
 
-  const status = element("p", "road-camera__status", "Noch keine Sitzung gestartet.");
+  const status = element("p", "road-camera__status", L("Noch keine Sitzung gestartet.", "No session started yet."));
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
 
-  const sourceSummary = element("p", "road-camera__source", "Quelle: –");
+  const sourceSummary = element("p", "road-camera__source", L("Quelle: –", "Source: –"));
 
   const runPanel = element("section", "road-camera__run");
-  runPanel.append(element("h3", "", "Analyse und Controller-Trace"));
+  runPanel.append(element("h3", "", L("Analyse und Controller-Trace", "Analysis and controller trace")));
   const runToolbar = element("div", "road-camera__run-toolbar");
-  const runSummary = element("p", "road-camera__run-summary", "Noch kein Analyse-Lauf gestartet.");
+  const runSummary = element("p", "road-camera__run-summary", L("Noch kein Analyse-Lauf gestartet.", "No analysis run started yet."));
   runSummary.setAttribute("role", "status");
   runSummary.setAttribute("aria-live", "polite");
-  const cancelRunButton = button("Analyse abbrechen", "button danger");
+  const cancelRunButton = button(L("Analyse abbrechen", "Cancel analysis"), "button danger");
   cancelRunButton.id = "road-camera-cancel";
   cancelRunButton.disabled = true;
   runToolbar.append(runSummary, cancelRunButton);
   const findings = element("div", "road-camera__findings");
-  findings.append(element("p", "road-camera__empty", "Noch keine Analysebefunde."));
+  findings.append(element("p", "road-camera__empty", L("Noch keine Analysebefunde.", "No analysis findings yet.")));
   const traceDetails = element("details");
-  traceDetails.append(element("summary", "", "Gespeicherte Controller-Ereignisse"));
-  const traceContent = element("pre", "road-camera__trace", "Noch kein Trace vorhanden.");
+  traceDetails.append(element("summary", "", L("Gespeicherte Controller-Ereignisse", "Stored controller events")));
+  const traceContent = element("pre", "road-camera__trace", L("Noch kein Trace vorhanden.", "No trace available yet."));
   traceDetails.append(traceContent);
   runPanel.append(runToolbar, findings, traceDetails);
 
   const content = element("div", "road-camera__content");
 
   const livePanel = element("section", "road-camera__live");
-  const liveTitle = element("h3", "", "Livebild");
+  const liveTitle = element("h3", "", L("Livebild", "Live image"));
   const viewport = element("div", "road-camera__viewport");
   const hud = element("div", "road-camera__hud");
   const recIndicator = element("span", "road-camera__rec-indicator");
   const recDot = element("span", "road-camera__rec-dot road-camera__rec-dot--standby");
   const recText = element("span", "", " STANDBY");
   recIndicator.append(recDot, recText);
-  const camInfo = element("span", "road-camera__cam-info", "CAM-01 · B4 NORD");
+  const camInfo = element("span", "road-camera__cam-info", L("CAM-01 · B4 NORD", "CAM-01 · B4 NORTH"));
   hud.append(recIndicator, camInfo);
   const frame = element("img", "road-camera__frame");
-  frame.alt = "Aktuelles Bild der synthetischen Straßenkamera";
+  frame.alt = L("Aktuelles Bild der synthetischen Straßenkamera", "Current image of the synthetic road camera");
   frame.decoding = "async";
   frame.src = getStandbyUrl();
   viewport.append(frame, hud);
-  const frameMeta = element("p", "road-camera__frame-meta", "Bereit. Starte eine Sitzung oder nutze die ⚡ 1-Klick Demo.");
+  const frameMeta = element("p", "road-camera__frame-meta", L("Bereit. Starte eine Sitzung oder nutze die ⚡ 1-Klick Demo.", "Ready. Start a session or use the ⚡ 1-click demo."));
   livePanel.append(liveTitle, viewport, frameMeta);
 
   const eventPanel = element("section", "road-camera__events");
-  eventPanel.append(element("h3", "", "Szenarioereignis"));
-  const eventLabel = element("label", "", "Ereignis für die Szene");
+  eventPanel.append(element("h3", "", L("Szenarioereignis", "Scenario event")));
+  const eventLabel = element("label", "", L("Ereignis für die Szene", "Event for the scene"));
   eventLabel.htmlFor = "road-camera-event";
   const eventSelect = element("select", "road-camera__event-select");
   eventSelect.id = "road-camera-event";
   for (const [value, label] of [
-    ["wrong_way", "Falschfahrer"],
-    ["bird", "Vogel"],
-    ["leaf", "Blatt"],
+    ["wrong_way", L("Falschfahrer", "Wrong-way driver")],
+    ["bird", L("Vogel", "Bird")],
+    ["leaf", L("Blatt", "Leaf")],
   ]) {
     const option = element("option", "", label);
     option.value = value;
     eventSelect.append(option);
   }
-  const injectButton = button("Ereignis einblenden", "button secondary");
+  const injectButton = button(L("Ereignis einblenden", "Inject event"), "button secondary");
   injectButton.id = "road-camera-inject";
   const eventHint = element(
     "p",
     "road-camera__hint",
-    "Das Ereignis verändert nur die Szene. Ein positiver Analysebefund wird ausschließlich aus tatsächlich analysierten Frames übernommen.",
+    L("Das Ereignis verändert nur die Szene. Ein positiver Analysebefund wird ausschließlich aus tatsächlich analysierten Frames übernommen.", "The event only changes the scene. A positive analysis finding is taken solely from frames that were actually analysed."),
   );
   eventPanel.append(eventLabel, eventSelect, injectButton, eventHint);
 
   const recordingPanel = element("section", "road-camera__recording");
-  recordingPanel.append(element("h3", "", "Aufzeichnung"));
-  const recordingSummary = element("p", "road-camera__recording-summary", "Warte auf Aufnahmedaten.");
+  recordingPanel.append(element("h3", "", L("Aufzeichnung", "Recording")));
+  const recordingSummary = element("p", "road-camera__recording-summary", L("Warte auf Aufnahmedaten.", "Waiting for recording data."));
   recordingSummary.setAttribute("aria-live", "off");
   const clipList = element("div", "road-camera__clip-list");
-  clipList.setAttribute("aria-label", "Gespeicherte Clips");
+  clipList.setAttribute("aria-label", L("Gespeicherte Clips", "Stored clips"));
   recordingPanel.append(recordingSummary, clipList);
 
   const playerPanel = element("section", "road-camera__player-panel");
-  playerPanel.append(element("h3", "", "Gespeicherter Clip"));
-  const playerEmpty = element("div", "road-camera__player-empty", "Noch kein Clip geladen. Wähle nach Beenden der Aufnahme einen Clip aus der Liste.");
+  playerPanel.append(element("h3", "", L("Gespeicherter Clip", "Stored clip")));
+  const playerEmpty = element("div", "road-camera__player-empty", L("Noch kein Clip geladen. Wähle nach Beenden der Aufnahme einen Clip aus der Liste.", "No clip loaded yet. After ending the recording, choose a clip from the list."));
   const player = element("video", "road-camera__player");
   player.id = "road-camera-player";
   player.controls = true;
   player.playsInline = true;
   player.preload = "metadata";
-  player.setAttribute("aria-label", "Gespeicherte Straßenkamera-Aufzeichnung");
+  player.setAttribute("aria-label", L("Gespeicherte Straßenkamera-Aufzeichnung", "Stored road camera recording"));
   player.hidden = true;
   playerPanel.append(playerEmpty, player);
-  const playerCaption = element("p", "road-camera__player-caption", "Wähle einen gespeicherten Clip aus.");
+  const playerCaption = element("p", "road-camera__player-caption", L("Wähle einen gespeicherten Clip aus.", "Choose a stored clip."));
   playerPanel.append(playerCaption);
 
   const secondaryGrid = element("div", "road-camera__secondary");
@@ -335,14 +336,14 @@ export function mountRoadCamera(container, apiClient) {
     clipListSignature = signature;
     clipList.replaceChildren();
     if (ordered.length === 0) {
-      clipList.append(element("p", "road-camera__empty", "Noch kein gespeicherter Clip."));
+      clipList.append(element("p", "road-camera__empty", L("Noch kein gespeicherter Clip.", "No stored clip yet.")));
       return;
     }
     for (const clip of ordered) {
       const duration = Math.max(0, Number(clip.end_seconds) - Number(clip.start_seconds));
       const sourceShort = String(clip.source_id || "").slice(-8);
       const item = button(
-        `Quelle …${sourceShort} · Version ${formatNumber(clip.version, 0)} · ${formatNumber(duration)} Sek.`,
+        L(`Quelle …${sourceShort} · Version ${formatNumber(clip.version, 0)} · ${formatNumber(duration)} Sek.`, `Source …${sourceShort} · version ${formatNumber(clip.version, 0)} · ${formatNumber(duration)} s`),
         "button secondary road-camera__clip-button",
       );
       item.dataset.clipId = clip.clip_id;
@@ -392,21 +393,21 @@ export function mountRoadCamera(container, apiClient) {
         const frames = formatNumber(payload.frame_count, 0);
         const seconds = formatNumber(payload.end_seconds, 2);
         const compressed = formatNumber(payload.compressed_bytes, 0);
-        const state = payload.closed ? "Quelle beendet" : "Aufzeichnung läuft";
+        const state = payload.closed ? L("Quelle beendet", "Source ended") : L("Aufzeichnung läuft", "Recording in progress");
         recordingSummary.textContent =
-          `${state} · ${frames} Frames · ${fps} Bilder/Sek. gemessen · ${seconds} Sek. · ${compressed} Byte`;
+          L(`${state} · ${frames} Frames · ${fps} Bilder/Sek. gemessen · ${seconds} Sek. · ${compressed} Byte`, `${state} · ${frames} frames · ${fps} frames/s measured · ${seconds} s · ${compressed} bytes`);
         if (payload.closed) {
           sourceOpen = false;
           clearFrameTimer();
           updateEventControls();
           setStatus(payload.error_code
-            ? "Quelle mit einem technischen Fehler beendet."
-            : "Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.");
+            ? L("Quelle mit einem technischen Fehler beendet.", "Source ended with a technical error.")
+            : L("Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.", "Source ended; the last real camera image stays visible."));
         }
       }
     } catch (error) {
       if (source === sourceId && sourceGeneration === generation && viewGeneration === view) {
-        setStatus(error.message || "Aufnahmedaten konnten nicht geladen werden.", true);
+        setStatus(error.message || L("Aufnahmedaten konnten nicht geladen werden.", "Recording data could not be loaded."), true);
       }
     } finally {
       if (!destroyed && source === sourceId && sourceGeneration === generation &&
@@ -433,7 +434,7 @@ export function mountRoadCamera(container, apiClient) {
       if (typeof payload.image_base64 === "string" && payload.image_base64) {
         setFrameImage(payload.image_base64);
         frameMeta.textContent =
-          `Frame ${String(payload.frame_id || "–")} · Quellenzeit ${formatNumber(payload.timestamp_seconds, 2)} Sek.`;
+          L(`Frame ${String(payload.frame_id || "–")} · Quellenzeit ${formatNumber(payload.timestamp_seconds, 2)} Sek.`, `Frame ${String(payload.frame_id || "–")} · source time ${formatNumber(payload.timestamp_seconds, 2)} s`);
         recText.textContent = " LIVE / REC";
         recDot.classList.remove("road-camera__rec-dot--standby");
       }
@@ -444,14 +445,14 @@ export function mountRoadCamera(container, apiClient) {
         recText.textContent = " STANDBY";
         recDot.classList.add("road-camera__rec-dot--standby");
         setStatus(payload.error_code
-          ? "Quelle mit einem technischen Fehler beendet."
-          : "Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.");
+          ? L("Quelle mit einem technischen Fehler beendet.", "Source ended with a technical error.")
+          : L("Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.", "Source ended; the last real camera image stays visible."));
         refreshRecording(source, generation, view);
         return;
       }
     } catch (error) {
       if (current(source, generation, view)) {
-        setStatus(error.message || "Das aktuelle Kamerabild konnte nicht geladen werden.", true);
+        setStatus(error.message || L("Das aktuelle Kamerabild konnte nicht geladen werden.", "The current camera image could not be loaded."), true);
       }
     }
     if (current(source, generation, view) && sourceOpen) {
@@ -472,14 +473,14 @@ export function mountRoadCamera(container, apiClient) {
 
   function updateSourceControls() {
     const hasOpenSource = Boolean(sourceId && sourceOpen);
-    quickDemoButton.disabled = !roadAvailable || locked || destroyed;
-    createButton.disabled = !roadAvailable || locked || destroyed;
+    quickDemoButton.disabled = !roadAvailable || destroyed;
+    createButton.disabled = !roadAvailable || destroyed;
     stopButton.disabled = !sourceId || destroyed;
-    stopButton.textContent = hasOpenSource ? "Aufnahme beenden" : "Aufnahme speichern";
+    stopButton.textContent = hasOpenSource ? L("Aufnahme beenden", "End recording") : L("Aufnahme speichern", "Save recording");
     resetButton.disabled = !sourceId || destroyed;
-    modeSelect.disabled = !roadAvailable || hasOpenSource || locked || destroyed;
+    modeSelect.disabled = !roadAvailable || hasOpenSource || destroyed;
     profileSelect.disabled =
-      modeSelect.value !== "fixture" || hasOpenSource || locked || destroyed;
+      modeSelect.value !== "fixture" || hasOpenSource || destroyed;
     profileLabel.hidden = modeSelect.value !== "fixture";
     profileSelect.hidden = modeSelect.value !== "fixture";
   }
@@ -496,14 +497,14 @@ export function mountRoadCamera(container, apiClient) {
       modes.includes("gemini_video");
     modeSelect.replaceChildren();
     if (fixtureAllowed) {
-      const fixture = element("option", "", "Offline-Testantwort");
+      const fixture = element("option", "", L("Offline-Testantwort", "Offline test answer"));
       fixture.value = "fixture";
       modeSelect.append(fixture);
     }
     const native = element(
       "option",
       "",
-      nativeAllowed ? "Gemini Video" : "Gemini Video (nicht freigeschaltet)",
+      nativeAllowed ? "Gemini Video" : L("Gemini Video (nicht freigeschaltet)", "Gemini Video (not enabled)"),
     );
     native.value = "gemini_video";
     native.disabled = !nativeAllowed;
@@ -529,22 +530,20 @@ export function mountRoadCamera(container, apiClient) {
   }
 
   function updateEventControls() {
-    const canInject = sourceOpen && warmedUp && runActive && !locked && !destroyed;
+    const canInject = sourceOpen && warmedUp && runActive && !destroyed;
     eventSelect.disabled = !canInject;
     injectButton.disabled = !canInject;
     cancelRunButton.disabled = !runActive || destroyed;
-    if (locked) {
-      eventHint.textContent = "Während einer Prüfung sind neue Szenarioereignisse gesperrt. Stoppen und Zurücksetzen bleiben verfügbar.";
-    } else if (!roadAvailable) {
-      eventHint.textContent = "Die Straßenkamera ist nicht verfügbar. Prüfe die FFmpeg-Voraussetzung.";
+    if (!roadAvailable) {
+      eventHint.textContent = L("Die Straßenkamera ist nicht verfügbar. Prüfe die FFmpeg-Voraussetzung.", "The road camera is not available. Check the FFmpeg requirement.");
     } else if (!sourceOpen) {
-      eventHint.textContent = "Starte zuerst eine Quelle.";
+      eventHint.textContent = L("Starte zuerst eine Quelle.", "Start a source first.");
     } else if (!warmedUp) {
-      eventHint.textContent = "Ereignisse werden erst freigegeben, wenn drei echte Startframes analysiert wurden.";
+      eventHint.textContent = L("Ereignisse werden erst freigegeben, wenn drei echte Startframes analysiert wurden.", "Events are only enabled once three real start frames have been analysed.");
     } else if (!runActive) {
-      eventHint.textContent = "Der Analyse-Lauf ist beendet. Starte eine neue Sitzung für eine weitere Prüfung.";
+      eventHint.textContent = L("Der Analyse-Lauf ist beendet. Starte eine neue Sitzung für eine weitere Prüfung.", "The analysis run has ended. Start a new session for another check.");
     } else {
-      eventHint.textContent = "Das Ereignis verändert nur die Szene. Ein positiver Befund entsteht ausschließlich aus analysierten Frames.";
+      eventHint.textContent = L("Das Ereignis verändert nur die Szene. Ein positiver Befund entsteht ausschließlich aus analysierten Frames.", "The event only changes the scene. A positive finding arises solely from analysed frames.");
     }
     updateSourceControls();
   }
@@ -560,10 +559,10 @@ export function mountRoadCamera(container, apiClient) {
         if (!roadAvailable) {
           const message = capabilities && typeof capabilities.message === "string"
             ? capabilities.message
-            : "Für die Straßenkamera-Aufzeichnung muss FFmpeg mit libx264 verfügbar sein.";
+            : L("Für die Straßenkamera-Aufzeichnung muss FFmpeg mit libx264 verfügbar sein.", "Road camera recording requires FFmpeg with libx264.");
           setStatus(message, true);
         } else if (!sourceId) {
-          setStatus("Lokale Straßenkamera und H.264-Aufzeichnung sind bereit.");
+          setStatus(L("Lokale Straßenkamera und H.264-Aufzeichnung sind bereit.", "Local road camera and H.264 recording are ready."));
         }
       })
       .catch(() => {
@@ -572,7 +571,7 @@ export function mountRoadCamera(container, apiClient) {
         capabilities = null;
         configureCaseOptions();
         updateEventControls();
-        setStatus("Die Kamerafunktion konnte nicht geprüft werden. Prüfe den lokalen FFmpeg-Server.", true);
+        setStatus(L("Die Kamerafunktion konnte nicht geprüft werden. Prüfe den lokalen FFmpeg-Server.", "The camera function could not be checked. Check the local FFmpeg server."), true);
       });
   }
   function renderRun(result) {
@@ -589,17 +588,17 @@ export function mountRoadCamera(container, apiClient) {
     ).length;
     warmedUp = initialCount >= 3 && statusValue !== "failed" && statusValue !== "cancelled";
     runSummary.textContent =
-      (RUN_LABELS[statusValue] || statusValue) + " · Lauf " +
+      (RUN_LABELS[statusValue] || statusValue) + L(" · Lauf ", " · Run ") +
       String(result.run_id || runId || "–") +
       (warmedUp
-        ? " · Startanalyse mit drei Frames abgeschlossen"
-        : " · Startframes " + Math.min(initialCount, 3) + "/3");
+        ? L(" · Startanalyse mit drei Frames abgeschlossen", " · Start analysis with three frames completed")
+        : L(" · Startframes ", " · Start frames ") + Math.min(initialCount, 3) + "/3");
     runSummary.classList.toggle("road-camera__run-summary--error", statusValue === "failed");
     findings.replaceChildren();
     const allFindings = Array.isArray(result.findings) ? result.findings : [];
     const displayFindings = allFindings.slice(-12);
     if (displayFindings.length === 0) {
-      findings.append(element("p", "road-camera__empty", "Noch keine Analysebefunde."));
+      findings.append(element("p", "road-camera__empty", L("Noch keine Analysebefunde.", "No analysis findings yet.")));
     } else {
       for (const finding of displayFindings) {
         const ids = Array.isArray(finding.frame_ids) ? finding.frame_ids.map(String).join(", ") : "";
@@ -607,25 +606,25 @@ export function mountRoadCamera(container, apiClient) {
           ? Object.entries(finding.metrics)
             .map(([key, value]) => key + ": " + JSON.stringify(value))
             .join(" · ")
-          : "keine Messwerte";
+          : L("keine Messwerte", "no measurements");
         findings.append(element(
           "p",
           "road-camera__finding",
-          String(finding.tool || "Befund") + " · Frames: " + (ids || "keine") + "\n" + metrics,
+          String(finding.tool || L("Befund", "Finding")) + " · Frames: " + (ids || L("keine", "none")) + "\n" + metrics,
         ));
       }
     }
     traceContent.textContent = JSON.stringify(trace, null, 2);
     updateEventControls();
 
-    if (autoDemoActive && warmedUp && sourceId && sourceOpen && runActive && !locked) {
+    if (autoDemoActive && warmedUp && sourceId && sourceOpen && runActive) {
       autoDemoActive = false;
-      setStatus("⚡ 1-Klick Demo: Startanalyse (3 Frames) beendet. Falschfahrer wird eingespeist …");
+      setStatus(L("⚡ 1-Klick Demo: Startanalyse (3 Frames) beendet. Falschfahrer wird eingespeist …", "⚡ 1-click demo: start analysis (3 frames) finished. Injecting wrong-way driver …"));
       eventSelect.value = "wrong_way";
       injectEvent().then(() => {
-        setStatus("⚡ 1-Klick Demo: Falschfahrer aktiv! Beobachte Erkennung und Leitwarten-Eingang.");
+        setStatus(L("⚡ 1-Klick Demo: Falschfahrer aktiv! Beobachte Erkennung und Leitwarten-Eingang.", "⚡ 1-click demo: wrong-way driver active! Watch the detection and the dispatch inbox."));
       }).catch((err) => {
-        setStatus("Fehler bei automatischer Ereigniseinblendung: " + err.message, true);
+        setStatus(L("Fehler bei automatischer Ereigniseinblendung: ", "Error during automatic event injection: ") + err.message, true);
       });
     }
   }
@@ -644,7 +643,7 @@ export function mountRoadCamera(container, apiClient) {
       })
       .catch((error) => {
         if (!current(source, generation, view) || runId !== currentRun) return;
-        runSummary.textContent = error.message || "Der Controllerstatus konnte nicht geladen werden.";
+        runSummary.textContent = error.message || L("Der Controllerstatus konnte nicht geladen werden.", "The controller status could not be loaded.");
         runSummary.classList.add("road-camera__run-summary--error");
         if (runActive) runTimer = window.setTimeout(pollRun, 1000);
       });
@@ -658,9 +657,9 @@ export function mountRoadCamera(container, apiClient) {
     root.dataset.caseId = "";
     runActive = false;
     warmedUp = false;
-    runSummary.textContent = "Starte den Fall und die tatsächliche Frameanalyse …";
-    findings.replaceChildren(element("p", "road-camera__empty", "Noch keine Analysebefunde."));
-    traceContent.textContent = "Noch kein Trace vorhanden.";
+    runSummary.textContent = L("Starte den Fall und die tatsächliche Frameanalyse …", "Starting the case and the actual frame analysis …");
+    findings.replaceChildren(element("p", "road-camera__empty", L("Noch keine Analysebefunde.", "No analysis findings yet.")));
+    traceContent.textContent = L("Noch kein Trace vorhanden.", "No trace available yet.");
     updateEventControls();
 
     const mode = modeSelect.value || "fixture";
@@ -678,7 +677,7 @@ export function mountRoadCamera(container, apiClient) {
     }
     if (!result || typeof result.case_id !== "string" || !result.case_id ||
         typeof result.run_id !== "string" || !result.run_id) {
-      throw new Error("Der Server lieferte keinen gültigen Fall- und Laufbezug.");
+      throw new Error(L("Der Server lieferte keinen gültigen Fall- und Laufbezug.", "The server returned no valid case and run reference."));
     }
     caseId = result.case_id;
     caseSnapshot = result;
@@ -716,7 +715,7 @@ export function mountRoadCamera(container, apiClient) {
         }));
       }
       renderRun(await apiClient.get("/runs/" + encodeURIComponent(currentRun)));
-      setStatus("Analyse abgebrochen; die Kameraquelle zeichnet weiter auf.");
+      setStatus(L("Analyse abgebrochen; die Kameraquelle zeichnet weiter auf.", "Analysis cancelled; the camera source keeps recording."));
     });
   }
 
@@ -731,20 +730,20 @@ export function mountRoadCamera(container, apiClient) {
     sourceOpen = true;
     root.dataset.sourceId = nextSource;
     currentClipId = null;
-    sourceSummary.textContent = "Quelle: " + nextSource;
+    sourceSummary.textContent = L("Quelle: ", "Source: ") + nextSource;
     clearFrameImage();
-    frameMeta.textContent = "Warte auf das erste Kamerabild.";
-    recordingSummary.textContent = "Warte auf Aufnahmedaten.";
+    frameMeta.textContent = L("Warte auf das erste Kamerabild.", "Waiting for the first camera image.");
+    recordingSummary.textContent = L("Warte auf Aufnahmedaten.", "Waiting for recording data.");
     setStatus(message);
     updateEventControls();
     startPolling();
     startCase(nextSource, sourceGeneration)
       .catch((error) => {
         if (sourceId === nextSource && sourceOpen) {
-          runSummary.textContent = error.message || "Der Kameraablauf konnte nicht gestartet werden.";
+          runSummary.textContent = error.message || L("Der Kameraablauf konnte nicht gestartet werden.", "The camera workflow could not be started.");
           runSummary.classList.add("road-camera__run-summary--error");
           updateEventControls();
-          setStatus("Die Quelle läuft, aber der Analyse-Lauf ist fehlgeschlagen.", true);
+          setStatus(L("Die Quelle läuft, aber der Analyse-Lauf ist fehlgeschlagen.", "The source is running, but the analysis run failed."), true);
         }
       });
   }
@@ -763,22 +762,21 @@ export function mountRoadCamera(container, apiClient) {
       }
       const created = await apiClient.post("/road/sessions", { seed: 42 });
       if (destroyed || typeof created.source_id !== "string") return;
-      applySource(created.source_id, "Neue synthetische Quelle gestartet.");
+      applySource(created.source_id, L("Neue synthetische Quelle gestartet.", "New synthetic source started."));
     });
   }
 
   function injectBlocker() {
     if (destroyed) return "destroyed";
     if (!sourceId || !sourceOpen) return "source_closed";
-    if (locked) return "review_locked";
     if (!warmedUp) return "warming_up";
     if (!runActive) return "run_inactive";
     return null;
   }
 
   // Resolves to { injected, reason }. Events are only accepted while the
-  // bound analysis run observes the scene and no case review is open, so
-  // every injected event can still become part of the analysed footage.
+  // bound analysis run observes the scene, so every injected event can still
+  // become part of the analysed footage.
   async function injectEvent(forcedEvent) {
     const event = forcedEvent || eventSelect.value;
     const blocked = injectBlocker();
@@ -796,10 +794,30 @@ export function mountRoadCamera(container, apiClient) {
         { event },
       );
       if (current(source, generation)) {
-        const label = { wrong_way: "Falschfahrer", bird: "Vogel", leaf: "Blatt" }[event] || "Szenarioereignis";
-        setStatus(`${label} in die Szene eingeblendet. Das ist noch kein Analysebefund.`);
+        const label = { wrong_way: L("Falschfahrer", "Wrong-way driver"), bird: L("Vogel", "Bird"), leaf: L("Blatt", "Leaf") }[event] || L("Szenarioereignis", "Scenario event");
+        setStatus(L(`${label} in die Szene eingeblendet. Das ist noch kein Analysebefund.`, `${label} injected into the scene. This is not an analysis finding yet.`));
       }
       return { injected: true, reason: null, sourceId: source, caseId };
+    });
+  }
+
+  // Opens the next case on the camera that is already running (no new source),
+  // e.g. after the previous case sealed its clip and went to review.
+  async function startNextCase() {
+    return enqueue("next-case", async () => {
+      if (destroyed || !sourceId || !sourceOpen) {
+        throw new Error(L("Die Kamera läuft nicht.", "The camera is not running."));
+      }
+      const source = sourceId;
+      const generation = sourceGeneration;
+      try {
+        await startCase(source, generation);
+      } catch (_error) {
+        // The previous case frees the camera a moment after its run ends; retry once.
+        await new Promise((resolve) => window.setTimeout(resolve, 600));
+        if (!current(source, generation) || !sourceOpen) return;
+        await startCase(source, generation);
+      }
     });
   }
 
@@ -823,13 +841,13 @@ export function mountRoadCamera(container, apiClient) {
         try {
           renderRun(await apiClient.get("/runs/" + encodeURIComponent(runId)));
         } catch (_error) {
-          runSummary.textContent = "Die Quelle ist beendet; der letzte Laufstatus ist nicht verfügbar.";
+          runSummary.textContent = L("Die Quelle ist beendet; der letzte Laufstatus ist nicht verfügbar.", "The source has ended; the last run status is not available.");
         }
       }
       if (stopped.clip) clips.set(stopped.clip.clip_id, stopped.clip);
       setStatus(wasOpen
-        ? "Quelle beendet; die vollständige Aufnahme wird angezeigt."
-        : "Die Quelle war bereits beendet; ihre gespeicherte Aufnahme ist nun fertiggestellt.");
+        ? L("Quelle beendet; die vollständige Aufnahme wird angezeigt.", "Source ended; the complete recording is shown.")
+        : L("Die Quelle war bereits beendet; ihre gespeicherte Aufnahme ist nun fertiggestellt.", "The source had already ended; its stored recording is now finalised."));
       await refreshRecording(source, generation, viewGeneration);
       renderClipList();
     });
@@ -862,9 +880,9 @@ export function mountRoadCamera(container, apiClient) {
       if (destroyed || previous !== sourceId || generation !== sourceGeneration) return;
       await refreshRecording(previous, generation, viewGeneration);
       if (typeof reset.source_id !== "string") {
-        throw new Error("Der Server lieferte keine neue Quellenkennung.");
+        throw new Error(L("Der Server lieferte keine neue Quellenkennung.", "The server returned no new source identifier."));
       }
-      applySource(reset.source_id, "Neue Quelle gestartet; frühere Clips bleiben erhalten.");
+      applySource(reset.source_id, L("Neue Quelle gestartet; frühere Clips bleiben erhalten.", "New source started; earlier clips are kept."));
     });
   }
 
@@ -898,10 +916,10 @@ export function mountRoadCamera(container, apiClient) {
     if (destroyed || selection !== clipSelectionGeneration ||
         sourceGenerationAtStart !== sourceGeneration || viewAtStart !== viewGeneration) return;
     if (!result || !(result.blob instanceof Blob)) {
-      throw new Error("Der Server lieferte keinen abspielbaren Clip.");
+      throw new Error(L("Der Server lieferte keinen abspielbaren Clip.", "The server returned no playable clip."));
     }
     if (result.sha256 && result.sha256 !== clip.sha256) {
-      throw new Error("Die Clip-Prüfsumme passt nicht zu den gespeicherten Metadaten.");
+      throw new Error(L("Die Clip-Prüfsumme passt nicht zu den gespeicherten Metadaten.", "The clip checksum does not match the stored metadata."));
     }
     const url = URL.createObjectURL(result.blob);
     clipUrls.set(clip.clip_id, { url, sha256: clip.sha256 });
@@ -922,7 +940,7 @@ export function mountRoadCamera(container, apiClient) {
       item.setAttribute("aria-pressed", String(item.dataset.clipId === currentClipId));
     }
     playerCaption.textContent =
-      `Quelle ${clip.source_id} · Version ${formatNumber(clip.version, 0)} · ${formatNumber(clip.start_seconds)}–${formatNumber(clip.end_seconds)} Sek.`;
+      L(`Quelle ${clip.source_id} · Version ${formatNumber(clip.version, 0)} · ${formatNumber(clip.start_seconds)}–${formatNumber(clip.end_seconds)} Sek.`, `Source ${clip.source_id} · version ${formatNumber(clip.version, 0)} · ${formatNumber(clip.start_seconds)}–${formatNumber(clip.end_seconds)} s`);
     if (player.src !== url) {
       await new Promise((resolve, reject) => {
         const loaded = () => {
@@ -931,7 +949,7 @@ export function mountRoadCamera(container, apiClient) {
         };
         const failed = () => {
           cleanup();
-          reject(new Error("Der gespeicherte Clip konnte nicht geöffnet werden."));
+          reject(new Error(L("Der gespeicherte Clip konnte nicht geöffnet werden.", "The stored clip could not be opened.")));
         };
         const cleanup = () => {
           player.removeEventListener("loadedmetadata", loaded);
@@ -987,11 +1005,6 @@ export function mountRoadCamera(container, apiClient) {
   });
   modeSelect.addEventListener("change", updateSourceControls);
 
-  function setLocked(value) {
-    locked = Boolean(value);
-    updateEventControls();
-  }
-
   function setCase(caseInfo) {
     const nextId = caseInfo && typeof caseInfo.case_id === "string"
       ? caseInfo.case_id
@@ -1041,7 +1054,7 @@ export function mountRoadCamera(container, apiClient) {
     container.replaceChildren();
   }
 
-  setLocked(false);
+  updateEventControls();
   loadRoadCapabilities();
   function getState() {
     return {
@@ -1050,7 +1063,6 @@ export function mountRoadCamera(container, apiClient) {
       caseId,
       runActive,
       warmedUp,
-      locked,
       available: roadAvailable,
       capabilities,
       injectBlocker: injectBlocker(),
@@ -1072,7 +1084,7 @@ export function mountRoadCamera(container, apiClient) {
     getSourceId,
     getState,
     configureCase,
-    setLocked,
+    startNextCase,
     setCase,
     injectScenarioEvent: (event) => injectEvent(event),
     createSource,

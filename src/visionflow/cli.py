@@ -294,6 +294,21 @@ def _parser() -> argparse.ArgumentParser:
         help="Eine einzelne ausdrücklich freigegebene Kameraquelle; wiederholbar",
     )
     serve.add_argument(
+        "--public-demo",
+        action="store_true",
+        help=(
+            "Hosted jury demo behind a reverse proxy: only synthetic road simulations "
+            "are readable, uploads are disabled and live road "
+            "sessions are limited. The bind stays loopback-only."
+        ),
+    )
+    serve.add_argument(
+        "--max-live-sessions",
+        type=int,
+        default=4,
+        help="Live road sessions allowed at once with --public-demo (default 4)",
+    )
+    serve.add_argument(
         "--allow-gemini-costs",
         action="store_true",
         help=(
@@ -406,13 +421,22 @@ def _camera_mapping(values: Sequence[str]) -> dict[str, int]:
 
 def _serve(args: argparse.Namespace) -> int:
     runtime = None
+    if args.public_demo and (args.camera or args.allow_gemini_costs):
+        return _write_error(
+            "public_demo_conflict",
+            "--public-demo cannot be combined with --camera or --allow-gemini-costs.",
+        )
+    if args.public_demo and args.max_live_sessions <= 0:
+        return _write_error("invalid_max_live_sessions", "--max-live-sessions must be positive.")
     try:
         from visionflow.road_runtime import build_road_runtime
         cameras = _camera_mapping(args.camera)
+        public = {"max_live_sessions": args.max_live_sessions} if args.public_demo else {}
         runtime = build_road_runtime(
             args.data_dir,
             allowed_camera_sources=cameras,
             allow_native_costs=args.allow_gemini_costs,
+            **public,
         )
         server = create_server(
             runtime.controller,
@@ -425,6 +449,7 @@ def _serve(args: argparse.Namespace) -> int:
             road_sessions=runtime.road_sessions,
             road_cases=runtime.road_cases,
             road_unavailable_reason=runtime.road_unavailable_reason,
+            **({"public_demo": True} if args.public_demo else {}),
         )
     except (ConfigError, OSError, ValueError) as exc:
         if runtime is not None:

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
+import os
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import cv2
@@ -33,6 +35,12 @@ _MAX_TRACK_GAP_SECONDS = 0.75
 _MAX_TRACK_GAP_DISTANCE_PX = 80.0
 _TRACK_GAP_ALIGNMENT_COSINE = 0.5
 _TRACK_GAP_ALIGNMENT_MIN_DISTANCE_PX = 8.0
+_MATCH_WORKERS = max(1, min(4, os.cpu_count() or 1))
+_MATCH_POOL = (
+    ThreadPoolExecutor(max_workers=_MATCH_WORKERS, thread_name_prefix="visionflow-direction")
+    if _MATCH_WORKERS > 1
+    else None
+)
 
 
 class DirectionAnalyzer:
@@ -186,8 +194,8 @@ class DirectionAnalyzer:
                 return []
 
             displacement = np.full_like(start, np.nan)
-            for index, point in enumerate(start):
-                forward = _match_feature_patch(previous, current, point)
+            forwards = _match_many(previous, current, start)
+            for index, (point, forward) in enumerate(zip(start, forwards)):
                 if forward is None:
                     continue
                 finish = np.asarray(forward[0], dtype=np.float32)
@@ -229,8 +237,8 @@ class DirectionAnalyzer:
 
         returned = np.full_like(start, np.nan)
         try:
-            for index in supported_indexes:
-                backward = _match_feature_patch(current, previous, finish[index])
+            backwards = _match_many(current, previous, finish[supported_indexes])
+            for index, backward in zip(supported_indexes, backwards):
                 if backward is not None:
                     returned[index] = np.asarray(backward[0], dtype=np.float32)
         except cv2.error as exc:
@@ -546,6 +554,21 @@ def _integer_vector(value: Any, length: int, name: str) -> tuple[int, ...]:
     return tuple(values)
 
 
+def _match_many(
+    source_gray: np.ndarray,
+    target_gray: np.ndarray,
+    points: np.ndarray,
+) -> list[tuple[tuple[float, float], float, float] | None]:
+    """Match every point independently; results keep the input order.
+
+    cv2.matchTemplate releases the GIL, so a small shared pool speeds up the
+    per-corner search without changing any individual match.
+    """
+    if _MATCH_POOL is None or len(points) < 8:
+        return [_match_feature_patch(source_gray, target_gray, point) for point in points]
+    return list(_MATCH_POOL.map(lambda point: _match_feature_patch(source_gray, target_gray, point), points))
+
+
 def _match_feature_patch(
     source_gray: np.ndarray,
     target_gray: np.ndarray,
@@ -610,17 +633,17 @@ def _match_feature_patch(
     best_y = minimum_y + best_location[1]
 
     local_maxima = response >= cv2.dilate(response, np.ones((3, 3), dtype=np.uint8))
-    peak_y, peak_x = np.nonzero(local_maxima)
-    if not len(peak_x):
-        return None
-    distinct = (
-        (peak_x + minimum_x - best_x) ** 2
-        + (peak_y + minimum_y - best_y) ** 2
-        > _PATCH_SECOND_PEAK_DISTANCE**2
+    # Select the same distinct local maxima directly in the response grid.
+    # OpenCV's masked reduction avoids materializing and indexing large peak
+    # coordinate arrays for every forward and backward feature match.
+    yy, xx = np.ogrid[:response.shape[0], :response.shape[1]]
+    distinct = local_maxima & (
+        (xx - best_location[0]) ** 2 + (yy - best_location[1]) ** 2
+        > _PATCH_SECOND_PEAK_DISTANCE ** 2
     )
     if not bool(distinct.any()):
         return None
-    second_score = float(response[peak_y[distinct], peak_x[distinct]].max())
+    _, second_score, _, _ = cv2.minMaxLoc(response, mask=distinct.astype(np.uint8))
     peak_gap = float(best_score) - second_score
     if not math.isfinite(peak_gap) or peak_gap < _PATCH_MIN_PEAK_GAP:
         return None

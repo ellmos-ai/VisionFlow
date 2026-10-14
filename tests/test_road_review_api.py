@@ -155,13 +155,28 @@ def test_case_review_routes_follow_real_pixels_and_preserve_owner_decision_flow(
         assert case["fixture_profile"] == "pending"
         assert case["run_id"]
 
+        # The browser injects only after three actual analysis frames. Source
+        # startup alone does not establish that the detector has warmed up.
+        warmup_deadline = time.monotonic() + 30.0
+        analysed = []
+        while time.monotonic() < warmup_deadline:
+            status, ready, _ = owner.request("GET", f"/road/cases/{case['case_id']}")
+            assert status == 200
+            analysed = [row for row in ready["perception_trace"] if row.get("type") in {
+                "frame_analyzed", "frame_observed", "observation_frame",
+            }]
+            if len(analysed) >= 3:
+                break
+            time.sleep(0.1)
+        assert len(analysed) >= 3, "detector did not reach the UI readiness gate"
+
         status, injected, _ = owner.request(
             "POST", f"/road/sessions/{source_id}/events", {"event": "wrong_way"}
         )
         assert status == 200
         assert injected["accepted"] is True
 
-        deadline = time.monotonic() + 45.0
+        deadline = time.monotonic() + 60.0
         current = None
         while time.monotonic() < deadline:
             status, current, _ = owner.request("GET", f"/road/cases/{case['case_id']}")

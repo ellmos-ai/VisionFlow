@@ -1,13 +1,14 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
-    <title>VisionFlow – lokaler Analyse-Arbeitsplatz</title>
+    <title data-de="VisionFlow – lokaler Analyse-Arbeitsplatz">VisionFlow – local analysis workplace</title>
     <link rel="stylesheet" href="/style.css">
     <link rel="stylesheet" href="/road.css">
     <link rel="stylesheet" href="/road-cartoon.css">
+    <script src="/i18n.js"></script>
     <script src="/road-sfx.js" defer></script>
     <script src="/road-game.js" defer></script>
     <script src="/app.js" defer></script>
@@ -15,104 +16,139 @@
   <body>
     <header class="app-header">
       <div>
-        <p class="eyebrow">Lokale Computer-Vision</p>
+        <p class="eyebrow" data-de="Agentische Bildverarbeitung mit OpenCV 5">Agentic vision with OpenCV 5</p>
         <h1>VisionFlow</h1>
       </div>
-      <p id="connection-status" class="connection-status" role="status" aria-live="polite">
-        Lokale Sitzung wird geprüft …
+      <nav class="workspace-tabs" aria-label="Workspaces" data-de-aria-label="Arbeitsbereiche">
+        <button id="road-tab" class="button primary" type="button" aria-pressed="true" disabled data-de="🚦 Falschfahrer-Warnung (Leitstelle)">🚦 Wrong-way driver warning (control room)</button>
+        <button id="analysis-tab" class="button secondary" type="button" aria-pressed="false" data-de="🧩 Wiederverwendbare Abläufe (Bild / Video)">🧩 Reusable workflows (image / video)</button>
+      </nav>
+      <p id="connection-status" class="connection-status" role="status" aria-live="polite" data-de="Lokale Sitzung wird geprüft …">
+        Checking local session …
       </p>
     </header>
 
+    <details class="intro-details">
+      <summary><span class="intro-info" aria-hidden="true">ⓘ</span><span data-de="So funktioniert VisionFlow">How VisionFlow works</span></summary>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h2 id="hero-title" data-de="Die Pixel entscheiden, was als Nächstes passiert.">The pixels decide what happens next.</h2>
+        <p class="hero-lead" data-de="VisionFlow macht aus Kamera-, Video- und Bildanalyse begrenzte, überprüfbare Abläufe. Dieses Beispiel: eine Falschfahrer-Warnung für eine Verkehrsleitstelle.">
+          VisionFlow turns camera, video and image analysis into bounded, reviewable workflows.
+          This example: a wrong-way driver warning for a traffic control room.
+        </p>
+        <p id="public-demo-note" class="public-demo-note" hidden data-de="Öffentliche Demo: synthetischer Verkehr · feste Offline-Modellantwort · simulierte Empfänger · jede Kamera-Sitzung endet nach zwei Minuten.">
+          Public demo: synthetic traffic · fixed offline model answer · simulated recipients · each camera session ends after two minutes.
+        </p>
+      </div>
+      <ol class="hero-steps">
+        <li>
+          <span class="hero-step-label" data-de="1 · Wahrnehmen">1 · Perceive</span>
+          <span data-de="OpenCV vergleicht jedes Bild mit dem vorherigen und erkennt Bewegung gegen die Fahrtrichtung der Spur.">OpenCV compares every frame with the previous one and finds motion against the lane direction.</span>
+        </li>
+        <li>
+          <span class="hero-step-label" data-de="2 · Entscheiden">2 · Decide</span>
+          <span data-de="Ein Treffer öffnet einen Fall mit unveränderlichem Beweisclip. Modell und Mensch prüfen denselben Clip – hier wird ein Auto von Vogel oder Blatt unterschieden.">A hit opens a case with an immutable evidence clip. Model and human review the same clip – this is where a car is told apart from a bird or a leaf.</span>
+        </li>
+        <li>
+          <span class="hero-step-label" data-de="3 · Handeln">3 · Act</span>
+          <span data-de="Bestätigte Fälle gehen sofort an ein simuliertes Behördenpostfach; unbeantwortete nach Ablauf der Frist. Eine späte Ablehnung sendet eine Entwarnung.">Confirmed cases reach a simulated authority inbox immediately; unanswered cases do so when the deadline expires. A late rejection sends an all-clear.</span>
+        </li>
+      </ol>
+      <p id="hero-reuse" class="hero-reuse" data-de="Derselbe Kern prüft auch Dokumentfotos und beobachtet Videos – nur die JSON-Konfiguration ist anders. Siehe Reiter „Wiederverwendbare Abläufe“.">
+        The same core also checks document photos and watches videos – only the JSON configuration differs.
+        See the “Reusable workflows” tab.
+      </p>
+    </section>
+    </details>
+
     <main class="workspace-shell">
-      <nav class="workspace-tabs" aria-label="Arbeitsbereiche">
-        <button id="road-tab" class="button primary" type="button" aria-pressed="true" disabled>🚨 Emergency Leitstelle (Mission Control)</button>
-        <button id="analysis-tab" class="button secondary" type="button" aria-pressed="false">📁 Archiv / Einzellauf-Analyse</button>
-      </nav>
+
       <div id="workspace-analysis" class="layout workspace-analysis" hidden>
       <section class="panel setup-panel" aria-labelledby="setup-title">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Quelle → Ablauf</p>
-            <h2 id="setup-title">Analyse einrichten</h2>
+            <p class="eyebrow" data-de="Quelle → Ablauf">Source → workflow</p>
+            <h2 id="setup-title" data-de="Analyse einrichten">Set up analysis</h2>
           </div>
           <span class="schema-chip">Schema 1</span>
         </div>
 
         <form id="workflow-form" novalidate>
-          <label for="workflow-name">Name des Laufs</label>
-          <input id="workflow-name" name="name" type="text" maxlength="120" value="VisionFlow-Prüfung">
+          <label for="workflow-name" data-de="Name des Laufs">Run name</label>
+          <input id="workflow-name" name="name" type="text" maxlength="120" value="VisionFlow check" data-de-value="VisionFlow-Prüfung">
 
-          <label for="workflow-preset">Ablaufvorlage</label>
+          <label for="workflow-preset" data-de="Ablaufvorlage">Workflow template</label>
           <select id="workflow-preset" name="workflow-preset">
-            <option value="document-quality">Dokumentqualität · gezielte Neuaufnahme</option>
-            <option value="motion-observation">Bewegungsbeobachtung · Video</option>
+            <option value="document-quality" data-de="Dokumentqualität · gezielte Neuaufnahme">Document quality · targeted re-capture</option>
+            <option value="motion-observation" data-de="Bewegungsbeobachtung · Video">Motion observation · video</option>
           </select>
-          <p id="preset-description" class="hint">Diese Vorlage fordert bewusst eine Neuaufnahme an; sie entscheidet nicht automatisch anhand eines Messwert-Grenzwerts.</p>
+          <p id="preset-description" class="hint" data-de="Diese Vorlage fordert bewusst eine Neuaufnahme an; sie entscheidet nicht automatisch anhand eines Messwert-Grenzwerts.">This template deliberately requests a re-capture; it does not decide automatically from a measurement threshold.</p>
 
-          <label for="input-kind">Eingabequelle</label>
+          <label for="input-kind" data-de="Eingabequelle">Input source</label>
           <select id="input-kind" name="input-kind">
-            <option value="image">Einzelbild</option>
-            <option value="video">Videodatei</option>
-            <option value="camera">Freigegebene Kamera</option>
+            <option value="image" data-de="Einzelbild">Single image</option>
+            <option value="video" data-de="Videodatei">Video file</option>
+            <option value="camera" data-de="Freigegebene Kamera">Approved camera</option>
           </select>
 
           <div id="file-source" class="source-group">
-            <label for="source-file">Bild oder Video auswählen</label>
+            <label for="source-file" data-de="Bild oder Video auswählen">Choose an image or video</label>
             <input id="source-file" name="source-file" type="file" accept="image/*,.avi,.mp4,.mov,.mkv,.webm">
             <div class="sample-actions">
-              <button id="sample-sharp-btn" type="button" class="button secondary sample-btn">📄 Beispieldokument (scharf)</button>
-              <button id="sample-blurred-btn" type="button" class="button secondary sample-btn">📄 Beispieldokument (unscharf)</button>
+              <button id="sample-sharp-btn" type="button" class="button secondary sample-btn" data-de="📄 Beispieldokument (scharf)">📄 Sample document (sharp)</button>
+              <button id="sample-blurred-btn" type="button" class="button secondary sample-btn" data-de="📄 Beispieldokument (unscharf)">📄 Sample document (blurred)</button>
             </div>
-            <p id="file-description" class="hint">Die Datei bleibt lokal. Der Server speichert sie unter einer erzeugten Referenz.</p>
-            <p id="file-name" class="file-name" aria-live="polite">Keine Datei ausgewählt.</p>
+            <p id="file-description" class="hint" data-de="Die Datei geht nur an diesen VisionFlow-Server. Er speichert sie unter einer erzeugten Referenz.">The file only goes to this VisionFlow server. It stores it under a generated reference.</p>
+            <p id="file-name" class="file-name" aria-live="polite" data-de="Keine Datei ausgewählt.">No file selected.</p>
           </div>
 
           <div id="camera-source" class="source-group" hidden>
-            <label for="camera-name">Freigegebener Kameraname</label>
-            <input id="camera-name" name="camera-name" type="text" inputmode="text" autocomplete="off" placeholder="z. B. front">
-            <p class="hint">Der Server muss diesen Namen ausdrücklich mit <code>serve --camera NAME=INDEX</code> freigeben. Es findet keine Kamerasuche statt.</p>
+            <label for="camera-name" data-de="Freigegebener Kameraname">Approved camera name</label>
+            <input id="camera-name" name="camera-name" type="text" inputmode="text" autocomplete="off" placeholder="e.g. front" data-de-placeholder="z. B. front">
+            <p class="hint"><span data-de="Der Server muss diesen Namen ausdrücklich mit">The server must approve this name explicitly with</span> <code>serve --camera NAME=INDEX</code><span data-de=" freigeben. Es findet keine Kamerasuche statt.">. No camera search takes place.</span></p>
           </div>
 
-          <label for="tool-select">Analysewerkzeug</label>
+          <label for="tool-select" data-de="Analysewerkzeug">Analysis tool</label>
           <select id="tool-select" name="tool" disabled>
-            <option value="">Werkzeuge werden geladen …</option>
+            <option value="" data-de="Werkzeuge werden geladen …">Loading tools …</option>
           </select>
           <p id="tool-description" class="hint" aria-live="polite"></p>
 
           <div id="model-question-group" class="source-group" hidden>
-            <label for="model-question">Frage für den Modellentscheidungsschritt</label>
-            <textarea id="model-question" name="question" rows="2">Welche Auffälligkeit zeigen die Messwerte?</textarea>
-            <p class="hint">Falls der Ablauf eine Modellentscheidung erreicht, wird die konfigurierte lokale Fixture-Entscheidung verwendet. Externe Modellanbieter werden hier nicht angeboten.</p>
+            <label for="model-question" data-de="Frage für den Modellentscheidungsschritt">Question for the model decision step</label>
+            <textarea id="model-question" name="question" rows="2" data-de="Welche Auffälligkeit zeigen die Messwerte?">Which anomaly do the measurements show?</textarea>
+            <p class="hint" data-de="Falls der Ablauf eine Modellentscheidung erreicht, wird die konfigurierte lokale Fixture-Entscheidung verwendet. Externe Modellanbieter werden hier nicht angeboten.">If the workflow reaches a model decision, the configured local fixture decision is used. External model providers are not offered here.</p>
           </div>
 
           <div class="limits-grid">
             <div>
-              <label for="observation-limit">Beobachtungsgrenze (Sek.)</label>
+              <label for="observation-limit" data-de="Beobachtungsgrenze (Sek.)">Observation limit (s)</label>
               <input id="observation-limit" type="number" min="1" max="300" step="1" value="10">
             </div>
             <div>
-              <label for="sample-fps">Abtastrate (Bilder/Sek.)</label>
+              <label for="sample-fps" data-de="Abtastrate (Bilder/Sek.)">Sampling rate (frames/s)</label>
               <input id="sample-fps" type="number" min="0.1" max="30" step="0.1" value="1">
             </div>
             <div>
-              <label for="max-frames">Frame-Limit</label>
+              <label for="max-frames" data-de="Frame-Limit">Frame limit</label>
               <input id="max-frames" type="number" min="1" max="300" step="1" value="60">
             </div>
             <div>
-              <label for="max-model-calls">Modellaufruf-Limit</label>
+              <label for="max-model-calls" data-de="Modellaufruf-Limit">Model call limit</label>
               <input id="max-model-calls" type="number" min="1" max="20" step="1" value="4">
             </div>
           </div>
 
           <label class="checkbox-row" for="approval-draft">
             <input id="approval-draft" type="checkbox">
-            <span>Benachrichtigungsentwurf zur Freigabe vorlegen</span>
+            <span data-de="Benachrichtigungsentwurf zur Freigabe vorlegen">Submit notification draft for approval</span>
           </label>
-          <p class="hint">Eine Bestätigung speichert nur die Freigabe. Es wird nichts versendet.</p>
+          <p class="hint" data-de="Eine Bestätigung speichert nur die Freigabe. Es wird nichts versendet.">A confirmation only stores the approval. Nothing is sent.</p>
 
           <div class="button-row">
-            <button id="validate-button" class="button secondary" type="button">Konfiguration prüfen</button>
-            <button id="start-button" class="button primary" type="button" disabled>Lauf starten</button>
+            <button id="validate-button" class="button secondary" type="button" data-de="Konfiguration prüfen">Validate configuration</button>
+            <button id="start-button" class="button primary" type="button" disabled data-de="Lauf starten">Start run</button>
           </div>
         </form>
         <p id="setup-message" class="message" role="status" aria-live="polite"></p>
@@ -121,95 +157,95 @@
       <section class="panel run-panel" aria-labelledby="run-title">
         <div class="section-heading run-heading">
           <div>
-            <p class="eyebrow">Laufstatus</p>
-            <h2 id="run-title">Ergebnisse und Belege</h2>
+            <p class="eyebrow" data-de="Laufstatus">Run status</p>
+            <h2 id="run-title" data-de="Ergebnisse und Belege">Results and evidence</h2>
           </div>
-          <span id="status-badge" class="status-badge" data-state="idle">Noch kein Lauf</span>
+          <span id="status-badge" class="status-badge" data-state="idle" data-de="Noch kein Lauf">No run yet</span>
         </div>
 
         <div class="run-controls">
-          <p class="run-id">Lauf-ID: <code id="run-id">–</code></p>
-          <button id="cancel-button" class="button danger" type="button" disabled>Lauf abbrechen</button>
+          <p class="run-id"><span data-de="Lauf-ID:">Run ID:</span> <code id="run-id">–</code></p>
+          <button id="cancel-button" class="button danger" type="button" disabled data-de="Lauf abbrechen">Cancel run</button>
         </div>
-        <p id="run-message" class="message" role="status" aria-live="polite">Ein geprüfter Lauf erscheint hier.</p>
+        <p id="run-message" class="message" role="status" aria-live="polite" data-de="Ein geprüfter Lauf erscheint hier.">A validated run appears here.</p>
 
         <section class="budget-panel" aria-labelledby="budget-title">
-          <h3 id="budget-title">Budget laut Controller-Trace</h3>
-          <p id="budget-summary" class="hint">Noch kein Budget-Snapshot im Trace verfügbar.</p>
+          <h3 id="budget-title" data-de="Budget laut Controller-Trace">Budget per controller trace</h3>
+          <p id="budget-summary" class="hint" data-de="Noch kein Budget-Snapshot im Trace verfügbar.">No budget snapshot in the trace yet.</p>
         </section>
 
         <section id="input-panel" class="followup-panel" aria-labelledby="input-title" hidden>
-          <h3 id="input-title">Eingabe erforderlich</h3>
+          <h3 id="input-title" data-de="Eingabe erforderlich">Input required</h3>
           <p id="input-reason" class="followup-reason"></p>
-          <label for="replacement-file">Optionale Ersatzdatei derselben Quellenart</label>
+          <label for="replacement-file" data-de="Optionale Ersatzdatei derselben Quellenart">Optional replacement file of the same source type</label>
           <input id="replacement-file" type="file" accept="image/*,.avi,.mp4,.mov,.mkv,.webm">
-          <label for="resume-json">Zusätzliche Eingabe als JSON-Objekt</label>
+          <label for="resume-json" data-de="Zusätzliche Eingabe als JSON-Objekt">Additional input as JSON object</label>
           <textarea id="resume-json" rows="3">{}</textarea>
-          <button id="resume-button" class="button primary" type="button">Eingabe übermitteln</button>
+          <button id="resume-button" class="button primary" type="button" data-de="Eingabe übermitteln">Submit input</button>
         </section>
 
         <section id="approval-panel" class="followup-panel approval-panel" aria-labelledby="approval-title" hidden>
-          <h3 id="approval-title">Entwurf prüfen</h3>
+          <h3 id="approval-title" data-de="Entwurf prüfen">Review draft</h3>
           <p id="approval-reason" class="followup-reason"></p>
-          <p class="hint">Die Freigabe versendet keine Nachricht und löst keine externe Aktion aus.</p>
+          <p class="hint" data-de="Die Freigabe versendet keine Nachricht und löst keine externe Aktion aus.">The approval sends no message and triggers no external action.</p>
           <p id="approval-expiry" class="hint"></p>
           <pre id="approval-content" class="content-box"></pre>
           <div class="button-row">
-            <button id="reject-button" class="button secondary" type="button">Ablehnen</button>
-            <button id="confirm-button" class="button primary" type="button">Entwurf bestätigen</button>
+            <button id="reject-button" class="button secondary" type="button" data-de="Ablehnen">Reject</button>
+            <button id="confirm-button" class="button primary" type="button" data-de="Entwurf bestätigen">Confirm draft</button>
           </div>
         </section>
 
         <div class="results-grid">
           <section class="result-section" aria-labelledby="findings-title">
-            <h3 id="findings-title">Tatsächliche Befunde</h3>
+            <h3 id="findings-title" data-de="Tatsächliche Befunde">Actual findings</h3>
             <div id="findings-list" class="findings-list">
-              <p class="empty-state">Noch keine Befunde gespeichert.</p>
+              <p class="empty-state" data-de="Noch keine Befunde gespeichert.">No findings stored yet.</p>
             </div>
           </section>
           <section class="result-section evidence-section" aria-labelledby="evidence-title">
-            <h3 id="evidence-title">Evidenzvorschau</h3>
+            <h3 id="evidence-title" data-de="Evidenzvorschau">Evidence preview</h3>
             <figure class="evidence-frame">
-              <img id="evidence-image" alt="Gespeicherter Bildbeleg" hidden>
-              <figcaption id="evidence-caption">Ein Befund mit Belegreferenz zeigt hier sein gespeichertes Bild.</figcaption>
+              <img id="evidence-image" alt="Stored image evidence" data-de-alt="Gespeicherter Bildbeleg" hidden>
+              <figcaption id="evidence-caption" data-de="Ein Befund mit Belegreferenz zeigt hier sein gespeichertes Bild.">A finding with an evidence reference shows its stored image here.</figcaption>
             </figure>
           </section>
         </div>
 
         <section class="result-section report-section" aria-labelledby="report-title">
           <div class="section-heading compact-heading">
-            <h3 id="report-title">Bericht und Trace</h3>
-            <button id="load-report-button" class="button secondary" type="button" disabled>Bericht laden</button>
+            <h3 id="report-title" data-de="Bericht und Trace">Report and trace</h3>
+            <button id="load-report-button" class="button secondary" type="button" disabled data-de="Bericht laden">Load report</button>
           </div>
-          <pre id="report-content" class="content-box">Der Bericht wird aus dem gespeicherten Lauf geladen.</pre>
+          <pre id="report-content" class="content-box" data-de="Der Bericht wird aus dem gespeicherten Lauf geladen.">The report is loaded from the stored run.</pre>
           <details>
-            <summary>Gespeicherte Trace-Ereignisse</summary>
-            <pre id="trace-content" class="content-box">Noch kein Trace vorhanden.</pre>
+            <summary data-de="Gespeicherte Trace-Ereignisse">Stored trace events</summary>
+            <pre id="trace-content" class="content-box" data-de="Noch kein Trace vorhanden.">No trace available yet.</pre>
           </details>
         </section>
       </section>
       </div>
-      <section id="workspace-road" class="road-workspace" aria-label="Straßenkamera-Demonstration">
+      <section id="workspace-road" class="road-workspace" aria-label="Road camera demonstration" data-de-aria-label="Straßenkamera-Demonstration">
         <p id="road-workspace-status" class="road-workspace-status" role="status" aria-live="polite"></p>
         <div id="road-camera-root" class="road-camera-root"></div>
         <div class="road-workspace-grid">
-          <section id="road-model-root" class="road-workspace-panel" aria-label="Modellprüfung"></section>
-          <section id="road-workplace-root" class="road-workspace-panel" aria-label="Menschliche Prüfung und Demo-Postfach"></section>
+          <section id="road-model-root" class="road-workspace-panel" aria-label="Model review" data-de-aria-label="Modellprüfung"></section>
+          <section id="road-workplace-root" class="road-workspace-panel" aria-label="Human review and demo inbox" data-de-aria-label="Menschliche Prüfung und Demo-Postfach"></section>
           <section id="road-timeline-root" class="road-workspace-panel road-timeline" aria-labelledby="road-timeline-title">
             <header class="road-panel-header">
-              <h2 id="road-timeline-title" class="road-panel-title">Fallchronik</h2>
+              <h2 id="road-timeline-title" class="road-panel-title" data-de="Fallchronik">Case timeline</h2>
             </header>
             <div id="road-controller-trace"></div>
             <div id="road-timeline-content">
-              <p class="road-empty-state">Starte eine Kameraquelle, um den echten Trace und das Entscheidungsjournal zu sehen.</p>
+              <p class="road-empty-state" data-de="Starte eine Kameraquelle, um den echten Trace und das Entscheidungsjournal zu sehen.">Start a camera source to see the real trace and the decision journal.</p>
             </div>
           </section>
         </div>
       </section>
     </main>
     <footer class="app-footer">
-      <span>Verarbeitung und Speicherung erfolgen lokal.</span>
-      <span>Diese Oberfläche öffnet keine externen Dienste.</span>
+      <span data-de="Verarbeitung und Speicherung erfolgen auf dem VisionFlow-Server.">Processing and storage happen on the VisionFlow server.</span>
+      <span data-de="Diese Oberfläche öffnet keine externen Dienste.">This interface opens no external services.</span>
     </footer>
   </body>
 </html>

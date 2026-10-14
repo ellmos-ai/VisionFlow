@@ -1,0 +1,218 @@
+"""Public demo mode: the hosted jury demo is restricted to synthetic roads."""
+
+from __future__ import annotations
+
+import json
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+from test_api import ApiClient, FakeController
+from visionflow.api import create_server
+from visionflow.registry import ToolDescriptor, ToolRegistry
+from visionflow.simulation import SimulationCapacityError, SimulationStore
+
+
+def _serve(tmp_path: Path, **options):
+    registry = ToolRegistry()
+    registry.register(ToolDescriptor("quality", input_kinds=("image", "video", "camera")), lambda f, p, c: {})
+    server = create_server(
+        FakeController(),
+        host="127.0.0.1",
+        port=0,
+        data_dir=tmp_path / "data",
+        evidence_root=tmp_path / "evidence",
+        registry=registry,
+        **options,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    address, port = server.server_address[:2]
+    client = ApiClient(f"http://{address}:{port}")
+    client.bootstrap()
+    return server, thread, client
+
+
+@pytest.fixture
+def public(tmp_path: Path):
+    server, thread, client = _serve(tmp_path, public_demo=True, public_upload_quota_bytes=1000)
+    try:
+        yield client
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def _workflow(kind: str, source: str) -> bytes:
+    return json.dumps({
+        "schema_version": 1,
+        "name": "public demo check",
+        "input": {"kind": kind, "source": source},
+        "nodes": [{"id": "analyze", "type": "analyze", "params": {"tool": "quality"}}],
+        "outputs": [],
+    }).encode("utf-8")
+
+
+def _upload(client: ApiClient, size: int) -> tuple[int, dict]:
+    status, payload, _ = client.request(
+        "POST",
+        "/media",
+        body=b"x" * size,
+        headers={"Content-Type": "application/octet-stream", "X-VisionFlow-Media-Kind": "image"},
+        origin=client.base_url,
+    )
+    return status, payload
+
+
+def test_session_reports_whether_the_public_demo_mode_is_active(public, tmp_path):
+    _status, payload, _ = public.request("GET", "/session", origin=public.base_url)
+    assert payload["public_demo"] is True
+
+    server, thread, local = _serve(tmp_path / "local")
+    try:
+        _status, payload, _ = local.request("GET", "/session", origin=local.base_url)
+        assert payload["public_demo"] is False
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+@pytest.mark.parametrize(
+    ("kind", "source"),
+    [
+        ("image", "fixture.png"),
+        ("image", "C:/Users/someone/secret.png"),
+        ("image", "/etc/passwd"),
+        ("image", "uploads/../evidence/x.bin"),
+        ("camera", "front"),
+    ],
+)
+def test_public_demo_rejects_server_paths_and_named_cameras(public, kind, source):
+    status, payload, _ = public.request("POST", "/runs", body=_workflow(kind, source), origin=public.base_url)
+    assert status == 403
+    assert payload["error"]["code"] == "public_demo_source_rejected"
+
+
+def test_public_demo_rejects_media_uploads(public):
+    status, uploaded = _upload(public, 10)
+    assert status == 403
+    assert uploaded["error"]["code"] == "public_demo_upload_disabled"
+
+
+def test_public_demo_resume_cannot_switch_to_a_server_path(tmp_path):
+    server, thread, client = _serve(tmp_path)
+    try:
+        status, uploaded = _upload(client, 10)
+        assert status == 201
+        status, result, _ = client.request(
+            "POST", "/runs", body=_workflow("image", uploaded["source"]), origin=client.base_url
+        )
+        assert status == 202
+        server.state.public_demo = True
+        status, payload, _ = client.request(
+            "POST", f"/runs/{result['run_id']}/input",
+            body=json.dumps({"source": "C:/Windows/win.ini"}).encode("utf-8"), origin=client.base_url,
+        )
+        assert status == 403
+        assert payload["error"]["code"] == "public_demo_source_rejected"
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def test_public_demo_rejects_uploads_independent_of_declared_quota(public):
+    for length in (10, 600, 1001):
+        status, payload = _upload(public, length)
+        assert status == 403
+        assert payload["error"]["code"] == "public_demo_upload_disabled"
+
+
+def test_simulation_store_caps_live_sessions_and_frees_closed_slots():
+    store = SimulationStore(max_live=2)
+    try:
+        first = store.create("owner-a")
+        store.create("owner-b")
+        with pytest.raises(SimulationCapacityError):
+            store.create("owner-c")
+        first.close()
+        deadline = time.monotonic() + 3
+        while not first.closed and time.monotonic() < deadline:
+            time.sleep(0.01)
+        store.create("owner-c")
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("extra", (["--allow-gemini-costs"], ["--camera", "front=0"]))
+def test_cli_refuses_public_demo_with_cameras_or_provider_costs(tmp_path, capsys, extra):
+    from visionflow.cli import main
+
+    code = main(["serve", "--public-demo", "--data-dir", str(tmp_path / "d"), *extra])
+    assert code != 0
+    assert "public_demo_conflict" in capsys.readouterr().err
+
+
+def _open_upload(server, client: ApiClient, length: int):
+    import http.client
+
+    address, port = server.server_address[:2]
+    connection = http.client.HTTPConnection(address, port, timeout=5)
+    connection.putrequest("POST", "/media")
+    for name, value in (
+        ("Origin", client.base_url), ("Cookie", client.cookie or ""), ("X-CSRF-Token", client.csrf_token or ""),
+        ("Content-Type", "application/octet-stream"), ("X-VisionFlow-Media-Kind", "image"),
+        ("Content-Length", str(length)), ("Connection", "close"),
+    ):
+        connection.putheader(name, value)
+    connection.endheaders()
+    return connection
+
+
+def _status(connection) -> int:
+    try:
+        response = connection.getresponse()
+        response.read()
+        return response.status
+    finally:
+        connection.close()
+
+
+@pytest.fixture
+def public_server(tmp_path: Path):
+    server, thread, client = _serve(tmp_path, public_demo=True, public_upload_quota_bytes=1000)
+    try:
+        yield server, client
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def test_parallel_public_uploads_store_no_media(public_server):
+    server, client = public_server
+    responses = []
+    workers = [threading.Thread(target=lambda: responses.append(_upload(client, 600)[0])) for _ in range(2)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=5)
+        assert not worker.is_alive()
+    assert sorted(responses) == [403, 403]
+    stored = sum(p.stat().st_size for p in (server.state.uploads_root).iterdir() if p.is_file())
+    assert stored == 0
+    assert server.state.upload_reserved_bytes == 0
+
+
+def test_an_aborted_public_upload_cannot_reserve_storage(public_server):
+    server, client = public_server
+    aborted = _open_upload(server, client, 600)
+    aborted.send(b"x" * 100)
+    aborted.close()
+    assert _upload(client, 600)[0] == 403
+    assert server.state.upload_reserved_bytes == 0
+    assert list(server.state.uploads_root.iterdir()) == []

@@ -109,7 +109,7 @@ def browser_probe(base_url: str, output: Path, phase: str) -> dict[str, Any]:
             if message.type == "error"
             else None,
         )
-        page.goto(base_url + "/", wait_until="domcontentloaded", timeout=30000)
+        page.goto(base_url + "/?lang=de", wait_until="domcontentloaded", timeout=30000)
         page.locator("#road-tab").wait_for(state="visible", timeout=15000)
         page.wait_for_function(
             "() => document.querySelector('#road-tab') && !document.querySelector('#road-tab').disabled",

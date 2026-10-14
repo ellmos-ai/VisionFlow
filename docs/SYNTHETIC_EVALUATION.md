@@ -1,4 +1,25 @@
-# Synthetic evaluation, 2026-10-08
+# Synthetic evaluation
+
+## Update 2026-10-13: portable RoadWorld script and the new scene renderer
+
+`evaluation/roadworld_eval.py` implements the RoadWorld part of the protocol below (seeds 17,
+18, 101, 102; events none, wrong-way, bird, leaf injected before the first frame; 24 frames at
+5 fps; lanes, minimum frames, displacement and opposition cosine as in the road workflow; a
+sequence counts as a candidate when any frame reports a confirmed opposing track). Run on the
+renderer of 2026-10-08 it reproduces all 16 frozen sequence results exactly, including the first
+candidate frame (`evaluation/results/roadworld-renderer-v1.json`).
+
+The road scene was then re-rendered with richer but deliberately smooth scenery and more
+detailed cars. With the same protocol (`evaluation/results/roadworld-renderer-v2.json`) the
+counts are unchanged: normal 0/4, wrong-way 4/4, bird 4/4, leaf 4/4 (as a wrong-way-vehicle
+detector TP 4, FP 8, TN 4, FN 0). Two first-candidate frames moved earlier: seed-18 bird from
+frame 3 to 2, seed-18 leaf from frame 9 to 2. Later changes on the same day (thread-pooled patch
+matching, resolution-independent event speeds) left all 16 sequence results identical.
+
+The section below is the original 2026-10-08 report; its 1,430 frozen PNGs describe the earlier
+renderer.
+
+## Original report, 2026-10-08
 
 Executed product revision: `e65ef914b4a27727481ad604ee3384ee13f5b27c`. Darwin arm64, Python 3.14.7, OpenCV 5.0.0 and NumPy 2.5.3. Source hashes and tracked status were identical before and after execution. No network or provider calls were made. Evaluation-script logic, seeds, generators, metrics and counting rules stayed fixed; only the repository locator and two protocol source fields changed. All 1,430 original input/ground-truth PNGs are byte-identical to the original Windows/Python 3.12.10 evaluation. The product algorithm and corner spacing changed during development; this is a rerun of known synthetic fixtures, not an external holdout.
 

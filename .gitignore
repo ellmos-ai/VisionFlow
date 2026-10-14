@@ -44,3 +44,6 @@ docs/superpowers/
 *.egg-info/
 build/
 dist/
+
+# Agent coordination locks never belong in the repository
+LOCK*.txt

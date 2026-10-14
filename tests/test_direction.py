@@ -642,6 +642,33 @@ def test_native_patch_match_reports_bounded_xy_motion():
     assert peak_gap >= 0.05
 
 
+def test_patch_uniqueness_ignores_the_peak_boundary_and_nonmaximum_shoulder(monkeypatch):
+    import cv2
+    from visionflow.tools.direction import _match_feature_patch
+
+    rng = np.random.default_rng(73)
+    source = rng.integers(0, 256, (80, 80), dtype=np.uint8)
+    target = rng.integers(0, 256, (80, 80), dtype=np.uint8)
+    response = np.zeros((60, 60), dtype=np.float32)
+    response[30, 30] = 0.98
+    response[30, 40] = 0.96  # Exactly ten pixels away: same-peak exclusion.
+    response[30, 41] = 0.95  # Outside, but a shoulder rather than a local maximum.
+    response[30, 44] = 0.86  # Strongest distinct local maximum.
+
+    def correlate(search, template, method):
+        assert search.shape == (80, 80) and template.shape == (21, 21)
+        assert method == cv2.TM_CCOEFF_NORMED
+        return response
+
+    monkeypatch.setattr(cv2, "matchTemplate", correlate)
+    match = _match_feature_patch(source, target, np.asarray([40.0, 40.0]))
+    assert match is not None
+    center, score, gap = match
+    assert center == (40.0, 40.0)
+    assert score == pytest.approx(0.98)
+    assert gap == pytest.approx(0.12, abs=1e-6)
+
+
 def test_native_patch_match_rejects_ambiguous_constant_and_out_of_bounds_inputs():
     from visionflow.tools.direction import _match_feature_patch
 

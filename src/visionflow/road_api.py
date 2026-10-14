@@ -21,7 +21,7 @@ import cv2
 
 from visionflow.contracts import UnknownRun
 from visionflow.recording import ClipNotReady, ClipRef, RecordingError, RecordingStore
-from visionflow.simulation import SimulationSession, SimulationStore
+from visionflow.simulation import SimulationCapacityError, SimulationSession, SimulationStore
 
 
 ROAD_SOURCE_PREFIX = "road-sim-"
@@ -188,7 +188,14 @@ class RoadSessionService:
         with self._lock:
             if self._closed:
                 raise RoadSessionError("service_closed", "Die Kamerademo ist beendet.", 503)
-            session = self._create_session(owner, seed)
+            try:
+                session = self._create_session(owner, seed)
+            except SimulationCapacityError:
+                raise RoadSessionError(
+                    "demo_busy",
+                    "Alle Demo-Kameras sind belegt. Jede Sitzung endet nach zwei Minuten; bitte gleich erneut versuchen.",
+                    503,
+                ) from None
         return {"source_id": session.source_id, "accepted": True}
 
     def _create_session(self, owner_id: str, seed: int) -> SimulationSession:

@@ -770,10 +770,16 @@ def test_case_wallclock_watchdog_expires_visibly_without_using_observation_budge
     service.close()
 
 
-def test_source_stop_cannot_interleave_with_final_decision_open(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("profile", "stop_reason", "expected_phase"),
+    [("high", "source_reset", "reported"), ("pending", "source_stopped", "human_review")],
+)
+def test_source_stop_cannot_interleave_with_final_decision_open(
+    tmp_path, monkeypatch, profile, stop_reason, expected_phase
+):
     fixture = _fixture(tmp_path)
     service = fixture["service"]
-    case = service.start("alice", "road-sim-a", "fixture", fixture_profile="high")
+    case = service.start("alice", "road-sim-a", "fixture", fixture_profile=profile)
     adapter, findings = _adapter_for(fixture, case)
     assert adapter.ask("Review the candidate", findings).action == "report"
     run_result = fixture["controller"].status(case["run_id"])
@@ -799,7 +805,7 @@ def test_source_stop_cannot_interleave_with_final_decision_open(tmp_path, monkey
     assert entered_open.wait(1)
 
     def stop_source():
-        fixture["sessions"].stop(case["run_id"], "source_reset")
+        fixture["sessions"].stop(case["run_id"], stop_reason)
         stop_finished.set()
 
     stopper = threading.Thread(target=stop_source)
@@ -814,7 +820,7 @@ def test_source_stop_cannot_interleave_with_final_decision_open(tmp_path, monkey
     assert not stopper.is_alive()
     assert stop_was_serialized
     assert stop_finished.is_set()
-    assert service.snapshot("alice", case["case_id"])["phase"] == "reported"
+    assert service.snapshot("alice", case["case_id"])["phase"] == expected_phase
     service.close()
 
 
@@ -941,9 +947,24 @@ def test_real_road_case_reaches_human_review_from_recorded_wrong_way_pixels(tmp_
     try:
         time.sleep(1.0)  # Let the initial road scene warm up before injecting pixels.
         case = service.start(owner_id, source_id, "fixture", fixture_profile="pending")
+        # Match the UI's readiness gate: three actual analysed frames, rather
+        # than assuming the detector is ready when the source has warmed up.
+        warmup_deadline = time.monotonic() + 30.0
+        analysed = []
+        while time.monotonic() < warmup_deadline:
+            ready = service.snapshot(owner_id, case["case_id"])
+            analysed = [row for row in ready["perception_trace"] if row.get("type") in {
+                "frame_analyzed", "frame_observed", "observation_frame",
+            }]
+            if len(analysed) >= 3:
+                break
+            time.sleep(0.1)
+        assert len(analysed) >= 3, "detector did not reach the UI readiness gate"
         road_sessions.inject(owner_id, source_id, "wrong_way")
 
-        deadline = time.monotonic() + 35.0
+        # Real pixel matching and FFmpeg export share the host with other work;
+        # this is a wall-clock wait, not the workflow's observation budget.
+        deadline = time.monotonic() + 60.0
         current = None
         while time.monotonic() < deadline:
             current = service.snapshot(owner_id, case["case_id"])
@@ -995,3 +1016,69 @@ def test_obtain_clip_retries_when_bounded_exports_are_busy(tmp_path):
 
     assert service._obtain_clip(case, context) is expected
     assert calls == [4.0, 4.0, 4.0]
+
+
+def test_source_is_free_for_a_new_case_once_the_first_is_in_review(tmp_path):
+    fixture = _fixture(tmp_path)
+    service = fixture["service"]
+    case = service.start("alice", "road-sim-a", "fixture", fixture_profile="pending")
+    adapter, findings = _adapter_for(fixture, case)
+    adapter.ask("Review the direction candidate", findings)
+    fixture["controller"].complete(case["run_id"], findings=findings)
+    _wait_for_phase(service, "alice", case["case_id"], {"human_review"})
+
+    # The evidence clip is sealed; the camera can feed the next case meanwhile.
+    second = service.start("alice", "road-sim-a", "fixture", fixture_profile="bird")
+    assert second["case_id"] != case["case_id"]
+    assert service.snapshot("alice", case["case_id"])["phase"] == "human_review"
+    service.cancel("alice", second["case_id"])
+    service.close()
+
+
+@pytest.mark.parametrize("reason", ["source_stopped", "source_end"])
+@pytest.mark.parametrize("decision", ["confirm", "reject"])
+def test_camera_stop_keeps_human_ticket_decidable(tmp_path, reason, decision):
+    fixture = _fixture(tmp_path)
+    service = fixture["service"]
+    try:
+        case = service.start("alice", "road-sim-a", "fixture", fixture_profile="pending")
+        adapter, findings = _adapter_for(fixture, case)
+        adapter.ask("Review the candidate", findings)
+        fixture["controller"].complete(case["run_id"], findings=findings)
+        before = _wait_for_phase(service, "alice", case["case_id"], {"human_review"})
+
+        fixture["sessions"].stop(case["run_id"], reason)
+        after = service.snapshot("alice", case["case_id"])
+        assert after["phase"] == "human_review"
+        assert after["content_hash"] == before["content_hash"]
+        assert after["exchange_ids"] == before["exchange_ids"]
+        resolved = service.decide(
+            "alice", case["case_id"], before["version"], before["content_hash"],
+            decision, "after-camera-stop",
+        )
+        assert resolved["phase"] == ("reported" if decision == "confirm" else "rejected")
+    finally:
+        service.close()
+
+
+def test_camera_stop_keeps_deadline_and_late_all_clear(tmp_path):
+    fixture = _fixture(tmp_path, countdown=0.2)
+    service = fixture["service"]
+    try:
+        case = service.start("alice", "road-sim-a", "fixture", fixture_profile="pending")
+        adapter, findings = _adapter_for(fixture, case)
+        adapter.ask("Review the candidate", findings)
+        fixture["controller"].complete(case["run_id"], findings=findings)
+        before = _wait_for_phase(service, "alice", case["case_id"], {"human_review"})
+        fixture["sessions"].stop(case["run_id"], "source_stopped")
+        fixture["clock"].advance(0.21)
+        expired = _wait_for_phase(service, "alice", case["case_id"], {"no_response"})
+        assert fixture["inbox"].list("alice")[0]["reason"] == "no_response"
+        resolved = service.decide(
+            "alice", case["case_id"], expired["version"], before["content_hash"],
+            "reject", "all-clear-after-camera-stop",
+        )
+        assert resolved["phase"] == "corrected"
+        assert len(fixture["inbox"].list("alice")) == 2
+    finally:
+        service.close()

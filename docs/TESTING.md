@@ -1,10 +1,12 @@
-# Testen und lokale Abnahme
+# Testing and local acceptance
 
-Diese Anleitung beschreibt die lokale Entwicklungsprüfung. Sie behauptet keine AWS-, Provider-, Kamera-Hardware-, Datensatz- oder Wettbewerbsabnahme.
+This guide covers the local development checks. Cloud runs are described in
+[AWS_ACCEPTANCE.md](AWS_ACCEPTANCE.md) and `cloud/demo/`.
 
-## Umgebung
+## Environment
 
-Im Repository-Root installierst du die gepinnten Pakete in eine virtuelle Umgebung und richtest den CLI-Import aus dem Quellcheckout ein:
+From the repository root, install the pinned packages into a virtual environment and make the
+source checkout importable:
 
 ```powershell
 python -m venv .venv
@@ -15,114 +17,156 @@ $env:PYTHONPATH = (Resolve-Path .\src).Path
 $env:PYTHONIOENCODING = "utf-8"
 ```
 
-Die editierbare Installation wird auch für die echten Windows-Konsolenprogrammtests benötigt. Diese Tests starten `.venv/Scripts/visionflow.exe` ohne `PYTHONIOENCODING` und prüfen UTF-8-Ausgabe. Für `pytest` setzt `pyproject.toml` den `src`-Pfad bereits. Nutze den Interpreter aus `.venv`, damit die geprüfte OpenCV-Version verwendet wird.
+The editable install is also needed by the real Windows console-program tests: they start
+`.venv/Scripts/visionflow.exe` without `PYTHONIOENCODING` and check UTF-8 output. `pyproject.toml`
+already puts `src` on the pytest path. Use the interpreter from `.venv` so that the checked
+OpenCV version is used. On macOS/Linux use `.venv/bin/python`.
 
-## Gezielte Demosuite
+## Full suite
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Measured on 2026-10-13 (Windows 11, Python 3.12.10, OpenCV 5.0.0, NumPy 2.5.3, commit `bde0e67`):
+560 passed, 1 skipped, 0 failed in 220 s. The skipped test needs directory symlinks, which
+Windows only allows with an extra privilege. The CLI and API contracts are covered by
+`tests/test_cli.py` and `tests/test_api.py`; the hosted demo mode by `tests/test_public_demo.py`.
+
+## Focused demo suite
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests\test_demo.py -q
 ```
 
-Die drei Tests erzeugen echte synthetische PNG- und AVI-Dateien mit OpenCV 5 und führen sie durch Registry, Controller und Fixture-Modelladapter. Sie prüfen:
+The three tests create real synthetic PNG and AVI files with OpenCV 5 and run them through the
+registry, controller and fixture model adapter. They check that:
 
-- dass die erste Dokumentmessung eine echte Eingabeanforderung auslöst und eine zweite Bildquelle anschließend neu analysiert wird;
-- dass der gemessene Laplace-Varianz-Wert des synthetischen Ersatzbilds höher ist;
-- dass Video-Follow-up denselben fortlaufenden Mediencursor verwendet und bei 10 fps mit 2 fps die tatsächlichen Frame-Indizes `2, 7, 12` nach den Initialframes `0, 1` liefert;
-- dass Trace-Dateien und Evidence-Dateien tatsächlich existieren und Evidence-Pfade innerhalb des Demo-Ausgabeordners bleiben;
-- dass ein vorhandener Ausgabeordner abgewiesen wird, ohne seinen Inhalt zu überschreiben.
+- the first document measurement raises a real input request and a second image source is then
+  analysed again;
+- the measured Laplacian variance of the synthetic replacement image is higher;
+- video follow-up uses the same running media cursor and, at 10 fps with 2 fps requested,
+  delivers the actual frame indices `2, 7, 12` after the initial frames `0, 1`;
+- trace and evidence files really exist and evidence paths stay inside the demo output folder;
+- an existing output folder is refused without overwriting its contents.
 
-Die Demo injiziert eine Uhr, die Wartezeiten verkürzt. Sie ändert weder die Video-Timeline noch Frame-IDs, Messwerte oder Budgetgrenzen. Modellentscheidungen sind lokal festgelegt; es gibt keinen Netzwerkzugriff.
+The demo injects a clock that shortens waits. It changes neither the video timeline nor frame
+IDs, measurements or budget limits. Model decisions are fixed locally; there is no network
+access.
 
-## CLI-Smoke-Test
+## CLI smoke test
 
-Wähle einen neuen Ausgabeordner und führe den CLI-Demolauf aus:
+Choose a new output folder and run the CLI demo:
 
 ```powershell
 $env:PYTHONIOENCODING = "utf-8"
 .\.venv\Scripts\python.exe -m visionflow.cli demo run --output-dir "$env:TEMP\visionflow-demo-smoke-01"
 ```
 
-Erwartet wird eine JSON-Antwort mit `status: "passed"`, `model_mode: "fixture"` und `network_used: false`. Öffne die angegebenen JSON-Traces und prüfe, dass deren Zustandswechsel und Frame-Ereignisse zu den zurückgegebenen Frame-IDs passen. Die Evidence-Refs zeigen auf die gespeicherten OpenCV-Framebilder im selben Ausgabeordner.
+Expected is a JSON answer with `status: "passed"`, `model_mode: "fixture"` and
+`network_used: false`. Open the JSON traces and check that their state changes and frame events
+match the returned frame IDs. The evidence references point to the stored OpenCV frames in the
+same output folder.
 
-Ein realer lokaler CLI-Lauf unter Windows x64, Python 3.12.10 und OpenCV 5.0.0 ergab die synthetischen Schärfewerte `4.557734375` und `8000.528359375`. Bei 10 fps und einer angeforderten Beobachtung von 2 fps waren die Folgeframes `2, 7, 12`. Diese Werte beschreiben nur die erzeugten Testmedien.
+A real local CLI run on Windows x64, Python 3.12.10 and OpenCV 5.0.0 gave the synthetic sharpness
+values `4.557734375` and `8000.528359375`. At 10 fps with 2 fps requested, the follow-up frames
+were `2, 7, 12`. These values only describe the generated test media.
 
-## Weitere Tests
+## Road demo tests
 
-Die Task-8-Prüfung wird gezielt mit `tests/test_demo.py` ausgeführt. Für die integrierte lokale Regression läuft nach der Stabilisierung aller parallelen Tasks die vollständige Suite:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests -q
-```
-
-Der CLI- und API-Vertrag ist zusätzlich über `tests/test_cli.py` und `tests/test_api.py` abgedeckt. Ein laufender Server lässt sich ausschließlich an Loopback starten:
-
-```powershell
-.\.venv\Scripts\python.exe -m visionflow.cli serve --host 127.0.0.1 --port 8765 --data-dir .\.visionflow-data
-```
-
-Das Vorhandensein dieser Tests ersetzt keinen separat dokumentierten Browser- oder Hardwarelauf.
-
-## Straßendemo-Tests und Browserabnahme
-
-Die Tests für die Straßendemo umfassen Richtungsanalyse, Aufnahme-Journal, MP4-Clip-Export, Modellprüfung, Fristen und Arbeitsplatz:
+The road tests cover direction analysis, the recording journal, MP4 clip export, model review,
+deadlines and the workplace:
 
 ```powershell
-# Gezielte Road-Suite (API, CLI, Review)
 .\.venv\Scripts\python.exe -m pytest tests/test_road_api.py tests/test_road_cli.py tests/test_road_review_api.py tests/test_road_review_cli.py -q
-
-# Gesamtsuite
-.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest tests/test_direction.py tests/test_simulation.py -q
 ```
 
-GitHub Actions ist für dieselbe Suite und den CLI-Demolauf auf Ubuntu und Windows konfiguriert (`.github/workflows/ci.yml`); die aktuellen Jobs starten wegen einer Abrechnungssperre nicht. Ein Hosted-CI-PASS wird daraus nicht abgeleitet.
-
-### Browserabnahme
-
-Die Browserabnahmen sind eigenständige Skripte und werden von `pytest` nicht gesammelt. Sie starten jeweils einen eigenen Loopback-Server mit frischem Datenordner und schreiben Belege nur unter `.local/`. Voraussetzungen:
-
-- Playwright in der Projektumgebung: `.\.venv\Scripts\python.exe -m pip install playwright`. Es steht nicht in der Lockdatei.
-- Ein Chromium-Browser:
-  - Unter Windows wird Microsoft Edge verwendet.
-  - Auf anderen Systemen ein installiertes Chromium oder das von Playwright.
-  - `VISIONFLOW_BROWSER` wählt ausdrücklich eine Browserdatei.
+RoadWorld evaluation (no browser, about a minute):
 
 ```powershell
-# Kamera-Phase (Steuerelemente, keine Browserfehler, keine externen Anfragen)
+.\.venv\Scripts\python.exe evaluation\roadworld_eval.py --out .local\roadworld.json
+```
+
+GitHub Actions is configured for the same suite and the CLI demo on Ubuntu and Windows
+(`.github/workflows/ci.yml`); hosted jobs currently do not start because of an account billing
+block, so no hosted CI pass is claimed.
+
+### Browser acceptance
+
+The browser acceptance runs are standalone scripts and are not collected by `pytest`. Each starts
+its own loopback server with a fresh data folder and writes evidence only under `.local/`.
+Requirements:
+
+- Playwright in the project environment: `.\.venv\Scripts\python.exe -m pip install playwright`
+  (not part of the lock file).
+- A Chromium-based browser: Microsoft Edge on Windows, otherwise an installed Chromium or the one
+  from Playwright. `VISIONFLOW_BROWSER` selects a browser executable explicitly.
+
+```powershell
+# Camera phase (controls, no browser errors, no external requests)
 .\.venv\Scripts\python.exe tests\road_browser_acceptance.py --phase camera --output .local/acceptance/run-camera-01
 
-# Emergency-Leitstelle: drei vollständige echte Fälle über die Spieloberfläche
+# Review phase
+.\.venv\Scripts\python.exe tests\road_browser_acceptance.py --phase review --output .local/acceptance/run-review-01
+
+# Control room: three complete real cases through the game interface
 .\.venv\Scripts\python.exe tests\game_multievent_acceptance.py --output .local/acceptance/multievent-01
 ```
 
-`road_browser_acceptance.py` schreibt `acceptance.json`, das Serverlog und Screenshots.
+The interface is English by default. The multi-event script first checks the English default
+(`lang="en"`, product name, inject button) and then runs its case assertions on the German
+interface via `?lang=de`; waits and assertions are unchanged.
 
-`game_multievent_acceptance.py` spielt drei Fälle durch:
+`road_browser_acceptance.py` writes `acceptance.json`, the server log and screenshots.
+`game_multievent_acceptance.py` plays three cases:
 
-1. **Profil `pending`:**
-   - Falschfahrer und Blatt in die laufende Analyse einblenden.
-   - Die echte Modellantwort `0,80` prüfen.
-   - Prüfen, dass neue Ereignisse während der Prüfung gesperrt sind.
-   - Den Server-Clip mit bestätigter SHA-256-Prüfsumme laden, dann die Gefahr bestätigen.
-2. **Profil `leaf` mit eingeblendetem Vogel:** Die Oberfläche zeigt die Fixture-Antwort „Blatt“, nicht das Szenario.
-3. **Profil `pending` ohne Entscheidung:**
-   - Echte Frist in Raum 4.
-   - Automatische Meldung nach Ablauf.
-   - Späte Verneinung mit Entwarnung.
+1. **Profile `pending`:** inject a wrong-way driver and a leaf into the running analysis; check
+   the real model answer `0.80`; start the next case on the same camera during review; load the
+   server clip with confirmed SHA-256 and confirm the hazard.
+2. **Profile `leaf` with an injected bird:** the interface shows the fixture answer "leaf", not
+   the scenario.
+3. **Profile `pending` without a decision:** real deadline in room 4, automatic report after it
+   expires even after stopping the camera, late rejection with an all-clear.
 
-Ein Lauf dauert etwa drei Minuten. Das Open-Source-Chromium von Playwright enthält keinen H.264-Decoder. Der Clip wird dort geladen und geprüft, aber nicht abgespielt; Edge und Chrome spielen ihn ab.
+Every detection becomes a numbered ticket shown at its current station: model review in
+room 2, human review in room 3, and expired deadlines in room 4. The multi-event acceptance
+checks room routing, a second event during review, and decidable tickets after camera stop.
 
-## Medienzeit und Browserbelege
+A run takes about three minutes. Playwright's open-source Chromium has no H.264 decoder; there
+the clip is loaded and checked but not played. Edge and Chrome play it.
 
-Dateivideo-Folgebeobachtung sampelt die Medienzeit, nicht die nächste Serie nativer Frames. Die lokale Implementierung benötigt eine positive, verlässliche FPS-Angabe und ein Backend, das die angeforderte Frameposition tatsächlich bestätigt. Unbekannte FPS oder unzuverlässiges Seek-Verhalten liefern einen strukturierten Medienfehler. Die synthetische AVI-Demo verwendet konstante Framerate; Videos mit variabler Framerate und reale Kameras sind nicht abgenommen.
+Measured on 2026-10-13 on the integrated tree: multi-event, camera and review phases passed with
+no browser errors and no external requests.
 
-Die unabhängige lokale Headless-Edge-Prüfung am 2026-10-02 bestand acht CLI-/Browserfälle einschließlich Upload, Neuaufnahme, Video-Folgebeobachtung, Freigabe, Abbruch, defekter Medien, Mehrtabbetrieb und 390-Pixel-Ansicht. Sie verwendete echte Serverprozesse, OpenCV und gespeicherte Framebelege. Screenshots und Ergebnis-JSON sind lokale Abnahmebelege; es gab keine externen Seitenanfragen und keine Browserfehler. Diese Prüfung ist keine Hardware- oder Wettbewerbsabnahme.
+## Media time
 
-## Ausführungsregeln des Kerns
+File-video follow-up samples media time, not the next run of native frames. The implementation
+needs a positive, reliable FPS value and a backend that confirms the requested frame position.
+Unknown FPS or unreliable seeking produce a structured media error. The synthetic AVI demo uses
+a constant frame rate; variable-frame-rate videos and real cameras are not covered.
 
-Zusammenlaufende gewählte Workflowzweige werden in topologischer Reihenfolge zusammengeführt; jeder Knoten läuft genau einmal. Mehrere Bildwerkzeuge verwenden dasselbe geladene Bild, wobei jeder Analyse-Knoten weiterhin das Frame-Verarbeitungsbudget belastet. Eine reine Texteingabe bewahrt Mediencursor und Werkzeugzustand; eine ausdrücklich gewählte Ersatzquelle startet einen neuen Analysezustand. Quellen bleiben während einer Eingabepause offen und werden bei Abschluss oder Abbruch geschlossen.
+## Core execution rules
 
-Bei Datei-Videos begrenzt die native Framerate die tatsächliche Abtastung; die konfigurierte `sample_fps` ist eine Obergrenze. Die Vorprüfung des Framebudgets bleibt konservativ anhand der angeforderten Rate. ROI-Findings bewahren die Region in Originalpixeln; `metrics.coordinate_system` kennzeichnet die Pixelkoordinaten des Bildausschnitts und der darin gemessenen Bewegungsregionen. Berichte und Nachrichtenentwürfe übernehmen nur die Metadaten früherer gerenderter Ausgaben, keine verschachtelten Berichtsinhalte.
+Converging workflow branches are merged in topological order; every node runs exactly once.
+Several image tools share one loaded image, while every analysis node still counts against the
+frame budget. A text-only input keeps the media cursor and tool state; an explicitly chosen
+replacement source starts a new analysis state. Sources stay open during an input pause and are
+closed on completion or cancellation.
 
-## Prüfstand vom 8. Oktober 2026
+For file videos the native frame rate limits the actual sampling; the configured `sample_fps` is
+an upper bound. The frame-budget pre-check stays conservative based on the requested rate. ROI
+findings keep the region in original pixels; `metrics.coordinate_system` marks the pixel
+coordinates of the crop and the motion regions measured in it. Reports and message drafts only
+take metadata of earlier rendered outputs, not nested report contents.
 
-Produktrevision `e65ef914`: vollständige Mac-Suite mit 549 bestandenen Tests in 101,46 Sekunden; tatsächliche Windows/Edge- und Mac/Chromium-Browserläufe mit jeweils drei vollständigen Fällen und elf erfolgreichen Checks. Die unveränderten 90-Sekunden-Grenzen und Assertions bleiben erhalten. Kein Browserfehler und keine externe Anfrage. Frühere Fehlläufe bleiben dokumentiert. Persönliche GUI- und Geräteabnahme durch Lukas sowie echte Provider-/AWS-Ausführung sind getrennte offene Gates.
+## History
+
+* 2026-10-02: independent local headless-Edge check passed eight CLI/browser cases (upload,
+  replacement capture, video follow-up, approval, cancellation, broken media, multiple tabs, a
+  390-pixel view) with real server processes, OpenCV and stored frame evidence; no external page
+  requests and no browser errors.
+* 2026-10-08: product revision `e65ef914` passed 549 tests on an isolated Mac in 101.46 s; actual
+  Windows/Edge and Mac/Chromium browser runs each passed three complete cases and eleven checks.
+  Earlier failed runs remain documented in the project records.
+* 2026-10-13: see the measurements above.

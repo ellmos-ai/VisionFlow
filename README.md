@@ -1,138 +1,199 @@
 # VisionFlow
 
-VisionFlow führt lokale, begrenzte Bild- und Video-Workflows mit OpenCV aus. Derselbe Workflow lässt sich über die Python-API, die CLI und den lokalen Webserver verwenden. Der Server bindet ausschließlich an Loopback.
+**Reusable OpenCV 5 vision workflows in which the pixels decide what happens next.**
+A camera, a video or a single image goes in; OpenCV measures; the measurement opens a case,
+asks for more evidence, involves a model and a human under a deadline, and ends in a bounded,
+logged action. The flagship example is a **wrong-way driver warning** you can try in the browser.
 
-## Technische Operatorprüfung vom 8. Oktober 2026
+<!-- VIDEO_THUMBNAIL -->
 
-Der integrierte und geprüfte Produktstand `e65ef914` besteht 549 Tests in der isolierten Mac-Umgebung mit Python 3.14.7 und OpenCV 5.0.0. Die echten Browserläufe auf Windows/Edge und Mac/Chromium bestehen jeweils drei vollständige Fälle und elf Checks ohne Browserfehler oder externe Requests. Die ursprünglichen Windows-Fehler bleiben dokumentiert; die neue pixelbasierte Richtungskorrektur und ihre Originalbild-Regressionen wurden unabhängig geprüft. GitHub Actions startet wegen einer Abrechnungssperre keine Jobs; ein Hosted-CI-PASS wird daraus nicht abgeleitet.
+| Try it | Where |
+|---|---|
+| **Live demo** (no install, synthetic traffic) | <!-- LIVE_DEMO_URL --> |
+| Demo video (under 5 minutes) | <!-- VIDEO_URL --> |
+| Local install | [Quick start](#quick-start) below |
+| Technical report | [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) |
 
-Die [Juryanleitung](docs/JURY_INSTRUCTIONS.md), [Architektur](docs/ARCHITECTURE.md) und der [technische Bericht](docs/TECHNICAL_REPORT.md) unterscheiden lokale Prüfungen, synthetische Evaluation und noch offene Ausführungsnachweise. Ein 2:45-Minuten-Video der tatsächlichen lokalen Oberfläche ist fertig; es zeigt synthetischen Verkehr, feste Offline-Modellantworten und simulierte Empfänger. Echte Gemini- und AWS-Ausführung, Video-Upload, Juryzugang und die persönliche GUI-Nutzungsabnahme bleiben getrennte Schritte.
+Built for the [OpenCV AI Competition 2026, powered by AWS](https://opencv26.devpost.com/) by
+Lukas Geiger (solo). Track: Agentic Vision with OpenCV 5.
 
-## Lokaler MVP-Stand
+![VisionFlow wrong-way driver control room](docs/media/visionflow-control-room.png)
 
-Die zwei Beispiele verwenden künstlich erzeugte Testmedien und den ausdrücklich markierten `fixture`-Modelladapter. Ein echter CLI-Demolauf mit OpenCV 5.0.0 ergab für das unscharfe synthetische Bild eine Laplace-Varianz von `4.557734375` und nach der Eingabe eines zweiten, schärferen Bildes `8000.528359375`. Das Video enthält 30 Frames mit 10 fps; nach den initialen Frames `0, 1` las die 2-fps-Folgebeobachtung die echten Medienframes `2, 7, 12` weiter. Trace-JSON und Framebelege lagen unter dem gewählten Demo-Ausgabeordner. Dieser Lauf nutzte kein Netzwerk.
+## Why
 
-Die beiden Schärfewerte kalibrieren nur diese künstlichen Bilder. Sie sind keine allgemeingültige Qualitätsgrenze und belegen weder OCR noch Dokumentvollständigkeit. Die Bewegungssequenz ist ebenfalls ein synthetischer Funktionstest, keine Evaluation an einem Datensatz.
+Traffic operators cannot watch every camera, and a pure "AI alarm" floods them with false alarms:
+a bird flying against the traffic or a leaf blowing across the lane moves exactly like a
+wrong-way driver. VisionFlow keeps the cheap, fast pixel analysis on every frame, but turns each
+hit into an **evidence-bound case**: the same immutable clip goes to a model and to a human,
+there is a real deadline, and every step is in the trace.
 
-## Installation aus dem Checkout
+The same controller is not a one-off traffic app. Workflows are JSON files: swap the tool, the
+input and the follow-up rules, and the identical core checks document quality, watches a video
+for motion, or monitors a road.
 
-Voraussetzung ist Python 3.12 oder neuer. Die geprüfte Umgebung war Windows x64 mit Python 3.12.10, NumPy 2.5.3 und OpenCV-Python 5.0.0.93 (Laufzeitversion `cv2.__version__`: 5.0.0).
+## How the loop works
 
-```powershell
+```mermaid
+flowchart LR
+    CAM[Camera / video / image] --> CV[OpenCV 5 tools<br/>direction · motion · quality]
+    CV -->|finding| CASE[Case opened<br/>5 s before + 10 s after clip<br/>SHA-256 bound]
+    CV -->|no finding| OBS[Keep observing<br/>bounded frames and seconds]
+    CASE --> MODEL[Model review<br/>offline profile or Gemini video]
+    MODEL -->|not a hazard| DISMISS[Dismissed as false alarm]
+    MODEL -->|vehicle, hazard, confidence ≥ 0.90<br/>and OpenCV confirmed| REPORT[Report sent<br/>to simulated authority]
+    MODEL -->|uncertain or model error| HUMAN[Human review<br/>60 s deadline]
+    HUMAN -->|confirm| REPORT
+    HUMAN -->|reject| DISMISS
+    HUMAN -->|no decision| REPORT
+    REPORT -->|late rejection| CORR[Linked all-clear]
+```
+
+1. **Perceive.** The `direction` tool tracks native-resolution grayscale patches between frames
+   (NCC ≥ 0.80, unique peak, forward/backward check within 1.5 px) and reports tracks that move
+   against the configured lane vector. It never sees scenario labels, only pixels.
+2. **Decide.** A hit stops the observation and opens a case. The recorder cuts an immutable H.264
+   clip (5 s before, 10 s after) and hashes it. The model stage receives exactly that clip; the
+   human sees the same hash.
+3. **Act.** The decision policy either dismisses the case, escalates it at high confidence, or
+   waits for a human until the server-side deadline. Notifications go to a simulated inbox; a
+   rejection after an automatic report creates a linked correction. Nothing real is ever sent.
+
+Every run is bounded by frame, observation-time and model-call budgets, and a model answer can
+never authorize a new media source or a new output destination.
+
+## The control room demo
+
+The browser interface turns the road workflow into four rooms:
+
+1. **Traffic room.** A live synthetic camera with traffic in both directions. Inject a wrong-way
+   driver, a bird or a leaf. Injecting is not a detection: only the analysis decides.
+2. **Data center.** The OpenCV stage, the clip, the actual model request and answer, with their
+   source clearly labelled (offline profile or Gemini).
+3. **Dispatch Alpha.** Human review of the hash-verified evidence clip: confirm or reject.
+4. **Dispatch Beta.** The real deadline. If nobody decides, the server reports automatically.
+
+Each detection creates a numbered ticket that appears at its current station: model review
+in room 2, human review in room 3, and expired deadlines in room 4. A second event during a
+review starts the next case on the same camera; stopping the camera keeps sealed tickets decidable.
+
+The public demo runs in **offline-profile mode**: the model step returns a fixed, selectable
+answer and does not look at the image. Everything else is real: rendered frames, OpenCV
+analysis, clip export with SHA-256, deadlines and the simulated authority inbox. Live Gemini
+video review is available locally with an explicit cost opt-in (see below).
+
+## Reusable workflows
+
+A workflow is a small DAG of `analyze`, `observe`, `branch`, `ask_model`, `request_input`,
+`approve`, `output` and `report` nodes. The examples in
+[`examples/workflows/`](examples/workflows/) all run on the same controller:
+
+| Workflow | Input | What the pixels change |
+|---|---|---|
+| `document-quality.json` | image | Measures sharpness, requests a replacement photo (a fixed step of this template) and measures the replacement again |
+| `motion-observation.json` | video | Measured motion goes to the model, which may request a bounded follow-up observation from the same video cursor, then a report |
+| `road-monitor.json` | camera | Opposing motion stops the observation and selects the candidate branch |
+| `road-review.json` | camera | Opposing motion opens an evidence case with model review, human decision and simulated escalation |
+| `direction-review.json` | video file | The same direction analysis on a recorded video |
+
+```json
+{"id": "monitor", "type": "observe",
+ "params": {"duration_seconds": 60, "sample_fps": 5,
+            "stop_when": {"tool": "direction", "metric": "opposition_count",
+                          "operator": "gte", "value": 1}},
+ "next": ["candidate"]}
+```
+
+The same core is available through the Python API, the CLI and the local web interface.
+
+## Quick start
+
+Python 3.12+, and FFmpeg with `libx264` for the road clips.
+
+```bash
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.lock
-.\.venv\Scripts\python.exe -m pip install --no-deps -e .
-$env:PYTHONPATH = (Resolve-Path .\src).Path
-$env:PYTHONIOENCODING = "utf-8"
+.venv/bin/python -m pip install -r requirements.lock      # Windows: .venv\Scripts\python.exe
+.venv/bin/python -m pip install --no-deps -e .
+.venv/bin/python -m visionflow.cli serve --port 8765      # then open http://127.0.0.1:8765/
 ```
 
-Die gepinnte Lockdatei umfasst Laufzeitpakete und die Testwerkzeuge. Prüfe die Installation mit:
+Offline end-to-end demo without a server (document and motion workflows, real OpenCV frames):
 
-```powershell
-.\.venv\Scripts\python.exe -m pip check
-.\.venv\Scripts\python.exe -m visionflow.cli --help
+```bash
+.venv/bin/python -m visionflow.cli demo run --output-dir ./demo-out-01
 ```
 
-Die editierbare Installation registriert zusätzlich `.\.venv\Scripts\visionflow.exe` und bleibt an diesen Quellcheckout gebunden. `PYTHONPATH` ist damit für die CLI nicht erforderlich; die gezeigte Einstellung erlaubt auch einen direkten Quellimport. Die CLI schreibt auch ohne `PYTHONIOENCODING` UTF-8.
+Road case from the command line (start the server first):
 
-## Workflows und Offline-Demo
-
-Die Workflowdateien liegen unter `examples/workflows/`. Ihre Eingabequelle `USER_PROVIDED` ist ein Platzhalter. Ersetze sie für einen normalen Serverlauf in einer Kopie der JSON-Datei durch einen erreichbaren Bild- oder Videopfad und validiere die Kopie:
-
-```powershell
-.\.venv\Scripts\python.exe -m visionflow.cli validate .\examples\workflows\document-quality.json
-.\.venv\Scripts\python.exe -m visionflow.cli validate .\examples\workflows\motion-observation.json
+```bash
+.venv/bin/python -m visionflow.cli road create --seed 17
+.venv/bin/python -m visionflow.cli road case start SOURCE_ID --mode fixture
+.venv/bin/python -m visionflow.cli road inject SOURCE_ID wrong_way
+.venv/bin/python -m visionflow.cli road case status CASE_ID
 ```
 
-Die reproduzierbare Demo erzeugt ihre eigenen Bilder und ihr eigenes Video. Sie braucht keinen Server und keinen externen Dienst. Wähle für jeden Lauf einen noch nicht existierenden Zielordner; vorhandene Ordner werden mit `FileExistsError` abgewiesen und nicht überschrieben.
+Live Gemini video review (costs may apply): set `GEMINI_API_KEY` and start
+`serve --allow-gemini-costs`; road cases with `--mode gemini_video` then send the hash-bound
+clip and evidence frames to the model, at most two requests per case.
 
-```powershell
-.\.venv\Scripts\python.exe -m visionflow.cli demo run --output-dir "$env:TEMP\visionflow-demo-01"
+## AWS
+
+* **Public demo:** the unchanged loopback-only server runs with `--public-demo` on an
+  **AWS Graviton (arm64) EC2** instance behind nginx, with **Amazon CloudFront** for HTTPS. The
+  security group only admits CloudFront, there is no SSH (SSM only), uploads are disabled, at most
+  four live road sessions run at once and the service restarts fresh every day.
+  Stack and deploy script: [`cloud/demo/`](cloud/demo/).
+* **Reproducible cloud acceptance:** [`cloud/template.json`](cloud/template.json) and
+  [`cloud/buildspec.yml`](cloud/buildspec.yml) run the full test suite and both OpenCV demos in
+  **AWS CodeBuild** from an exact source ZIP in private S3 and return hashed evidence
+  ([procedure](docs/AWS_ACCEPTANCE.md)).
+
+<!-- AWS_RESULTS -->
+
+Architecture overview: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Evaluation and limits
+
+Synthetic, pre-declared protocol ([details](docs/SYNTHETIC_EVALUATION.md)); the RoadWorld part
+can be rerun with [`evaluation/roadworld_eval.py`](evaluation/roadworld_eval.py):
+
+* Known blur: sharpness ordering correct in 18/18 pairs.
+* Known horizontal direction (36 sequences): TP 9, FP 0, TN 24, FN 3.
+* RoadWorld scenes (16 sequences): direction candidates for normal traffic 0/4, wrong-way 4/4,
+  bird 4/4, leaf 4/4. The pixel stage finds **opposing motion**, not vehicles. Read as a
+  wrong-way-vehicle detector it gives TP 4, FP 8, TN 4, FN 0. Telling the bird and the leaf apart
+  from a car is exactly the job of the model and human stages behind it.
+
+Live model test (13 October 2026): five real Gemini video requests. The provider answered HTTP 503 ("high demand") or exceeded the 30-second client bound, and in every case the policy fell back to human review and the deadline, as designed. No model accuracy is claimed.
+
+Limits: all traffic is synthetic, the parameters were tuned on known sequences (no blinded
+holdout), and nothing here is a claim about real-road safety. Notifications are simulated.
+
+## Tests
+
+```bash
+.venv/bin/python -m pytest -q
 ```
 
-Die CLI gibt UTF-8-JSON mit Status, OpenCV-Version, Szenarioergebnissen, echten Frame-IDs, Messwerten sowie Trace- und Evidence-Pfaden aus. Die Traces liegen in `traces/`, die erzeugten Medien in `media/` und die echten Framebelege in `evidence/` unter dem Ausgabeordner.
+On Windows 11 with Python 3.12.10, OpenCV 5.0.0 and NumPy 2.5.3 the suite reports **560 passed, 1 skipped** (the directory-symlink test needs a Windows privilege), 0 failed (2026-10-13, commit bde0e67).
 
-## Lokaler Server, CLI und Weboberfläche
+Browser acceptance scripts (Playwright with Edge or Chromium) live in `tests/` and are described
+in [docs/TESTING.md](docs/TESTING.md).
 
-Starte den Server in einem PowerShell-Fenster. `--host` akzeptiert nur Loopback-Adressen; der Standard ist `127.0.0.1`. Workflow- und Evidence-Daten bleiben im lokalen Datenordner.
+## Security and responsible use
 
-```powershell
-.\.venv\Scripts\python.exe -m visionflow.cli serve --host 127.0.0.1 --port 8765 --data-dir .\.visionflow-data
-```
+The server binds to loopback only. In local mode, workflows may read files the server account
+can read, so do not expose it to untrusted users; the hosted demo uses `--public-demo`, which only
+reads the synthetic road simulation and rejects media uploads. Camera access needs an explicit
+`--camera NAME=INDEX` mapping. Provider calls need an explicit cost opt-in and never carry
+credentials in source. VisionFlow is a decision-support prototype: a human or a documented policy
+stays responsible for every escalation.
 
-Öffne anschließend `http://127.0.0.1:8765/` oder nutze in einem zweiten Fenster die CLI:
+## Documentation
 
-```powershell
-.\.venv\Scripts\python.exe -m visionflow.cli tools --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli validate .\examples\workflows\document-quality.json
-.\.venv\Scripts\python.exe -m visionflow.cli run .\examples\workflows\document-quality.json --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli status RUN_ID --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli cancel RUN_ID --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli confirm RUN_ID ACTION_ID CONTENT_HASH --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli reject RUN_ID ACTION_ID CONTENT_HASH --server http://127.0.0.1:8765
-```
-
-Ersetze `RUN_ID` durch die ID aus der JSON-Antwort von `run`. Wenn ein Lauf auf ein Bild wartet, kannst du es mit einem JSON-Objekt fortsetzen:
-
-```powershell
-.\.venv\Scripts\python.exe -m visionflow.cli input RUN_ID '{"source":"C:\\Users\\User\\Pictures\\aufnahme.png"}' --server http://127.0.0.1:8765
-```
-
-`confirm RUN_ID ACTION_ID CONTENT_HASH` bestätigt einen lokal gespeicherten Entwurf nach Prüfung seiner ID und seines Inhalts. Das bestätigt keine externe Aktion und versendet nichts. Mit `reject RUN_ID ACTION_ID CONTENT_HASH` wird ein Entwurf abgelehnt.
-
-Die lokale HTTP-API stellt dieselben Funktionen bereit: `GET /tools`, `POST /validate`, `POST /runs`, `GET /runs/{run_id}`, `POST /runs/{run_id}/cancel`, `POST /runs/{run_id}/input`, `POST /runs/{run_id}/confirm` und `POST /runs/{run_id}/reject`. `POST /media` nimmt eine begrenzte Bild- oder Videodatei für einen Lauf entgegen. Der CLI-Client und die Weboberfläche übernehmen die lokale Sitzung und den CSRF-Schutz für schreibende Requests.
-
-Kameraeingaben benötigen eine ausdrücklich freigegebene Zuordnung wie `--camera schreibtisch=0`. VisionFlow sucht nicht nach Kameras. Kamera-Hardware wurde in dieser lokalen Abnahme nicht geprüft.
-
-## Straßenverkehrs-Demonstrator (Road Demo)
-
-Der Straßenverkehrs-Demonstrator erweitert VisionFlow um eine interaktive Kameraquelle mit synthetischem 960×540-Verkehr, pixelbasierter Richtungserkennung (`direction`-Werkzeug), automatischer H.264-Kameraaufzeichnung und einem Arbeitsplatz mit menschlicher Überprüfung und simulierter Behörden-Inbox:
-
-- **Ereignis-Injektion:** Normalverkehr, Falschfahrer (`wrong_way`), Vogel (`bird`) und Blatt (`leaf`).
-- **OpenCV Direction-Analyse:** Verfolgt Merkmale über mehrere Frames und erkennt Gegenverkehr anhand des konfigurierten Spurvektors rein aus Pixelbewegungen.
-- **Unveränderliche Clips:** Vorlauf (5 s) und Nachlauf (10 s) werden als deterministischer MP4-Clip exportiert (gleicher SHA-256-Hash für Modell und Mensch).
-- **Arbeitsplatz:** Countdown-Timer (20 s), Gefahr bestätigen, verneinen oder automatische Eskalation bei hoher Modellsicherheit (>0,90). Späte Ablehnungen erzeugen eine verknüpfte Entwarnung im simulierten Postfach.
-
-### Emergency-Leitstelle (Spieloberfläche)
-
-Die Weboberfläche öffnet die Straßendemo als Comic-Leitstelle mit vier Räumen. Alle angezeigten Falldaten kommen vom lokalen Server: Fallnummern stehen für echte Fälle, Modellantworten stammen aus den Fall-Snapshots und Modellaustauschen, und die Beweisclips werden über `/road/clips` geladen. Bei jedem Clip wird angezeigt, ob die vom Server gelieferte SHA-256-Prüfsumme zum Fall passt. Die Frist in Raum 4 ist die echte Entscheidungsfrist.
-
-- **Raum 1:** Blendet ein Szenario in die laufende Analyse ein. Ein eingeblendetes Ereignis ist noch kein Befund. Für den nächsten Fall wird hier das Modell gewählt: im Fixture-Modus ein festes Antwortprofil, mit Freigabe auch Gemini. Während ein Fall geprüft wird, sind neue Ereignisse gesperrt. Ein neuer Fall startet erst, wenn der vorige abgeschlossen ist, denn ein Quellwechsel bricht eine offene Prüfung ab.
-- **Raum 2:** Zeigt das eingeblendete Szenario, das Ergebnis der OpenCV-Stufe und die tatsächliche Modellantwort samt Quelle. Fixture-Antworten sind fest vorgegeben und hängen nicht vom Bildinhalt ab. Das Spiel weist ausdrücklich darauf hin.
-- **Raum 3 und 4:** Bestätigen oder Verneinen läuft über denselben gebundenen Entscheidungsweg wie im Arbeitsplatz. Läuft die Frist ohne Entscheidung ab, folgen die automatische Meldung und eine mögliche spätere Entwarnung.
-
-Der Knopf „Technische Fallansicht“ blendet Modellprüfung, Arbeitsplatz und Fallchronik ein.
-
-### CLI-Befehle für die Straßendemo
-
-```powershell
-# Sitzung erstellen und steuern
-.\.venv\Scripts\python.exe -m visionflow.cli road create --seed 42 --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli road inject SOURCE_ID wrong_way --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli road recording SOURCE_ID --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli road clip CLIP_ID --output .\clip.mp4 --server http://127.0.0.1:8765
-
-# Fallprüfung und Arbeitsplatz
-.\.venv\Scripts\python.exe -m visionflow.cli road case start SOURCE_ID --mode fixture --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli road case status CASE_ID --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli road case decide CASE_ID confirm --version 1 --content-hash HASH --idempotency-key click-1 --server http://127.0.0.1:8765
-.\.venv\Scripts\python.exe -m visionflow.cli road inbox --server http://127.0.0.1:8765
-```
-
-Für den Video-Export wird FFmpeg mit `libx264` vorausgesetzt. Fehlt FFmpeg, bleibt der Core-Workflow uneingeschränkt nutzbar; die Clip-Erzeugung wird mit dem Grund `ffmpeg_required` deaktiviert.
-
-## Grenzen
-
-Standardmäßig nutzt VisionFlow keine echte Modell- oder Provideranbindung. Der Fixture-Modus trifft festgelegte lokale Entscheidungen und macht keine Netzaufrufe. Es gibt außerdem keine AWS-Ausführung und keine Wettbewerbsbewertung.
-
-Ausdrücklich zuschaltbar ist ein Gemini-Videomodus: `serve --allow-gemini-costs` mit gesetztem `GEMINI_API_KEY`. Fälle im Modus `gemini_video` senden den H.264-Clip (Base64) und Belegbilder an `generativelanguage.googleapis.com`. Dabei können Providerkosten entstehen. Der Schlüssel wird nur im Header `X-Goog-Api-Key` übertragen; Weiterleitungen werden abgelehnt. Dieser Pfad ist nur mit lokalen Test-Doubles geprüft, nicht gegen den echten Dienst.
-
-Sicherheitshinweis: Die lokale HTTP-API akzeptiert in Workflows lokale Datei- und Videopfade, damit `visionflow.cli run --server` mit Dateien auf demselben Rechner arbeiten kann. Jeder lokale Prozess, der den Loopback-Port erreicht, kann daher Bilder und Videos lesen, die das Serverkonto lesen darf. Betreibe den Server nicht auf Mehrbenutzerrechnern mit nicht vertrauenswürdigen Konten. Die künstlichen Beispiele ersetzen weder einen realen Kamera-/Browser-Hardwaretest noch Datensatz-, Baseline- oder Wettbewerbs-Evaluationen. Die lokale Browser-Abnahme am 2026-10-02 bestand acht Fälle in Headless Edge: separate CLI-Prozesse, Unicode-Uploads und Neuaufnahme, Video-Folgebeobachtung mit Entwurfsfreigabe, Abbruch, defekte Medien, Mehrtabbetrieb und eine 390-Pixel-Ansicht ohne horizontalen Überlauf. Browserkonsole und externe Seitenanfragen blieben leer. Echte Kamera-Hardware und ein Mobilgerät wurden nicht geprüft.
-
-Weitere Test- und Prüfschritte stehen in [docs/TESTING.md](docs/TESTING.md).
-
-## Ausführungsregeln des Kerns
-
-Zusammenlaufende gewählte Workflowzweige werden in topologischer Reihenfolge zusammengeführt; jeder Knoten läuft genau einmal. Mehrere Bildwerkzeuge verwenden dasselbe geladene Bild, wobei jeder Analyse-Knoten weiterhin das Frame-Verarbeitungsbudget belastet. Eine reine Texteingabe bewahrt Mediencursor und Werkzeugzustand; eine ausdrücklich gewählte Ersatzquelle startet einen neuen Analysezustand. Quellen bleiben während einer Eingabepause offen und werden bei Abschluss oder Abbruch geschlossen.
-
-Bei Datei-Videos begrenzt die native Framerate die tatsächliche Abtastung; die konfigurierte `sample_fps` ist eine Obergrenze. Die Vorprüfung des Framebudgets bleibt konservativ anhand der angeforderten Rate. ROI-Findings bewahren die Region in Originalpixeln; `metrics.coordinate_system` kennzeichnet die Pixelkoordinaten des Bildausschnitts und der darin gemessenen Bewegungsregionen. Berichte und Nachrichtenentwürfe übernehmen nur die Metadaten früherer gerenderter Ausgaben, keine verschachtelten Berichtsinhalte.
+[Technical report](docs/TECHNICAL_REPORT.md) ·
+[Architecture](docs/ARCHITECTURE.md) ·
+[Jury instructions](docs/JURY_INSTRUCTIONS.md) ·
+[Evaluation](docs/SYNTHETIC_EVALUATION.md) ·
+[Testing](docs/TESTING.md) ·
+[AWS acceptance](docs/AWS_ACCEPTANCE.md) ·
+[Deutsche Kurzfassung](README_de.md)

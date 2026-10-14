@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import math
 import random
 from dataclasses import dataclass
@@ -11,6 +12,20 @@ import numpy as np
 
 
 _EVENT_NAMES = frozenset({"wrong_way", "bird", "leaf"})
+# Perspective: every road line runs from its bottom position towards one vanishing
+# point; at the horizon a line sits at 0.5 + (bottom - 0.5) * _VANISH (road edges
+# 0.05/0.95 at the bottom, 0.38/0.62 at the horizon).
+_VANISH = 0.12 / 0.45
+# Three equal lanes per carriageway (fractions of the width at the bottom edge):
+# lanes 0-2 move away from the camera, lanes 3-5 come towards it.
+_CARRIAGEWAY_LEFT = (0.07, 0.46)
+_CARRIAGEWAY_RIGHT = (0.54, 0.93)
+_LANE_WIDTH = (_CARRIAGEWAY_LEFT[1] - _CARRIAGEWAY_LEFT[0]) / 3
+_LANE_CENTERS = tuple(
+    [_CARRIAGEWAY_LEFT[0] + _LANE_WIDTH * (i + 0.5) for i in range(3)]
+    + [_CARRIAGEWAY_RIGHT[0] + _LANE_WIDTH * (i + 0.5) for i in range(3)]
+)
+_AWAY_LANES = 3
 _CAR_COLORS = (
     (72, 95, 186),
     (42, 140, 212),
@@ -57,6 +72,7 @@ class RoadWorld:
         self._events: list[_SceneEvent] = []
         self._last_render_time = 0.0
         self._traffic = self._make_traffic()
+        self._static: np.ndarray | None = None
 
     def inject(self, event: str) -> None:
         """Start one visible scenario event, rejecting unknown values first."""
@@ -64,7 +80,7 @@ class RoadWorld:
             raise ValueError(f"unknown road event: {event!r}")
 
         color = self._rng.choice(_CAR_COLORS)
-        lane = (2 if self._seed % 2 else 0) if event == "wrong_way" else None
+        lane = (4 if self._seed % 2 else 1) if event == "wrong_way" else None
         self._events.append(
             _SceneEvent(
                 kind=event,
@@ -87,14 +103,13 @@ class RoadWorld:
         timestamp = float(source_time)
         self._last_render_time = timestamp
         image = self._draw_background()
-        self._draw_road(image)
         self._draw_traffic(image, timestamp)
         self._draw_events(image, timestamp)
         return image
 
     def _make_traffic(self) -> tuple[_TrafficCar, ...]:
         cars: list[_TrafficCar] = []
-        phases = ((0, 0.24), (1, 0.68), (2, 0.31), (3, 0.73), (0, 0.77), (2, 0.82))
+        phases = ((0, 0.24), (1, 0.68), (2, 0.45), (3, 0.31), (4, 0.73), (5, 0.12), (1, 0.05))
         for lane, phase in phases:
             cars.append(
                 _TrafficCar(
@@ -107,25 +122,72 @@ class RoadWorld:
         return tuple(cars)
 
     def _draw_background(self) -> np.ndarray:
-        image = np.empty((self.height, self.width, 3), dtype=np.uint8)
-        horizon = self._horizon
-        image[:horizon] = (206, 222, 232)
-        image[horizon:] = (74, 113, 67)
+        # The static scenery is rendered once; every frame starts from a copy.
+        if self._static is None:
+            image = np.empty((self.height, self.width, 3), dtype=np.uint8)
+            self._draw_scenery(image)
+            self._draw_road_static(image)
+            self._apply_vignette(image)
+            self._static = image
+        return self._static.copy()
 
-        # Low distant tree lines make the road read as an outdoor scene.
-        tree_y = min(self.height - 1, horizon + max(3, self.height // 70))
-        tree_radius = max(2, min(self.width, self.height) // 55)
-        for fraction, shade in (
-            (0.10, (59, 96, 55)),
-            (0.18, (66, 105, 59)),
-            (0.82, (62, 101, 57)),
-            (0.90, (55, 92, 53)),
-        ):
-            center = (int(self.width * fraction), tree_y)
-            cv2.circle(image, center, tree_radius, shade, -1, cv2.LINE_AA)
-        return image
+    def _draw_scenery(self, image: np.ndarray) -> None:
+        """Sky, hazy hills, grass and soft trees.
 
-    def _draw_road(self, image: np.ndarray) -> None:
+        Scenery is deliberately smooth and blurred: the direction detector picks
+        the strongest corners per lane, so hard static corners would compete
+        with the moving vehicles for its corner budget.
+        """
+        width, height, horizon = self.width, self.height, self._horizon
+        sky_top = np.array((214, 168, 118), dtype=np.float32)
+        sky_low = np.array((236, 228, 214), dtype=np.float32)
+        ramp = np.linspace(0.0, 1.0, horizon, dtype=np.float32)[:, None]
+        image[:horizon] = (sky_top + (sky_low - sky_top) * ramp)[:, None, :].astype(np.uint8)
+        grass_far = np.array((104, 146, 108), dtype=np.float32)
+        grass_near = np.array((58, 118, 66), dtype=np.float32)
+        ramp = np.linspace(0.0, 1.0, height - horizon, dtype=np.float32)[:, None]
+        image[horizon:] = (grass_far + (grass_near - grass_far) * ramp)[:, None, :].astype(np.uint8)
+
+        layer = image.copy()
+        hill_height = max(2, round(height * 0.05))
+        xs = np.arange(0, width + 8, 8, dtype=np.float32)
+        for amplitude, phase, shade in ((1.0, 0.0, (166, 168, 146)), (0.6, 1.9, (148, 156, 128))):
+            ys = horizon - hill_height * amplitude * (0.55 + 0.45 * np.sin(xs / width * 7.0 + phase))
+            hill = np.vstack(
+                ([0, horizon + 1], np.column_stack((xs, ys)), [width, horizon + 1])
+            ).astype(np.int32)
+            cv2.fillPoly(layer, [hill], shade, lineType=cv2.LINE_AA)
+
+        rng = random.Random(1009)
+        for side in (-1, 1):
+            for row in range(9):
+                depth = (row + rng.uniform(0.1, 0.9)) / 9.0
+                y = horizon + max(2, round(depth**1.6 * (height - horizon) * 0.95))
+                road_edge = 0.5 + side * (0.12 + 0.33 * self._depth(y))
+                x = (road_edge + side * (0.04 + 0.10 * depth + rng.uniform(0.0, 0.05))) * width
+                radius = max(2, round((5 + 30 * depth) * min(width / 960.0, height / 540.0)))
+                trunk = (44, 58, 72)
+                cv2.rectangle(
+                    layer,
+                    (round(x - radius * 0.15), y - radius // 3),
+                    (round(x + radius * 0.15), y + radius // 2),
+                    trunk,
+                    -1,
+                )
+                crown = (52 + rng.randint(0, 14), 98 + rng.randint(0, 22), 50 + rng.randint(0, 10))
+                cv2.ellipse(layer, (round(x), y - radius), (radius, round(radius * 1.25)), 0, 0, 360, crown, -1, cv2.LINE_AA)
+        blur = max(3, (round(min(width, height) / 90) // 2) * 2 + 1)
+        image[:] = cv2.GaussianBlur(layer, (blur, blur), 0)
+
+    def _apply_vignette(self, image: np.ndarray) -> None:
+        # A gentle vignette gives the frame a camera-lens feel without edges.
+        width, height = self.width, self.height
+        yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+        dist = ((xx / width - 0.5) ** 2 + (yy / height - 0.5) ** 2) ** 0.5
+        shade = 1.0 - 0.22 * np.clip((dist - 0.35) / 0.35, 0.0, 1.0)
+        image[:] = (image.astype(np.float32) * shade[:, :, None]).astype(np.uint8)
+
+    def _draw_road_static(self, image: np.ndarray) -> None:
         width = self.width
         height = self.height
         horizon = self._horizon
@@ -138,18 +200,31 @@ class RoadWorld:
             ),
             dtype=np.int32,
         )
-        cv2.fillPoly(image, [road], (60, 64, 68), lineType=cv2.LINE_AA)
+        # Asphalt fades into haze towards the horizon (smooth, corner-free).
+        mask = np.zeros((height, width), dtype=np.uint8)
+        cv2.fillPoly(mask, [road], 255, lineType=cv2.LINE_AA)
+        far = np.array((104, 106, 108), dtype=np.float32)
+        near = np.array((58, 61, 65), dtype=np.float32)
+        ramp = np.zeros((height, 1, 1), dtype=np.float32)
+        ramp[horizon:, 0, 0] = np.linspace(0.0, 1.0, height - horizon, dtype=np.float32) ** 0.6
+        asphalt = far + (near - far) * ramp
+        alpha = (mask.astype(np.float32) / 255.0)[:, :, None]
+        image[:] = (image * (1.0 - alpha) + asphalt * alpha).astype(np.uint8)
 
         shoulder = max(1, round(min(width, height) / 240))
         lane_width = max(1, round(min(width, height) / 300))
-        self._perspective_line(image, 0.38, 0.05, (175, 177, 171), shoulder)
-        self._perspective_line(image, 0.62, 0.95, (175, 177, 171), shoulder)
+        # Guardrails just outside both shoulders: a lit rail over a soft shadow.
+        for bottom_x in (0.03, 0.97):
+            self._perspective_line(image, *_persp(bottom_x), (70, 76, 74), shoulder + 2)
+            self._perspective_line(image, *_persp(bottom_x), (196, 200, 198), shoulder)
+        for bottom_x in (0.05, 0.95):
+            self._perspective_line(image, *_persp(bottom_x), (175, 177, 171), shoulder)
 
         # A narrow grassy median and low barrier separate the opposing flows.
         median = np.asarray(
             (
-                (int(width * 0.49), horizon),
-                (int(width * 0.51), horizon),
+                (int(width * _persp(0.46)[0]), horizon),
+                (int(width * _persp(0.54)[0]), horizon),
                 (int(width * 0.54), height - 1),
                 (int(width * 0.46), height - 1),
             ),
@@ -158,15 +233,14 @@ class RoadWorld:
         cv2.fillPoly(image, [median], (72, 104, 63), lineType=cv2.LINE_AA)
         self._perspective_line(image, 0.50, 0.50, (150, 155, 151), lane_width + 1)
 
-        for top_x, bottom_x in (
-            (0.46, 0.3675),
-            (0.54, 0.6325),
-        ):
-            self._draw_dashed_line(image, top_x, bottom_x)
+        # Dashed lines between the three lanes of each carriageway.
+        for left, _right in (_CARRIAGEWAY_LEFT, _CARRIAGEWAY_RIGHT):
+            for boundary in (1, 2):
+                self._draw_dashed_line(image, *_persp(left + _LANE_WIDTH * boundary))
 
-        # Fine shoulder lines frame both carriageways without adding text cues.
-        self._perspective_line(image, 0.39, 0.07, (221, 220, 205), lane_width)
-        self._perspective_line(image, 0.61, 0.93, (221, 220, 205), lane_width)
+        # Solid edge lines frame both carriageways (shoulder and median side).
+        for bottom_x in (*_CARRIAGEWAY_LEFT, *_CARRIAGEWAY_RIGHT):
+            self._perspective_line(image, *_persp(bottom_x), (221, 220, 205), lane_width)
 
     def _draw_dashed_line(self, image: np.ndarray, top_x: float, bottom_x: float) -> None:
         height = self.height
@@ -211,22 +285,19 @@ class RoadWorld:
         )
 
     def _lane_center(self, lane: int, y: float) -> float:
-        lane_edges = (
-            (0.445, 0.32),
-            (0.475, 0.415),
-            (0.525, 0.585),
-            (0.555, 0.68),
-        )
-        top_x, bottom_x = lane_edges[lane]
+        top_x, bottom_x = _persp(_LANE_CENTERS[lane])
         fraction = self._depth(y)
         return (top_x + (bottom_x - top_x) * fraction) * self.width
+
+    def _lane_width_px(self, depth: float) -> float:
+        return _LANE_WIDTH * self.width * (_VANISH + (1.0 - _VANISH) * depth)
 
     def _draw_traffic(self, image: np.ndarray, source_time: float) -> None:
         horizon = self._horizon
         travel = max(1, self.height - 1 - horizon)
         for car in self._traffic:
             distance = (car.phase + source_time * car.speed) % 1.0
-            if car.lane < 2:
+            if car.lane < _AWAY_LANES:
                 depth = 1.0 - distance
                 direction = -1
             else:
@@ -234,37 +305,39 @@ class RoadWorld:
                 direction = 1
             y = horizon + depth * travel
             x = self._lane_center(car.lane, y)
-            self._draw_car(image, x, y, depth, car.color, direction)
+            self._draw_car(image, x, y, depth, car.color, direction, car.lane)
 
     def _draw_events(self, image: np.ndarray, source_time: float) -> None:
+        # Event speeds were tuned at 540 px height; keep them resolution-independent.
+        speed = self.height / 540.0
         for event in self._events:
             elapsed = source_time - event.start_time
             if elapsed < 0:
                 continue
             if event.kind == "wrong_way":
-                lane = 2 if event.lane is None else event.lane
-                if lane < 2:
+                lane = 4 if event.lane is None else event.lane
+                if lane < _AWAY_LANES:
                     direction = 1
-                    y = self.height * 0.43 + elapsed * 82.0
+                    y = self.height * 0.43 + elapsed * 82.0 * speed
                 else:
                     direction = -1
-                    y = self.height * 0.73 - elapsed * 82.0
+                    y = self.height * 0.73 - elapsed * 82.0 * speed
                 if -self.height * 0.15 <= y <= self.height * 1.1:
                     depth = self._depth(y)
                     x = self._lane_center(lane, y)
-                    self._draw_car(image, x, y, depth, event.color, direction)
+                    self._draw_car(image, x, y, depth, event.color, direction, lane)
             elif event.kind == "bird":
-                y = self.height * 0.65 - elapsed * 105.0
+                y = self.height * 0.65 - elapsed * 105.0 * speed
                 if -self.height * 0.1 <= y <= self.height * 1.1:
                     depth = self._depth(y)
-                    x = self._lane_center(3, y)
+                    x = self._lane_center(4, y)
                     self._draw_bird(image, x, y, depth, elapsed, event.color)
             else:
-                y = self._horizon + self.height * 0.025 + elapsed * 90.0
+                y = self._horizon + self.height * 0.025 + elapsed * 90.0 * speed
                 if -self.height * 0.1 <= y <= self.height * 1.1:
                     depth = self._depth(y)
                     wind = math.sin(elapsed * 2.7) * self.width * 0.01
-                    x = self._lane_center(1, y) + wind
+                    x = self._lane_center(2, y) + wind
                     self._draw_leaf(image, x, y, depth, elapsed, event.color)
 
     def _draw_car(
@@ -275,11 +348,48 @@ class RoadWorld:
         depth: float,
         color: tuple[int, int, int],
         direction: int,
+        lane: int,
     ) -> None:
+        """Draw an upright car on a small tile, rotate it onto the lane and blend it in.
+
+        The tile is drawn twice (black and white background); their difference gives
+        an exact anti-aliased alpha without a key colour.
+        """
         scale = min(self.width / 960.0, self.height / 540.0)
-        size_scale = 0.52 + 0.75 * depth
-        car_width = max(5, round((22 + 17 * depth) * scale))
-        car_height = max(9, round((36 + 30 * depth) * scale * size_scale))
+        # Cars fill a bit less than half a lane and grow with it towards the camera.
+        car_width = max(5, round(self._lane_width_px(depth) * 0.44))
+        car_height = max(9, round(car_width * 1.8))
+        top_x, bottom_x = _persp(_LANE_CENTERS[lane])
+        travel = max(1, self.height - 1 - self._horizon)
+        angle = math.degrees(math.atan2((bottom_x - top_x) * self.width, travel))
+        premultiplied, alpha = _car_sprite(
+            tuple(color), direction, car_width, car_height, round(angle, 2), scale
+        )
+        side = premultiplied.shape[0]
+        half = side // 2
+        x0, y0 = round(center_x) - half, round(center_y) - half
+        ix0, iy0 = max(0, x0), max(0, y0)
+        ix1, iy1 = min(image.shape[1], x0 + side), min(image.shape[0], y0 + side)
+        if ix0 >= ix1 or iy0 >= iy1:
+            return
+        tx0, ty0 = ix0 - x0, iy0 - y0
+        tx1, ty1 = tx0 + (ix1 - ix0), ty0 + (iy1 - iy0)
+        region = image[iy0:iy1, ix0:ix1].astype(np.float32)
+        a = alpha[ty0:ty1, tx0:tx1]
+        blended = region * (1.0 - a) + premultiplied[ty0:ty1, tx0:tx1]
+        image[iy0:iy1, ix0:ix1] = np.clip(blended, 0, 255).astype(np.uint8)
+
+    @staticmethod
+    def _draw_car_upright(
+        image: np.ndarray,
+        center_x: float,
+        center_y: float,
+        car_width: int,
+        car_height: int,
+        color: tuple[int, int, int],
+        direction: int,
+        scale: float,
+    ) -> None:
         cx = round(center_x)
         cy = round(center_y)
         half_width = car_width // 2
@@ -315,7 +425,18 @@ class RoadWorld:
             -1,
             cv2.LINE_AA,
         )
-        cv2.fillPoly(image, [body], color, lineType=cv2.LINE_AA)
+        # Darker flanks with a lighter centre panel read as a curved body.
+        flank = tuple(round(channel * 0.68) for channel in color)
+        cv2.fillPoly(image, [body], flank, lineType=cv2.LINE_AA)
+        inset = max(1, round(car_width * 0.16))
+        cv2.rectangle(
+            image,
+            (left + inset, top + corner // 2),
+            (right - inset, bottom - corner // 2),
+            color,
+            -1,
+            cv2.LINE_AA,
+        )
         cv2.polylines(image, [body], True, (31, 33, 36), max(1, round(scale)), cv2.LINE_AA)
 
         wheel_width = max(1, round(car_width * 0.12))
@@ -358,6 +479,19 @@ class RoadWorld:
             (cx - glass_width // 2, rear_center - windshield_height // 2),
             (cx + glass_width // 2, rear_center + windshield_height // 2),
             (61, 71, 76),
+            -1,
+            cv2.LINE_AA,
+        )
+
+        # Roof panel between the windows, a little brighter than the paint.
+        roof = tuple(min(255, round(channel * 1.18 + 12)) for channel in color)
+        roof_half = max(1, round(car_height * 0.11))
+        roof_center = cy + direction * round(car_height * 0.02)
+        cv2.rectangle(
+            image,
+            (cx - glass_width // 2 + 1, roof_center - roof_half),
+            (cx + glass_width // 2 - 1, roof_center + roof_half),
+            roof,
             -1,
             cv2.LINE_AA,
         )
@@ -507,6 +641,40 @@ class RoadWorld:
             max(1, round(scale)),
             cv2.LINE_AA,
         )
+
+
+@functools.lru_cache(maxsize=1024)
+def _car_sprite(
+    color: tuple[int, int, int],
+    direction: int,
+    car_width: int,
+    car_height: int,
+    angle: float,
+    scale: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Rotated, premultiplied car tile and its alpha; cached because a car keeps its
+    lane, colour and direction and its size changes in whole pixels."""
+    side = int(car_height * 1.5) + 8
+    half = side // 2
+    tiles = []
+    for background in (0, 255):
+        tile = np.full((side, side, 3), background, dtype=np.uint8)
+        RoadWorld._draw_car_upright(tile, half, half, car_width, car_height, color, direction, scale)
+        tiles.append(tile.astype(np.float32))
+    black, white = tiles
+    alpha = np.clip(1.0 - (white - black).mean(axis=2, keepdims=True) / 255.0, 0.0, 1.0)
+    rotation = cv2.getRotationMatrix2D((half, half), angle, 1.0)
+    # Drawn over black, so the black tile is already colour times alpha.
+    premultiplied = cv2.warpAffine(black, rotation, (side, side), flags=cv2.INTER_LINEAR)
+    alpha = cv2.warpAffine(alpha, rotation, (side, side), flags=cv2.INTER_LINEAR)[:, :, None]
+    premultiplied.flags.writeable = False
+    alpha.flags.writeable = False
+    return premultiplied, alpha
+
+
+def _persp(bottom_x: float) -> tuple[float, float]:
+    """Return (horizon_x, bottom_x) of a road line aimed at the vanishing point."""
+    return 0.5 + (bottom_x - 0.5) * _VANISH, bottom_x
 
 
 __all__ = ["RoadWorld"]

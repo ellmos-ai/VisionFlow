@@ -449,6 +449,25 @@ def test_web_assets_are_served_with_blob_preview_policy_and_real_api_shell(api):
     assert b"focus-visible" in css
 
 
+@pytest.mark.parametrize("name", ["alex", "kira", "schmidt", "weber", "leaf", "bird", "wrong-way", "patrol"])
+def test_generated_control_room_assets_are_served_as_png(api, name):
+    client, _server, _controller, _evidence_root = api
+    status, payload, headers = client.request("GET", f"/assets/{name}.png")
+    assert status == 200
+    assert headers["content-type"] == "image/png"
+    assert isinstance(payload, bytes) and payload.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+@pytest.mark.parametrize("path", [
+    "/assets/unknown.png", "/assets/../api.py", "/assets/%2e%2e/api.py",
+    "/assets/alex.png/../api.py", "/assets/LOCK.ticket-guidance.txt",
+])
+def test_control_room_asset_route_does_not_expose_arbitrary_files(api, path):
+    client, _server, _controller, _evidence_root = api
+    status, _payload, _headers = client.request("GET", path)
+    assert status == 404
+
+
 def test_cancelled_run_cannot_create_a_new_terminal_approval(api):
     client, server, controller, _evidence_root = api
     client.bootstrap()

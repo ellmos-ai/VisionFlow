@@ -555,9 +555,21 @@ def _set_socket_timeout(response: Any, timeout: float) -> None:
 def _abort_response(response: Any) -> None:
     """Unblock a pending read from another thread, then close the response."""
     try:
-        response.fp.raw._sock.shutdown(socket.SHUT_RDWR)
+        sock = response.fp.raw._sock
     except Exception:
-        pass
+        sock = None
+    if sock is not None:
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+        # On Windows a timed recv waits in select(), which a local shutdown
+        # does not wake; closing the descriptor does. close() alone is
+        # deferred while the response's SocketIO still holds a reference.
+        try:
+            socket.close(sock.detach())
+        except Exception:
+            pass
     _close_quietly(response)
 
 
