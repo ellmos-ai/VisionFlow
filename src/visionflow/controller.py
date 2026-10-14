@@ -144,6 +144,28 @@ class Controller:
         run.done_event.wait(timeout=None if timeout is None else float(timeout))
         return self._snapshot(run)
 
+    def join(self, run_id: str, timeout: float = 5.0) -> RunResult:
+        """Join the current worker, including native cleanup after terminal status.
+
+        ``wait`` yields a status snapshot; a completed snapshot can precede
+        source.close(). Short-lived callers use this barrier before exiting.
+        """
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+            raise TypeError("timeout must be a finite non-negative number")
+        if not math.isfinite(float(timeout)) or timeout < 0:
+            raise ValueError("timeout must be a finite non-negative number")
+        run = self._get_run(run_id)
+        with run.lock:
+            thread = run.thread
+        if thread is not None:
+            thread.join(timeout=float(timeout))
+            if thread.is_alive():
+                raise TimeoutError("run worker has not finished its cleanup")
+        with run.lock:
+            if run.thread is not thread:
+                raise InvalidTransition("run worker changed while joining")
+        return self._snapshot(run)
+
     def cancel(self, run_id: str) -> RunResult:
         """Cancel promptly; an in-flight adapter may finish but cannot publish work."""
         run = self._get_run(run_id)

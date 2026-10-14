@@ -88,8 +88,13 @@ def _wait_for_status(controller: Any, run_id: str, expected: str) -> RunResult:
             raise TimeoutError(f"demo run did not reach {expected!r}")
         result = controller.wait(run_id, timeout=min(0.1, remaining))
         if result.status == expected:
+            if expected == "completed":
+                # A terminal snapshot is published before VideoCapture.release;
+                # join the daemon worker before this CLI can finalize Python.
+                return controller.join(run_id, timeout=max(0.0, deadline - time.monotonic()))
             return result
         if result.status in {"failed", "cancelled"}:
+            controller.join(run_id, timeout=max(0.0, deadline - time.monotonic()))
             raise RuntimeError(f"demo run ended in {result.status!r}")
 
 

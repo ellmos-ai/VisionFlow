@@ -16,6 +16,7 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import stat
 import subprocess
 import sys
@@ -27,8 +28,10 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def aws(*args: str, region: str, parse: bool = True):
+    environment = os.environ.copy()
+    environment.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", AWS_CLI_FILE_ENCODING="utf-8")
     out = subprocess.check_output(["aws", *args, "--region", region, "--output", "json"],
-                                  text=True, encoding="utf-8")
+                                  text=True, encoding="utf-8", env=environment)
     return json.loads(out) if parse and out.strip() else out
 
 

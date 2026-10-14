@@ -339,6 +339,7 @@ def run_acceptance(repo: Path, output: Path, source_zip_sha256: str) -> dict:
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(repo / "src")
     environment["PYTHONIOENCODING"] = "utf-8"
+    environment["PYTHONUTF8"] = "1"
     started = datetime.now(timezone.utc).isoformat()
     with (output / "pytest.log").open("w", encoding="utf-8") as log:
         tests = subprocess.run([sys.executable, "-m", "pytest", "tests", "-q",
@@ -346,13 +347,25 @@ def run_acceptance(repo: Path, output: Path, source_zip_sha256: str) -> dict:
                                env=environment, stdout=log, stderr=subprocess.STDOUT, timeout=900)
     if tests.returncode:
         raise RuntimeError(f"test suite failed ({tests.returncode}); inspect pytest.log")
-    demo = subprocess.run([sys.executable, "-m", "visionflow.cli", "demo", "run",
-                           "--output-dir", str(output / "demo")], cwd=repo, env=environment,
-                          capture_output=True, text=True, encoding="utf-8", timeout=90, check=True)
-    write_json(output / "demo-summary.json", portable_references(json.loads(demo.stdout), output))
+    # Direct files survive native abort and timeout; check=True/captured text
+    # previously raised before either diagnostic stream reached the artifact.
+    stdout_path, stderr_path = output / "demo-stdout.log", output / "demo-stderr.log"
+    try:
+        with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+            demo = subprocess.run(
+                [sys.executable, "-X", "faulthandler", "-m", "visionflow.cli", "demo", "run",
+                 "--output-dir", str(output / "demo")], cwd=repo, env=environment,
+                stdout=stdout, stderr=stderr, timeout=90, check=False,
+            )
+    except subprocess.TimeoutExpired as exc:
+        write_json(output / "demo-exit.json", {"returncode": None, "timed_out": True})
+        raise RuntimeError("demo timed out; inspect demo-stdout.log and demo-stderr.log") from exc
+    write_json(output / "demo-exit.json", {"returncode": demo.returncode, "timed_out": False})
+    if demo.returncode:
+        raise RuntimeError(f"demo failed ({demo.returncode}); inspect demo-stdout.log and demo-stderr.log")
+    write_json(output / "demo-summary.json", portable_references(json.loads(stdout_path.read_text(encoding="utf-8")), output))
     for path in (output / "demo" / "traces").glob("*.json"):
         write_json(path, portable_references(json.loads(path.read_text(encoding="utf-8")), output))
-    (output / "demo-stderr.log").write_text(demo.stderr, encoding="utf-8")
     freeze = subprocess.check_output([sys.executable, "-m", "pip", "freeze"], text=True)
     (output / "pip-freeze.txt").write_text(freeze, encoding="utf-8")
     write_json(output / "source-manifest.json", source)
