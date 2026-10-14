@@ -11,10 +11,10 @@ from typing import Any
 import cv2
 import numpy as np
 
-from .config import load_workflow
 from .contracts import Finding, ModelDecision, RunResult, WorkflowConfig
 from .model import FixtureModelAdapter
 from .runtime import create_controller, create_registry
+from .workflow_resources import load_builtin_workflow
 
 
 class _DemoClock:
@@ -186,10 +186,9 @@ def run_demo(output_dir: Path) -> dict[str, Any]:
     _write_motion_video(motion_path)
 
     registry = create_registry()
-    examples = Path(__file__).resolve().parents[2] / "examples" / "workflows"
-    document_config = load_workflow(examples / "document-quality.json", registry)
+    document_config = load_builtin_workflow("document-quality.json", registry)
     document_config.input.source = str(blurred_path.resolve())
-    motion_config = load_workflow(examples / "motion-observation.json", registry)
+    motion_config = load_builtin_workflow("motion-observation.json", registry)
     motion_config.input.source = str(motion_path.resolve())
 
     controller = create_controller(

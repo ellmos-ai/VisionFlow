@@ -19,7 +19,7 @@ dev = ["pytest==9.1.1"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-visionflow = ["web/*.html", "web/*.js", "web/*.css", "web/assets/*.png"]
+visionflow = ["web/*.html", "web/*.js", "web/*.css", "web/assets/*.png", "workflows/*.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
