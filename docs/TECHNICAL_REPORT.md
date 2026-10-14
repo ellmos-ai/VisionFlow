@@ -114,7 +114,10 @@ Full details: [SYNTHETIC_EVALUATION.md](SYNTHETIC_EVALUATION.md).
   Interactions API; three cases failed with HTTP 503 ("high demand"), one direct check confirmed
   the 503, one case exceeded the 30-second client bound. In every case the policy fell back to
   human review and the deadline path, as designed. No model accuracy is claimed.
-* **Software tests**: On Windows 11 with Python 3.12.10, OpenCV 5.0.0 and NumPy 2.5.3 the suite reports **560 passed, 1 skipped** (the directory-symlink test needs a Windows privilege), 0 failed (2026-10-13, commit bde0e67). Browser acceptance (Playwright with Microsoft Edge):
+* **Software tests**: GUI revision `f94289c` passed **600 tests with no failures** in each
+  GitHub Actions job on Ubuntu and Windows (14 October 2026,
+  [source-bound run](https://github.com/ellmos-ai/VisionFlow/actions/runs/38487244459)).
+  Browser acceptance (Playwright with Microsoft Edge):
   multi-event control-room run, camera phase and review phase passed on the integrated tree with
   no browser errors and no external requests.
 

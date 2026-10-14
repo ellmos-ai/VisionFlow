@@ -88,9 +88,10 @@ RoadWorld evaluation (no browser, about a minute):
 .\.venv\Scripts\python.exe evaluation\roadworld_eval.py --out .local\roadworld.json
 ```
 
-GitHub Actions is configured for the same suite and the CLI demo on Ubuntu and Windows
-(`.github/workflows/ci.yml`); hosted jobs currently do not start because of an account billing
-block, so no hosted CI pass is claimed.
+GitHub Actions runs the same suite and the actual CLI demo on Ubuntu and Windows
+(`.github/workflows/ci.yml`). The source-bound run for GUI revision `f94289c` on
+14 October 2026 passed **600 tests on each platform**, with no failures:
+[run 38487244459](https://github.com/ellmos-ai/VisionFlow/actions/runs/38487244459).
 
 ### Browser acceptance
 

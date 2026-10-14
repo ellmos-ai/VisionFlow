@@ -2,16 +2,23 @@
 
 ## 1. Live demo (no installation)
 
-<!-- LIVE_DEMO_URL -->
+[Open the AWS control room](https://d2fmnfnvxb0cs1.cloudfront.net/).
 
-1. Open the URL in a desktop browser. The top section explains the loop; below it is the
-   **wrong-way driver warning** control room.
+1. Open the URL in a desktop browser. The top header switches between workspaces;
+   the **wrong-way driver warning** opens the control room. The information symbol
+   expands the introduction when needed.
 2. In room 1, choose a fixed offline answer under *Fixed offline test answer (profile)*, then
-   press **Inject wrong-way driver** (or bird / leaf). Injecting is not a detection: the server
+   start the camera with its own control, then press **Inject wrong-way driver** (or bird / leaf).
+   Injecting is not a detection: the server
    analyses the rendered frames with OpenCV and opens a case only if it finds opposing motion.
-3. Follow the cable to room 2 (OpenCV stage, clip and model answer), room 3 (human review of the
-   hash-verified clip: confirm or deny) and room 4 (the real deadline if nobody decides).
-4. Image and video workflows are available in the locally installed app (section 2).
+3. Use the black bottom arrows to follow the same selected ticket to room 2
+   (assessment, clip and model answer), room 3 (human review: confirm or deny)
+   and room 4 (deadline and report). Technical stage identifiers and hashes open under details.
+   The human-review deadline is 60 seconds, measured by the server.
+4. For a second, separate example, first choose the fixed **bird** response and start a fresh
+   camera case before injecting a bird. A visual candidate receives the predefined
+   no-hazard response and closes. The offline response does not inspect the clip.
+5. Image and video workflows are available in the locally installed app (section 2).
    The hosted road demo does not accept uploads.
 
 The public demo uses synthetic traffic, fixed offline model answers and a simulated authority
