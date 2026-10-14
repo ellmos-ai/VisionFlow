@@ -13,6 +13,9 @@ Live-Demo, Video und alle Belege. Gebaut von Lukas Geiger (Einzelteilnahme) für
 [Öffentliche AWS-Demo](https://d2fmnfnvxb0cs1.cloudfront.net/?lang=de) ·
 [Devpost-Projekt](https://devpost.com/software/visionflow-yibs83).
 
+[Vorführvideo ansehen](https://youtu.be/hyKPwB1lc6M) – 2:59 Minuten, englisch,
+mit zwei echten aufgezeichneten Abläufen und elektronischer Originalmusik.
+
 ![Spuren des Richtungswerkzeugs: grün mit dem Verkehr, rot dagegen](docs/media/direction-tracks.png)
 
 ## Der Ablauf
@@ -42,9 +45,15 @@ Die überarbeitete Leitstelle führt dasselbe Ticket durch Kamera, Bewertung, En
 und Frist/Meldung. Die Einführung und technische Belege sind einklappbar; die schwarzen
 Pfeile wechseln die Station. Die menschliche Entscheidung hat eine echte Frist von 60 Sekunden.
 
-Für GUI-Revision `f94289c` bestehen die GitHub-Tests unter Linux und Windows jeweils mit
-600 erfolgreichen Prüfungen und ohne Fehler. Die feste Offline-Antwort erkennt keine
+Für Paketrevision `aeb2148` bestehen die GitHub-Tests unter Linux und Windows jeweils mit
+616 erfolgreichen Prüfungen und ohne Fehler. Auch ein tatsächlich installiertes Wheel
+startet außerhalb des Quellordners einen Kamerafall. Die feste Offline-Antwort erkennt keine
 Bildinhalte; sie bleibt in der Oberfläche ausdrücklich gekennzeichnet.
+
+Die AWS-Abnahme besteht mit 615 erfolgreichen Tests, einem Skip und beiden Offline-Demos.
+In der öffentlichen AWS-Demo sind der Vogel-Fall sowie die echte 60-Sekunden-Frist mit
+automatischer Meldung und späterer Entwarnung anhand identischer Belegclips geprüft.
+[Ergebnisse und Grenzen](docs/AWS_RESULTS_2026-10-14.json).
 
 ## Schnellstart
 

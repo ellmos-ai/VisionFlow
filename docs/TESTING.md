@@ -89,9 +89,11 @@ RoadWorld evaluation (no browser, about a minute):
 ```
 
 GitHub Actions runs the same suite and the actual CLI demo on Ubuntu and Windows
-(`.github/workflows/ci.yml`). The source-bound run for GUI revision `f94289c` on
-14 October 2026 passed **600 tests on each platform**, with no failures:
-[run 38487244459](https://github.com/ellmos-ai/VisionFlow/actions/runs/38487244459).
+(`.github/workflows/ci.yml`). The source-bound run for packaged revision `aeb2148` on
+14 October 2026 passed **616 tests on each platform**, with no failures. Both jobs
+also built an actual wheel and ran `tests/wheel_consumer.py` outside the checkout:
+offline demos passed, road case start returned HTTP 202 and real frames were analyzed.
+[run 38491740474](https://github.com/ellmos-ai/VisionFlow/actions/runs/38491740474).
 
 ### Browser acceptance
 

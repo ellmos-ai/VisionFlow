@@ -4,6 +4,10 @@
 
 [Open the AWS control room](https://d2fmnfnvxb0cs1.cloudfront.net/).
 
+[Watch the 2:59 demonstration](https://youtu.be/hyKPwB1lc6M), recorded from the actual
+application. The camera is synthetic; displayed model answers are fixed offline profiles,
+and reports are simulated. A visible time-jump label identifies the shortened waiting period.
+
 1. Open the URL in a desktop browser. The top header switches between workspaces;
    the **wrong-way driver warning** opens the control room. The information symbol
    expands the introduction when needed.

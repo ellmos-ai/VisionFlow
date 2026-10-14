@@ -5,12 +5,12 @@ A camera, a video or a single image goes in; OpenCV measures; the measurement op
 asks for more evidence, involves a model and a human under a deadline, and ends in a bounded,
 logged action. The flagship example is a **wrong-way driver warning** you can try in the browser.
 
-<!-- VIDEO_THUMBNAIL -->
+[![Watch the 2:59 VisionFlow demonstration](docs/media/visionflow-video-thumbnail.png)](https://youtu.be/hyKPwB1lc6M)
 
 | Try it | Where |
 |---|---|
 | **Live demo** (no install, synthetic traffic) | [Open the AWS control room](https://d2fmnfnvxb0cs1.cloudfront.net/) |
-| Demo video (under 5 minutes) | <!-- VIDEO_URL --> |
+| Demo video (2:59, English) | [Watch on YouTube](https://youtu.be/hyKPwB1lc6M) |
 | Local install | [Quick start](#quick-start) below |
 | Technical report | [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) |
 
@@ -147,7 +147,12 @@ clip and evidence frames to the model, at most two requests per case.
   **AWS CodeBuild** from an exact source ZIP in private S3 and return hashed evidence
   ([procedure](docs/AWS_ACCEPTANCE.md)).
 
-<!-- AWS_RESULTS -->
+On 14 October 2026, source `aeb2148` completed AWS CodeBuild: **615 passed, 1 skipped,
+0 failed**, with both offline OpenCV demos passing. Exact source bytes, downloaded evidence
+and actual AWS build metadata were verified; the temporary acceptance stack was deleted.
+The public AWS demo also passed real bird dismissal and wrong-way deadline/report/late-correction
+cases with downloaded clip hashes checked. Model answers remained fixed offline fixtures.
+[Publication-safe results and limits](docs/AWS_RESULTS_2026-10-14.json).
 
 Architecture overview: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -174,9 +179,10 @@ holdout), and nothing here is a claim about real-road safety. Notifications are 
 .venv/bin/python -m pytest -q
 ```
 
-For GUI revision `f94289c`, the GitHub Actions run on 14 October 2026 reports
-**600 passed, 0 failed** on both Ubuntu and Windows. The jobs also run the actual offline CLI demo.
-[Source-bound CI result](https://github.com/ellmos-ai/VisionFlow/actions/runs/38487244459).
+For packaged revision `aeb2148`, the GitHub Actions run on 14 October 2026 reports
+**616 passed, 0 failed** on both Ubuntu and Windows. Both jobs also run the offline CLI demo
+and build an actual wheel whose consumer starts a real road case outside the checkout.
+[Source-bound CI result](https://github.com/ellmos-ai/VisionFlow/actions/runs/38491740474).
 
 Browser acceptance scripts (Playwright with Edge or Chromium) live in `tests/` and are described
 in [docs/TESTING.md](docs/TESTING.md).

@@ -8,7 +8,24 @@ VisionFlow uses AWS in two ways:
 2. **Cloud acceptance** – this document: one AWS CodeBuild run that executes the full test suite
    and both OpenCV demos from an exact, hashed source package and returns verifiable evidence.
 
-<!-- AWS_RESULTS -->
+## Verified run: 14 October 2026
+
+Source `aeb214887f825e47d59f58deba748173d6ccbe2b`, source ZIP SHA-256
+`aedd94d98a67c31fb223d789c024b19cf4cc0072b6194979429322114eb1f767`:
+AWS CodeBuild **SUCCEEDED**, **615 passed, 1 skipped, 0 failed** in 119.75 s;
+both offline OpenCV demos passed. The verifier returned exit 0 with
+`integrity_verified: true` and `cloud_verified: true` after checking the exact source,
+downloaded artifact and independent AWS metadata. The temporary stack was deleted;
+`DELETE_COMPLETE` was independently read back.
+
+The public EC2/CloudFront demo serves this source and passed a bird dismissal and
+a wrong-way case with a real 60-second deadline, simulated report and linked late correction.
+Downloaded clip bytes matched both the case and HTTP-header hashes.
+
+[Publication-safe result summary](AWS_RESULTS_2026-10-14.json). The complete original
+cloud evidence and private context are retained privately; this public summary is
+not a digital signature and does not replace the full verification inputs below.
+Earlier failed attempts remain in the project record and are not counted as passes.
 
 ## Scope and cost bound
 
