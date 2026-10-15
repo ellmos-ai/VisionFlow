@@ -196,6 +196,11 @@ reads the synthetic road simulation and rejects media uploads. Camera access nee
 credentials in source. VisionFlow is a decision-support prototype: a human or a documented policy
 stays responsible for every escalation.
 
+## License and provenance
+
+VisionFlow's original source is licensed under [MIT](LICENSE). Dependency licenses and
+generated artwork provenance are documented separately in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Documentation
 
 [Technical report](docs/TECHNICAL_REPORT.md) ·
