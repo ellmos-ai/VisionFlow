@@ -18,7 +18,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-PUBLIC_ROOT = {"README.md", "README_de.md", "LICENSE", "pyproject.toml", "requirements.lock"}
+PUBLIC_ROOT = {"README.md", "README_de.md", "LICENSE", "THIRD_PARTY_NOTICES.md",
+               "pyproject.toml", "requirements.lock", "requirements-browser.lock"}
 PUBLIC_DOCS = {"docs/TESTING.md", "docs/AWS_ACCEPTANCE.md", "docs/TECHNICAL_REPORT.md",
                "docs/ARCHITECTURE.md", "docs/JURY_INSTRUCTIONS.md",
                "docs/SYNTHETIC_EVALUATION.md"}
