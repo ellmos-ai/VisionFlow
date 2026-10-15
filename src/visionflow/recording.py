@@ -292,7 +292,7 @@ class RecordingStore:
             + projected_manifest_size
             - manifest_reservation_before
         )
-        if projected_usage > self.max_bytes:
+        if projected_usage > self.max_bytes - self._finish_headroom(session):
             raise RecordingError("byte_limit", "Das Speicherlimit dieser Aufzeichnung ist erreicht.")
         self._reserve_usage(session, projected_usage)
 
@@ -535,6 +535,7 @@ class RecordingStore:
                 - self._usage(session)
                 - manifest_size_after
                 + manifest_reservation_before
+                - (self._finish_headroom(session) if event_key != "finish" else 0)
             )
         if remaining < MIN_MP4_BYTES:
             raise RecordingError("byte_limit", "Für den Clip ist das Speicherlimit erreicht.")
@@ -627,9 +628,18 @@ class RecordingStore:
                 latest = session.latest_clip_by_event.get(event_key)
                 if latest is not None and latest.end_seconds >= end_seconds:
                     return latest
-                if self._usage(session) + output_size > self.max_bytes:
+                # Other exports/frames may have committed while encoding. Check
+                # the current manifest too, keeping the final recording's room.
+                commit_manifest_size = self._manifest_size(
+                    session, next_clip=planned_ref, export_bytes=self.max_bytes,
+                )
+                projected_usage = self._usage_without_manifest(session) + output_size + max(
+                    commit_manifest_size, session.manifest_reserved_bytes,
+                )
+                budget = self.max_bytes - (self._finish_headroom(session) if event_key != "finish" else 0)
+                if projected_usage > budget:
                     raise RecordingError("byte_limit", "Der Clip würde das Speicherlimit überschreiten.")
-                self._reserve_usage(session, self._usage(session) + output_size + manifest_size_after)
+                self._reserve_usage(session, projected_usage)
                 session.pending_export_bytes += output_size
                 pending_reserved = True
 
@@ -1194,6 +1204,11 @@ class RecordingStore:
         if not intervals:
             return MAX_SOURCE_FPS
         return 1.0 / statistics.median(intervals)
+
+    def _finish_headroom(self, session: _SourceSession) -> int:
+        # Hosted producers can reach the byte cap before the time cap. Frames
+        # and event clips must leave room for a complete final MP4 + manifest.
+        return self.max_bytes // 4 if self.retention and session.finish_ref is None else 0
 
     def _usage(self, session: _SourceSession) -> int:
         manifest_size = self._optional_file_size(session.directory / "manifest.json")
