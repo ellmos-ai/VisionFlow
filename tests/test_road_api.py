@@ -8,6 +8,8 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import gc
+import weakref
 from pathlib import Path
 
 import cv2
@@ -107,6 +109,27 @@ def _decode_clip(tmp_path: Path, data: bytes) -> int:
     finally:
         capture.release()
     return count
+
+
+def test_stopped_source_keeps_compressed_preview_without_live_frames(road_server):
+    base_url, service, _, _ = road_server
+    client = ApiClient(base_url)
+    client.bootstrap()
+    status, created, _ = client.request("POST", "/road/sessions", {})
+    assert status == 201
+    source_id = created["source_id"]
+    owner = client.cookie.split("=", 1)[1]
+    session = service.get(owner, source_id)
+    image_ref = weakref.ref(session.latest_frame().image)
+    time.sleep(0.2)
+    assert client.request("POST", f"/road/sessions/{source_id}/stop", {})[0] == 200
+    gc.collect()
+    assert image_ref() is None, "stopped source retains uncompressed frames"
+    status, preview, _ = client.request("GET", f"/road/sessions/{source_id}/frame")
+    assert status == 200 and preview["closed"] is True
+    image = cv2.imdecode(np.frombuffer(base64.b64decode(preview["image_base64"]), dtype=np.uint8), cv2.IMREAD_COLOR)
+    assert image.shape == (540, 960, 3)
+    assert client.request("GET", f"/road/sessions/{source_id}/frame")[1]["frame_id"] == preview["frame_id"]
 
 
 def test_road_source_serves_real_jpeg_and_owner_scoped_h264_clip(road_server, tmp_path):

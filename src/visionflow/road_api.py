@@ -271,15 +271,24 @@ class RoadSessionService:
         try:
             frame = session.latest_frame()
             ok, encoded = cv2.imencode(".jpg", frame.image, [cv2.IMWRITE_JPEG_QUALITY, 88])
-        except (cv2.error, RuntimeError) as exc:
+            if not ok or encoded.size == 0:
+                raise RoadSessionError("frame_unavailable", "Das aktuelle Kamerabild ist nicht verfügbar.")
+            frame_id, timestamp = frame.frame_id, frame.timestamp_seconds
+            jpeg = encoded.tobytes()
+        except RuntimeError as exc:
+            # Closed producers retain only one compressed preview and its identity.
+            jpeg = session.final_preview_jpeg()
+            metadata = session.final_preview_metadata()
+            if jpeg is None or metadata is None:
+                raise RoadSessionError("frame_unavailable", "Das aktuelle Kamerabild ist nicht verfügbar.") from exc
+            frame_id, timestamp = metadata
+        except cv2.error as exc:
             raise RoadSessionError("frame_unavailable", "Das aktuelle Kamerabild ist nicht verfügbar.") from exc
-        if not ok or encoded.size == 0:
-            raise RoadSessionError("frame_unavailable", "Das aktuelle Kamerabild ist nicht verfügbar.")
         payload = {
             "source_id": source_id,
-            "frame_id": frame.frame_id,
-            "timestamp_seconds": float(frame.timestamp_seconds),
-            "image_base64": base64.b64encode(encoded.tobytes()).decode("ascii"),
+            "frame_id": frame_id,
+            "timestamp_seconds": float(timestamp),
+            "image_base64": base64.b64encode(jpeg).decode("ascii"),
         }
         if session.closed:
             payload["closed"] = True
