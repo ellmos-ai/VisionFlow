@@ -430,8 +430,10 @@ def _serve(args: argparse.Namespace) -> int:
         return _write_error("invalid_max_live_sessions", "--max-live-sessions must be positive.")
     try:
         from visionflow.road_runtime import build_road_runtime
+        from visionflow.retention import RetentionPolicy
         cameras = _camera_mapping(args.camera)
-        public = {"max_live_sessions": args.max_live_sessions} if args.public_demo else {}
+        public = {"max_live_sessions": args.max_live_sessions,
+                  "retention_policy": RetentionPolicy()} if args.public_demo else {}
         runtime = build_road_runtime(
             args.data_dir,
             allowed_camera_sources=cameras,

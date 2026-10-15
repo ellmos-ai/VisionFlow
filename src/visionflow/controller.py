@@ -71,6 +71,8 @@ class _Run:
     tool_states: dict[tuple[str, tuple[float, float, float, float] | None], dict[str, Any]] = field(default_factory=dict)
     pending_proposal: ActionProposal | None = None
     output_index: int = 0
+    retained_metadata_bytes: int = 0
+    retained_evidence_bytes: int = 0
 
 
 class Controller:
@@ -86,6 +88,7 @@ class Controller:
         clock: Any = None,
         approval_store: Any = None,
         observer: Callable[..., Any] | None = None,
+        retention: Any = None,
     ) -> None:
         if not isinstance(registry, ToolRegistry):
             raise TypeError("registry must be a ToolRegistry")
@@ -97,6 +100,8 @@ class Controller:
         self.approval_store = approval_store
         self._approval_lock = threading.Lock()
         self.observer = observer
+        self.retention = retention
+        self._forget_callbacks: set[Callable[[str], None]] = set()
         self._runs: dict[str, _Run] = {}
         self._runs_lock = threading.RLock()
 
@@ -106,6 +111,8 @@ class Controller:
             raise ConfigError("config must be a validated WorkflowConfig")
         run_config = copy.deepcopy(config)
         run_id = uuid.uuid4().hex
+        if self.retention is not None:
+            self.retention.ensure_usage(run_config.input.source, "run:" + run_id, 4096)
         limits = run_config.limits
         budget = Budget(
             max_observation_seconds=limits.max_observation_seconds,
@@ -121,7 +128,7 @@ class Controller:
             recorder=recorder,
             queue=[run_config.nodes[0].id] if run_config.nodes else [],
         )
-        recorder.append({"type": "state_change", "state": "queued"})
+        self._record_locked(run, {"type": "state_change", "state": "queued"})
         result.trace = recorder.export()
         with self._runs_lock:
             self._runs[run_id] = run
@@ -294,6 +301,9 @@ class Controller:
             self._fail(run, exc)
         finally:
             with run.lock:
+                if self.retention and run.result.status in _TERMINAL:
+                    run.tool_states.clear()
+                    run.image_frame = None
                 run.done_event.set()
 
     def _execute(self, run: _Run) -> None:
@@ -457,6 +467,7 @@ class Controller:
             with run.lock:
                 if run.result.status in _TERMINAL:
                     return
+                self._account_metadata(run, self._finding_dict(finding))
                 run.result.findings.append(finding)
                 run.frames_analyzed += 1
                 run.last_tool = tool_name
@@ -558,7 +569,11 @@ class Controller:
                 image_bytes = encoded.tobytes()
             except ImportError as exc:
                 raise MediaError("NumPy/OpenCV is required to store array evidence") from exc
+        if self.retention is not None:
+            self.retention.ensure_usage(run.config.input.source, "evidence:" + run.result.run_id,
+                                        run.retained_evidence_bytes + len(image_bytes))
         path = store_evidence(self.evidence_root, run.result.run_id, evidence_id, image_bytes)
+        run.retained_evidence_bytes += len(image_bytes)
         relative_ref = path.resolve(strict=True).relative_to(
             self.evidence_root.resolve(strict=True)
         )
@@ -1150,6 +1165,7 @@ class Controller:
     def _append_output(self, run: _Run, output: dict[str, Any]) -> None:
         with run.lock:
             if run.result.status not in _TERMINAL:
+                self._account_metadata(run, output)
                 run.result.outputs.append(copy.deepcopy(output))
 
     def _findings(self, run: _Run) -> list[Finding]:
@@ -1203,10 +1219,56 @@ class Controller:
         with run.lock:
             self._record_locked(run, event)
 
-    @staticmethod
-    def _record_locked(run: _Run, event: dict[str, Any]) -> None:
+    def _account_metadata(self, run: _Run, value: Any) -> None:
+        if self.retention is None:
+            return
+        size = 2 * len(json.dumps(self._json_safe(value), ensure_ascii=False, allow_nan=False).encode("utf-8"))
+        self.retention.ensure_usage(run.config.input.source, "run:" + run.result.run_id,
+                                    run.retained_metadata_bytes + size + 4096)
+        run.retained_metadata_bytes += size
+
+    def _record_locked(self, run: _Run, event: dict[str, Any]) -> None:
+        # The initial 4 KiB reserve guarantees a terminal error/cancel record even
+        # when a frame, finding or model result exhausted the shared budget.
+        if event.get("state") not in _TERMINAL:
+            self._account_metadata(run, event)
         run.recorder.append(event)
         run.result.trace = run.recorder.export()
+
+    def on_run_forget(self, callback: Callable[[str], None]) -> Callable[[], None]:
+        with self._runs_lock:
+            self._forget_callbacks.add(callback)
+
+        def unsubscribe():
+            with self._runs_lock:
+                self._forget_callbacks.discard(callback)
+        return unsubscribe
+
+    def run_ids_for_source(self, source_id: str) -> list[str]:
+        with self._runs_lock:
+            return [key for key, run in self._runs.items() if run.config.input.source == source_id]
+
+    def delete_run_files(self, run_id: str) -> None:
+        """Delete inactive evidence without dropping references before other stores succeed."""
+        from .retention import remove_owned_tree
+        with self._runs_lock:
+            run = self._runs.get(run_id)
+            if run is None:
+                return
+            with run.lock:
+                if run.result.status not in _TERMINAL or (run.thread is not None and run.thread.is_alive()):
+                    raise RuntimeError("run still active")
+                if self.evidence_root.exists():
+                    remove_owned_tree(self.evidence_root, self.evidence_root / run_id)
+
+    def forget_run(self, run_id: str) -> None:
+        """Remove an inactive run only after its owned evidence tree is gone."""
+        with self._runs_lock:
+            self.delete_run_files(run_id)
+            self._runs.pop(run_id, None)
+            callbacks = tuple(self._forget_callbacks)
+        for callback in callbacks:
+            callback(run_id)
 
     def _get_run(self, run_id: str) -> _Run:
         if not isinstance(run_id, str):

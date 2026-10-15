@@ -30,6 +30,7 @@ class SimulationSession:
         owner_id: str,
         seed: int = 42,
         on_frame: Callable[[Frame], None] | None = None,
+        on_closed: Callable[[], None] | None = None,
     ) -> None:
         if not isinstance(owner_id, str) or not owner_id.strip():
             raise ValueError("owner_id must be a non-empty string")
@@ -40,6 +41,7 @@ class SimulationSession:
         self.source_id = f"road-sim-{uuid.uuid4().hex}"
         self._world = RoadWorld(seed=seed)
         self._on_frame = on_frame
+        self._on_closed = on_closed
         self._condition = threading.Condition()
         self._world_lock = threading.Lock()
         self._frames: deque[tuple[int, Frame]] = deque(maxlen=_RAW_BUFFER_SIZE)
@@ -155,6 +157,13 @@ class SimulationSession:
                     self._on_frame = None
                     self._images_released.set()
                     self._condition.notify_all()
+                    on_closed, self._on_closed = self._on_closed, None
+        if on_closed is not None:
+            try:
+                on_closed()
+            except Exception:
+                with self._condition:
+                    self._producer_error = True
 
     def _produce_frames(self) -> None:
         try:
@@ -279,8 +288,9 @@ class SimulationStore:
         seed: int = 42,
         *,
         on_frame: Callable[[Frame], None] | None = None,
+        on_closed: Callable[[], None] | None = None,
     ) -> SimulationSession:
-        session = SimulationSession(owner_id=owner_id, seed=seed, on_frame=on_frame)
+        session = SimulationSession(owner_id=owner_id, seed=seed, on_frame=on_frame, on_closed=on_closed)
         with self._lock:
             if self._closed:
                 session.close()
@@ -300,6 +310,15 @@ class SimulationStore:
             if session is None or session.owner_id != owner_id:
                 raise KeyError(source_id)
             return session
+
+    def forget(self, owner_id: str, source_id: str) -> None:
+        with self._lock:
+            session = self._sessions.get(source_id)
+            if session is None:
+                return
+            if session.owner_id != owner_id or not session.closed:
+                raise RuntimeError("cannot forget a live or foreign source")
+            self._sessions.pop(source_id, None)
 
     def reset(
         self,

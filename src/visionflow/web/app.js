@@ -72,6 +72,10 @@
       "The public demo upload storage is full. It is cleared every day.",
     ),
     service_closed: L("Die Kamerademo ist beendet.", "The camera demo has ended."),
+    demo_capacity_full: L(
+      "Das Datenbudget der Demo ist belegt. Bitte in einer Minute erneut versuchen; laufende Prüfungen bleiben erhalten.",
+      "The demo resource budget is full. Please retry in a minute; ongoing reviews are preserved.",
+    ),
   };
 
   function apiError(payload, status) {

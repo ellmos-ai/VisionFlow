@@ -58,10 +58,22 @@ flowchart LR
 * **Public demo** (`cloud/demo/demo-stack.yaml`): one Graviton instance runs the unchanged
   server. It still binds to loopback; nginx forwards only requests that carry CloudFront's
   secret header and rewrites Host/Origin to the loopback values the server expects. In
-  `--public-demo` mode workflows can only read the road simulation and media uploaded to this
-  server, uploads share a 200 MB quota, at most four live road sessions run at once, and systemd
+  `--public-demo` runs only the bounded road case workflow; uploads and generic workflow
+  execution are disabled. At most four live road sessions run at once, and systemd
   restarts the service with an empty data directory every 24 hours. No SSH; the instance is
   managed through SSM. Provider calls and cameras are disabled in this mode.
+  A shared retention manager admits at most 32 retained sources against a 512 MiB data
+  budget (recordings, clips, evidence, traces, bounded case metadata and export scratch).
+  A new source reserves a full recording plus 16 MiB of volatile image/scratch capacity;
+  each case reserves 16 MiB for its fixed offline exchanges and up to 64 decision keys,
+  with the final key reserved for a late correction. Byte admission can therefore reject
+  earlier than the count limits. This is a data budget, not a claim about total process RSS.
+  Inactive sources expire 30 minutes after their last case activity; polls do not extend
+  that period. Producers, reviews, exports, downloads and decisions hold source leases.
+  Files are removed before store references, only inside verified source directories;
+  cleanup errors retain the charge. Capacity errors return HTTP 503 and Retry-After: 60.
+  Public session tokens are capped at 128 and expire after eight hours. Restarting the
+  service discards demo sessions. Local mode does not enable retention by default.
 * **Cloud acceptance** (`cloud/template.json`, `cloud/buildspec.yml`): CodeBuild installs the
   pinned dependencies from an exact source ZIP, runs the full test suite and both OpenCV demos,
   and returns hashed evidence ([procedure](AWS_ACCEPTANCE.md)).

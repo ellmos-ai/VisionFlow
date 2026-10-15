@@ -112,6 +112,9 @@ class DecisionStore:
         policy: DecisionPolicy,
         inbox: SimulatedAuthorityInbox,
         clock: ReviewClock,
+        *,
+        max_idempotency_keys: int | None = None,
+        max_snapshot_bytes: int | None = None,
     ) -> None:
         if not isinstance(policy, DecisionPolicy):
             raise TypeError("policy must be a DecisionPolicy")
@@ -124,8 +127,22 @@ class DecisionStore:
         self.policy = policy
         self.inbox = inbox
         self.clock = clock
+        if max_idempotency_keys is not None and (type(max_idempotency_keys) is not int or max_idempotency_keys < 2):
+            raise ValueError("max_idempotency_keys must be at least two")
+        self.max_idempotency_keys = max_idempotency_keys
+        if max_snapshot_bytes is not None and (type(max_snapshot_bytes) is not int or max_snapshot_bytes < 4096):
+            raise ValueError("max_snapshot_bytes must be at least 4096")
+        self.max_snapshot_bytes = max_snapshot_bytes
         self._cases: dict[tuple[str, str], _StoredCase] = {}
         self._lock = threading.RLock()
+
+    def forget_case(self, owner_id: str, case_id: str) -> None:
+        with self._lock:
+            state = self._cases.get((owner_id, case_id))
+            if state is not None and state.phase == "human_review":
+                raise RuntimeError("decision still active")
+            self._cases.pop((owner_id, case_id), None)
+        self.inbox.forget_case(owner_id, case_id)
 
     def open_case(
         self,
@@ -189,6 +206,12 @@ class DecisionStore:
                 model_error=safe_error,
                 content_hash=content_hash,
             )
+            if self.max_snapshot_bytes is not None:
+                # Leave half the cap for the bounded journal and two receipts.
+                initial_bytes = len(json.dumps(self._public_case(state), ensure_ascii=False).encode("utf-8"))
+                if initial_bytes > self.max_snapshot_bytes // 2:
+                    from .retention import RetentionCapacityError
+                    raise RetentionCapacityError("The hosted demo decision metadata is too large.")
             self._cases[key] = state
             self._record(state, "case_opened")
 
@@ -269,6 +292,15 @@ class DecisionStore:
                         "Der Idempotenzschlüssel ist an eine andere Entscheidung gebunden.",
                     )
                 return copy.deepcopy(previous_result)
+
+            # Keep the final slot available for a late correction. Replaying an
+            # existing key remains possible even after new admissions are full.
+            if self.max_idempotency_keys is not None:
+                limit = self.max_idempotency_keys
+                if (len(state.idempotency) >= limit or
+                    (decision == "confirm" and len(state.idempotency) >= limit - 1)):
+                    from .retention import RetentionCapacityError
+                    raise RetentionCapacityError("The hosted demo decision budget is full.")
 
             if isinstance(version, bool) or not isinstance(version, int):
                 raise DecisionConflict("invalid_version", "Die Fallversion ist ungültig.")

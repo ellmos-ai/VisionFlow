@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import re
 from threading import RLock
 from typing import Any
@@ -40,7 +41,10 @@ class ModelExchangeError(RuntimeError):
 class ModelExchangeStore:
     """Keep request/response records private by owner and expose pathless snapshots."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_record_bytes: int | None = None) -> None:
+        if max_record_bytes is not None and (type(max_record_bytes) is not int or max_record_bytes < 256):
+            raise ValueError("max_record_bytes must be at least 256")
+        self.max_record_bytes = max_record_bytes
         self._lock = RLock()
         self._records: dict[str, dict[str, Any]] = {}
         self._owners: dict[str, str] = {}
@@ -52,8 +56,7 @@ class ModelExchangeStore:
         with self._lock:
             if request.exchange_id in self._records:
                 raise ModelExchangeError("exchange_exists")
-            self._owners[request.exchange_id] = owner
-            self._records[request.exchange_id] = {
+            record = {
                 "exchange_id": request.exchange_id,
                 "case_id": request.case_id,
                 "run_id": request.run_id,
@@ -69,6 +72,20 @@ class ModelExchangeStore:
                 "usage": None,
                 "error_code": None,
             }
+            self._check_size(record)
+            self._owners[request.exchange_id] = owner
+            self._records[request.exchange_id] = record
+
+    def forget_case(self, owner_id: str, case_id: str) -> None:
+        with self._lock:
+            identifiers = [key for key, row in self._records.items()
+                           if self._owners.get(key) == owner_id and row["case_id"] == case_id]
+            for key in identifiers:
+                if self._records[key]["status"] == "pending":
+                    raise RuntimeError("model exchange still active")
+            for key in identifiers:
+                self._records.pop(key, None)
+                self._owners.pop(key, None)
 
     def append_delta(self, exchange_id: str, text: str) -> None:
         exchange = _identifier(exchange_id, "exchange_id")
@@ -87,6 +104,7 @@ class ModelExchangeStore:
             current_size = sum(len(item.encode("utf-8")) for item in record["deltas"])
             if current_size + len(text.encode("utf-8")) > _MAX_OUTPUT_BYTES:
                 raise ModelExchangeError("output_too_large")
+            self._check_size({**record, "deltas": [*record["deltas"], text]})
             record["deltas"].append(text)
 
     def complete(
@@ -108,10 +126,17 @@ class ModelExchangeStore:
                 raise KeyError(exchange)
             if record["status"] != "pending":
                 raise ModelExchangeError("exchange_closed")
-            record["status"] = "complete"
-            record["raw_output"] = raw_output
-            record["assessment"] = assessment.to_dict()
-            record["usage"] = safe_usage
+            changes = {"status": "complete", "raw_output": raw_output,
+                       "assessment": assessment.to_dict(), "usage": safe_usage}
+            self._check_size({**record, **changes})
+            record.update(changes)
+
+    def _check_size(self, record: dict[str, Any]) -> None:
+        if self.max_record_bytes is not None:
+            size = len(json.dumps(record, ensure_ascii=False, allow_nan=False).encode("utf-8"))
+            if size > self.max_record_bytes - 128:  # retain space for a terminal safe error
+                from .retention import RetentionCapacityError
+                raise RetentionCapacityError("The hosted demo model metadata is too large.")
 
     def fail(self, exchange_id: str, safe_code: str) -> None:
         exchange = _identifier(exchange_id, "exchange_id")

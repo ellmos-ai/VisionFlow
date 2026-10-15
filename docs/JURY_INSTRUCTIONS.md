@@ -29,6 +29,13 @@ The public demo uses synthetic traffic, fixed offline model answers and a simula
 inbox. Each camera session ends after two minutes; at most four sessions run at once (“All demo
 cameras are busy” means: try again a minute later).
 
+The hosted service retains at most 32 sources within a shared 512 MiB data budget.
+It removes inactive cases and their clips 30 minutes after the last case activity;
+refreshing the page does not extend retention. Active reviews and exports remain protected.
+An accepted late correction starts a new 30-minute window. If capacity is full, retry
+after one minute. Restarting the demo service discards its sessions. These limits can
+reject a new camera before all four live-camera slots are occupied.
+
 Each detection creates a numbered ticket at its current station: room 2 for model review,
 room 3 for human review, and room 4 after the deadline expires. Injecting a second event during
 review starts the next case on the same camera; stopping it keeps sealed tickets decidable.
