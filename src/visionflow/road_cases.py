@@ -387,6 +387,24 @@ class RoadCaseService:
                 raise
             raise RoadCaseError("run_start_failed", status=500) from None
 
+    def list_cases(self, owner_id: str) -> list[dict[str, Any]]:
+        """Read owned cases in creation order without restarting any deadline."""
+        owner = _identifier(owner_id, "owner_id")
+        with self._lock:
+            owned = sorted(
+                (case for (case_owner, _), case in self._cases.items() if case_owner == owner),
+                key=lambda case: case.created_at,
+            )
+        rows = []
+        for case in owned:
+            try:
+                rows.append(self.snapshot(owner, case.case_id))
+            except RoadCaseError as exc:
+                # A retention collection may remove an inactive case after the list copy.
+                if exc.code != "case_not_found":
+                    raise
+        return rows
+
     def snapshot(self, owner_id: str, case_id: str) -> dict[str, Any]:
         case = self._owned_case(owner_id, case_id)
         result: RunResult | None = None

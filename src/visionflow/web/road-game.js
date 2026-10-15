@@ -396,6 +396,7 @@
     for (const [caseId, entry] of Object.entries(cases)) {
       if (entry && entry.snapshot) updateTicket(caseId, entry.snapshot, entry.exchanges);
     }
+    if (!selectedCaseId && tickets.has(detail.viewedCaseId)) selectedCaseId = detail.viewedCaseId;
     render();
   }
 

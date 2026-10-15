@@ -662,7 +662,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
 
             if path in {
                 "/", "/index.html", "/app.js", "/style.css", "/road-camera.js",
-                "/road-model.js", "/road-workplace.js", "/road.css",
+                "/road-model.js", "/road-workplace.js", "/road-session.js", "/road.css",
                 "/road-cartoon.css", "/road-sfx.js", "/road-game.js", "/i18n.js", "/favicon.ico",
                 "/assets/alex.png", "/assets/kira.png", "/assets/schmidt.png", "/assets/weber.png",
                 "/assets/leaf.png", "/assets/bird.png", "/assets/wrong-way.png",
@@ -711,6 +711,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             "/app.js": "app.js",
             "/style.css": "style.css",
             "/road-camera.js": "road-camera.js",
+            "/road-session.js": "road-session.js",
             "/road-model.js": "road-model.js",
             "/road-workplace.js": "road-workplace.js",
             "/road.css": "road.css",

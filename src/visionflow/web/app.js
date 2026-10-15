@@ -35,6 +35,7 @@
   let evidenceObjectUrl = null;
   let reportText = "";
   let roadModulePromise = null;
+  let roadSessionModule = null;
   let roadMount = null;
   let roadModelMount = null;
   let roadWorkplaceMount = null;
@@ -741,6 +742,7 @@
     // A new case on the same camera must not pull an open review out of view.
     if (event.type !== "road-case-started" || !ROAD_REVIEW_PHASES.has(roadCasePhases.get(roadViewedCaseId))) {
       roadViewedCaseId = id;
+      roadSessionModule?.rememberRoadCase(id);
     }
     if (roadMount) roadMount.setCase(detail.case || { case_id: id });
     roadRefreshGeneration += 1;
@@ -752,6 +754,7 @@
     const id = typeof detail.caseId === "string" ? detail.caseId : null;
     if (!id) return;
     roadViewedCaseId = id;
+    roadSessionModule?.rememberRoadCase(id);
     roadRefreshGeneration += 1;
     void refreshRoadViews();
   }
@@ -930,8 +933,10 @@
           import("/road-camera.js"),
           import("/road-model.js"),
           import("/road-workplace.js"),
+          import("/road-session.js"),
         ]);
-        const [cameraModule, modelModule, workplaceModule] = await roadModulePromise;
+        const [cameraModule, modelModule, workplaceModule, sessionModule] = await roadModulePromise;
+        roadSessionModule = sessionModule;
         if (!roadWorkspaceReady) {
           const client = roadApiClient();
           const cameraRoot = $("road-camera-root");
@@ -956,6 +961,18 @@
           window.roadCameraMount = roadMount;
           window.roadApiClient = client;
           roadWorkspaceReady = true;
+          const restored = await sessionModule.restoreRoadCases(client);
+          for (const snapshot of restored.cases) roadTrackedCaseIds.add(snapshot.case_id);
+          roadViewedCaseId = restored.selectedCaseId;
+          roadActiveCaseId = restored.cases.at(-1)?.case_id || null;
+          if (restored.cases.length) await roadMount.restoreSource(restored.cases.at(-1));
+          if (restored.sessionLost) {
+            const notice = document.createElement("p");
+            notice.setAttribute("role", "status");
+            notice.id = "road-recovery-status";
+            notice.textContent = L("Die vorherige Sitzung ist nicht mehr verfügbar.", "The previous session is no longer available.");
+            $("workspace-road").prepend(notice);
+          }
           await refreshRoadViews();
           scheduleRoadRefresh();
         }
@@ -968,10 +985,12 @@
           openCase: (caseId) => {
             if (typeof caseId !== "string" || !caseId) return;
             roadViewedCaseId = caseId;
+            roadSessionModule?.rememberRoadCase(caseId);
             roadRefreshGeneration += 1;
             void refreshRoadViews();
           },
         });
+        await refreshRoadViews();
       }
     } catch (error) {
       $("road-camera-root").textContent = error.message || L("Die Straßenkamera-Oberfläche konnte nicht geladen werden.", "The road camera interface could not be loaded.");

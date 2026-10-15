@@ -734,6 +734,10 @@ def dispatch_road_get(
             result.update(cases.capabilities)
         return RoadHttpResponse(200, result)
     parts = route.strip("/").split("/")
+    if route == "/road/cases":
+        if cases is None:
+            raise RoadSessionError("road_cases_unavailable", "Die Fallprüfung ist nicht verfügbar.", 404)
+        return RoadHttpResponse(200, {"cases": cases.list_cases(owner_id)})
     if route == "/road/inbox":
         if cases is None:
             raise RoadSessionError("road_cases_unavailable", "Die Fallprüfung ist nicht verfügbar.", 404)
