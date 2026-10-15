@@ -45,3 +45,36 @@ jobs:
           PYTHONUTF8: "1"
           PYTHONIOENCODING: utf-8
         run: python tests/wheel_consumer.py .local/wheels/visionflow-0.1.0-py3-none-any.whl
+
+  browser:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install FFmpeg and pinned Python dependencies
+        run: |
+          choco install ffmpeg --no-progress -y
+          python -m pip install -r requirements.lock -r requirements-browser.lock
+          python -m pip install --no-deps -e .
+          python -m pip check
+      - name: Ensure Microsoft Edge is available
+        run: python -m playwright install msedge
+      - name: Real browser journeys and H.264 playback
+        run: python tests/run_browser_acceptance.py --output .local/acceptance/ci-browser
+      - name: Preserve browser receipts on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-windows-edge-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            .local/acceptance/ci-browser/acceptance.json
+            .local/acceptance/ci-browser/*/acceptance.json
+            .local/acceptance/ci-browser/**/*.png
+            .local/acceptance/ci-browser/*.log

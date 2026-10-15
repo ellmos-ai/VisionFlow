@@ -79,3 +79,9 @@ synthetisch, die Empfänger sind simuliert, und es gibt keine Aussage über real
 Reproduzierbar mit `evaluation/roadworld_eval.py`.
 
 Technischer Bericht: [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) (englisch).
+
+## Lizenz und Herkunft
+
+Der eigene VisionFlow-Quellcode steht unter der [MIT-Lizenz](LICENSE).
+Abhängigkeiten behalten ihre jeweiligen Lizenzen. Hinweise zu Komponenten und zur Herkunft
+der generierten Illustrationen stehen in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

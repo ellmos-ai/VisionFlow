@@ -396,6 +396,7 @@
     for (const [caseId, entry] of Object.entries(cases)) {
       if (entry && entry.snapshot) updateTicket(caseId, entry.snapshot, entry.exchanges);
     }
+    if (!selectedCaseId && tickets.has(detail.viewedCaseId)) selectedCaseId = detail.viewedCaseId;
     render();
   }
 
@@ -885,6 +886,8 @@
 
     const state = decisionState(ticket);
     if (currentRoom === 3) ensureOpen(ticket, state);
+    const coffee = $("btn-schmidt-coffee");
+    if (coffee) coffee.disabled = !ticket || phaseOf(ticket) !== "human_review" || !(state.canConfirm || state.canReject);
     const radio = $("btn-schmidt-radio");
     const reject = $("btn-schmidt-reject");
     if (radio) radio.disabled = !state.canConfirm;
@@ -1077,7 +1080,6 @@
           if (!global.RoadSFX) return;
           const next = !global.RoadSFX.getMuted(); global.RoadSFX.setMuted(next); setText("cartoon-sound-btn", next ? t("soundOff") : t("soundOn"));
         } }),
-        h("button", { id: "cartoon-lang-btn", className: "cartoon-pill-btn", type: "button", textContent: t("langToggle"), onclick: () => window.VisionFlowI18n?.setLang(currentLang === "de" ? "en" : "de") }),
       ]),
     ]));
 
@@ -1138,7 +1140,7 @@
         h("div", { className: "dispatch-desk" }, [
           h("h3", { textContent: L("Deine Entscheidung", "Your decision") }), h("p", { id: "schmidt-decision-status", className: "decision-status", "aria-live": "polite" }),
           h("p", { id: "schmidt-countdown", className: "decision-time", "aria-live": "off" }),
-          h("div", { className: "dispatch-actions" }, [action("btn-schmidt-radio", t("schmidtRadio"), () => decideTicket(focusAt(3), "confirm", "speech-schmidt"), "chunky-btn--radio", true), action("btn-schmidt-reject", t("schmidtFalseAlarm"), () => decideTicket(focusAt(3), "reject", "speech-schmidt"), "", true), action("btn-schmidt-coffee", t("schmidtCoffee"), onSchmidtCoffee, "chunky-btn--coffee")]),
+          h("div", { className: "dispatch-actions" }, [action("btn-schmidt-radio", t("schmidtRadio"), () => decideTicket(focusAt(3), "confirm", "speech-schmidt"), "chunky-btn--radio", true), action("btn-schmidt-reject", t("schmidtFalseAlarm"), () => decideTicket(focusAt(3), "reject", "speech-schmidt"), "", true), action("btn-schmidt-coffee", t("schmidtCoffee"), onSchmidtCoffee, "chunky-btn--coffee", true)]),
           coffee("schmidt-away", true),
         ]),
       ]),
@@ -1163,7 +1165,6 @@
     setText("cartoon-title", t("title"));
     setText("cartoon-subtitle", t("subtitle"));
     setText("cartoon-sound-btn", global.RoadSFX && global.RoadSFX.getMuted() ? t("soundOff") : t("soundOn"));
-    setText("cartoon-lang-btn", t("langToggle"));
     const container = $("cartoon-details-btn") && $("cartoon-details-btn").closest(".road-workspace--game");
     setText("cartoon-details-btn", container && container.classList.contains("road-workspace--details") ? t("detailsHide") : t("detailsShow"));
     for (const idx of [1, 2, 3, 4]) setText(`nav-text-${idx}`, t(`room${idx}`));

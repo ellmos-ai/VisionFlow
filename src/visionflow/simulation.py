@@ -8,6 +8,8 @@ import uuid
 from collections import deque
 from collections.abc import Callable
 
+import cv2
+
 from visionflow.contracts import Frame
 from visionflow.media import FrameSource
 
@@ -28,6 +30,7 @@ class SimulationSession:
         owner_id: str,
         seed: int = 42,
         on_frame: Callable[[Frame], None] | None = None,
+        on_closed: Callable[[], None] | None = None,
     ) -> None:
         if not isinstance(owner_id, str) or not owner_id.strip():
             raise ValueError("owner_id must be a non-empty string")
@@ -38,6 +41,7 @@ class SimulationSession:
         self.source_id = f"road-sim-{uuid.uuid4().hex}"
         self._world = RoadWorld(seed=seed)
         self._on_frame = on_frame
+        self._on_closed = on_closed
         self._condition = threading.Condition()
         self._world_lock = threading.Lock()
         self._frames: deque[tuple[int, Frame]] = deque(maxlen=_RAW_BUFFER_SIZE)
@@ -47,7 +51,11 @@ class SimulationSession:
         self._closed = False
         self._started_at: float | None = None
         self._producer: threading.Thread | None = None
-        self._producer_error: Exception | None = None
+        # Keeping an exception would retain its traceback and the raw frame locals.
+        self._producer_error = False
+        self._preview_jpeg: bytes | None = None
+        self._preview_metadata: tuple[str, float] | None = None
+        self._images_released = threading.Event()
 
     @property
     def closed(self) -> bool:
@@ -59,7 +67,7 @@ class SimulationSession:
     def error_code(self) -> str | None:
         """Return a safe producer status without exposing exception text."""
         with self._condition:
-            return "producer_failed" if self._producer_error is not None else None
+            return "producer_failed" if self._producer_error else None
 
     def start(self) -> None:
         """Start the producer once; the first frame is produced immediately."""
@@ -90,9 +98,24 @@ class SimulationSession:
         with self._condition:
             while self._latest is None and not self._closed:
                 self._condition.wait()
-            if self._latest is None:
+            if self._closed or self._latest is None:
                 raise RuntimeError("simulation session closed before producing a frame")
             return self._latest
+
+    def final_preview_jpeg(self) -> bytes | None:
+        """Return the compressed final preview after the producer released its images."""
+        if not self.closed:
+            return None
+        self._images_released.wait()
+        with self._condition:
+            return self._preview_jpeg
+
+    def final_preview_metadata(self) -> tuple[str, float] | None:
+        """Identity and media time of the retained preview, without a raw image."""
+        if self.final_preview_jpeg() is None:
+            return None
+        with self._condition:
+            return self._preview_metadata
 
     def open_reader(self) -> FrameSource:
         """Open an independent cursor over frames retained in the shared buffer."""
@@ -111,6 +134,36 @@ class SimulationSession:
 
         if producer is not None and producer is not threading.current_thread():
             producer.join()
+        self._release_images()
+
+    def _release_images(self) -> None:
+        with self._world_lock:
+            with self._condition:
+                if self._images_released.is_set():
+                    return
+                try:
+                    if self._latest is not None:
+                        ok, jpeg = cv2.imencode(".jpg", self._latest.image, [cv2.IMWRITE_JPEG_QUALITY, 88])
+                        if ok and 0 < jpeg.size < 1024 * 1024:
+                            self._preview_jpeg = jpeg.tobytes()
+                            self._preview_metadata = (self._latest.frame_id, self._latest.timestamp_seconds)
+                except cv2.error:
+                    # Snapshot failure must never prevent releasing the large buffers.
+                    pass
+                finally:
+                    self._frames.clear()
+                    self._latest = None
+                    self._world = None
+                    self._on_frame = None
+                    self._images_released.set()
+                    self._condition.notify_all()
+                    on_closed, self._on_closed = self._on_closed, None
+        if on_closed is not None:
+            try:
+                on_closed()
+            except Exception:
+                with self._condition:
+                    self._producer_error = True
 
     def _produce_frames(self) -> None:
         try:
@@ -157,15 +210,16 @@ class SimulationSession:
 
                 # Schedule from capture start: slow rendering never causes a catch-up burst.
                 next_capture_at = capture_time + _FRAME_PERIOD_SECONDS
-        except Exception as exc:
+        except Exception:
             with self._condition:
-                self._producer_error = exc
+                self._producer_error = True
                 self._closed = True
                 self._condition.notify_all()
         finally:
             with self._condition:
                 self._closed = True
                 self._condition.notify_all()
+            self._release_images()
 
 
 class _SimulationReader:
@@ -234,8 +288,9 @@ class SimulationStore:
         seed: int = 42,
         *,
         on_frame: Callable[[Frame], None] | None = None,
+        on_closed: Callable[[], None] | None = None,
     ) -> SimulationSession:
-        session = SimulationSession(owner_id=owner_id, seed=seed, on_frame=on_frame)
+        session = SimulationSession(owner_id=owner_id, seed=seed, on_frame=on_frame, on_closed=on_closed)
         with self._lock:
             if self._closed:
                 session.close()
@@ -255,6 +310,15 @@ class SimulationStore:
             if session is None or session.owner_id != owner_id:
                 raise KeyError(source_id)
             return session
+
+    def forget(self, owner_id: str, source_id: str) -> None:
+        with self._lock:
+            session = self._sessions.get(source_id)
+            if session is None:
+                return
+            if session.owner_id != owner_id or not session.closed:
+                raise RuntimeError("cannot forget a live or foreign source")
+            self._sessions.pop(source_id, None)
 
     def reset(
         self,

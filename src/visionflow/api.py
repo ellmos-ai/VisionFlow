@@ -33,6 +33,7 @@ MAX_JSON_BYTES = 1024 * 1024
 MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 SESSION_COOKIE = "vf_session"
 SESSION_TTL_SECONDS = 8 * 60 * 60
+MAX_PUBLIC_SESSIONS = 128
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 DEFAULT_PUBLIC_UPLOAD_QUOTA_BYTES = 200 * 1024 * 1024
 _PUBLIC_UPLOAD_REF = re.compile(r"uploads/vf_[0-9a-f]{48}\.bin")
@@ -91,6 +92,11 @@ class _ApiState:
         self.sessions: dict[str, tuple[str, float]] = {}
         self.run_sessions: dict[str, str] = {}
         self.lock = threading.RLock()
+        def forget_owner(run_id: str) -> None:
+            with self.lock:
+                self.run_sessions.pop(run_id, None)
+        subscribe = getattr(controller, "on_run_forget", None)
+        self.unsubscribe_forget = subscribe(forget_owner) if callable(subscribe) else lambda: None
 
 
 class VisionFlowHTTPServer(ThreadingHTTPServer):
@@ -106,6 +112,7 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
             for service in (self.state.road_cases, self.state.road_sessions):
                 if service is not None:
                     service.close()
+            self.state.unsubscribe_forget()
 
     def __init__(
         self,
@@ -333,7 +340,10 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             self.connection.settimeout(previous_timeout)
 
     def _handle_exception(self, exc: Exception) -> None:
-        if isinstance(exc, _ApiFault):
+        from visionflow.retention import RetentionCapacityError, RetentionExpiredError
+        if isinstance(exc, (RetentionCapacityError, RetentionExpiredError)):
+            self._send_road_error(exc)
+        elif isinstance(exc, _ApiFault):
             self._send_fault(exc)
         elif isinstance(exc, UnknownRun):
             self._send_error(404, "unknown_run", "The requested run does not exist.")
@@ -603,12 +613,19 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         return True
 
     def _send_road_error(self, exc: Exception) -> None:
+        from visionflow.retention import RetentionCapacityError, RetentionExpiredError
         from visionflow.decision_policy import DecisionError
         from visionflow.recording import RecordingError
         from visionflow.road_api import RoadSessionError
         from visionflow.road_cases import RoadCaseError
 
-        if isinstance(exc, (RoadSessionError, RoadCaseError)):
+        if isinstance(exc, RetentionCapacityError):
+            self._send_json(503, {"error": {"code": "demo_capacity_full",
+                             "message": "Das Datenbudget der Demo ist belegt. Bitte später erneut versuchen."}},
+                            extra_headers={"Retry-After": "60"})
+        elif isinstance(exc, RetentionExpiredError):
+            self._send_error(404, "case_not_found", "Der Fall ist nicht mehr verfügbar.")
+        elif isinstance(exc, (RoadSessionError, RoadCaseError)):
             self._send_error(exc.status, exc.code, str(exc))
         elif isinstance(exc, DecisionError):
             status = 404 if exc.code == "case_not_found" else 409
@@ -635,10 +652,16 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                 session_id = self._session_id()
                 now = time.monotonic()
                 with self.server.state.lock:
+                    for expired, (_, created_at) in list(self.server.state.sessions.items()):
+                        if now - created_at > SESSION_TTL_SECONDS:
+                            del self.server.state.sessions[expired]
                     existing = self.server.state.sessions.get(session_id or "")
                     if existing is not None and now - existing[1] <= SESSION_TTL_SECONDS:
                         csrf = existing[0]
                     else:
+                        if self.server.state.public_demo and len(self.server.state.sessions) >= MAX_PUBLIC_SESSIONS:
+                            from visionflow.retention import RetentionCapacityError
+                            raise RetentionCapacityError("The hosted demo session budget is full.")
                         session_id = secrets.token_urlsafe(32)
                         csrf = secrets.token_urlsafe(32)
                     self.server.state.sessions[session_id] = (csrf, now)
@@ -662,7 +685,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
 
             if path in {
                 "/", "/index.html", "/app.js", "/style.css", "/road-camera.js",
-                "/road-model.js", "/road-workplace.js", "/road.css",
+                "/road-model.js", "/road-workplace.js", "/road-session.js", "/road.css",
                 "/road-cartoon.css", "/road-sfx.js", "/road-game.js", "/i18n.js", "/favicon.ico",
                 "/assets/alex.png", "/assets/kira.png", "/assets/schmidt.png", "/assets/weber.png",
                 "/assets/leaf.png", "/assets/bird.png", "/assets/wrong-way.png",
@@ -711,6 +734,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             "/app.js": "app.js",
             "/style.css": "style.css",
             "/road-camera.js": "road-camera.js",
+            "/road-session.js": "road-session.js",
             "/road-model.js": "road-model.js",
             "/road-workplace.js": "road-workplace.js",
             "/road.css": "road.css",
@@ -805,6 +829,9 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                     getattr(getattr(workflow, "input", None), "kind", None),
                     getattr(getattr(workflow, "input", None), "source", None),
                 )
+                if self.server.state.public_demo:
+                    raise _ApiFault(403, "public_demo_workflow_disabled",
+                                    "The public demo runs the bounded road case workflow only.")
                 road_source_id = self._authorize_workflow_source(session_id, workflow)
                 result = self.server.state.controller.start(workflow)
                 run_id = getattr(result, "run_id", None)

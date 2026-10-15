@@ -20,8 +20,10 @@ _WINDOWS_EDGE = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.
 def venv_python() -> Path:
     """Return the project virtual-environment interpreter for this platform."""
     if os.name == "nt":
-        return REPO / ".venv" / "Scripts" / "python.exe"
-    return REPO / ".venv" / "bin" / "python"
+        candidate = REPO / ".venv" / "Scripts" / "python.exe"
+    else:
+        candidate = REPO / ".venv" / "bin" / "python"
+    return candidate if candidate.is_file() else Path(sys.executable)
 
 
 def browser_executable() -> tuple[Path | None, str]:

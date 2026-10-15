@@ -748,6 +748,21 @@ export function mountRoadCamera(container, apiClient) {
       });
   }
 
+  async function restoreSource(snapshot) {
+    // Resume polling an authorized existing source without creating another case.
+    if (!snapshot || !snapshot.source_id || destroyed) return;
+    await apiClient.get(`/road/sessions/${encodeURIComponent(snapshot.source_id)}/frame`);
+    sourceGeneration += 1;
+    viewGeneration += 1;
+    sourceId = snapshot.source_id;
+    sourceOpen = true;
+    setCase(snapshot);
+    sourceSummary.textContent = L("Quelle: ", "Source: ") + sourceId;
+    renderRun({ run_id: snapshot.run_id, status: snapshot.controller_status, trace: snapshot.perception_trace });
+    startPolling();
+    if (runActive) pollRun();
+  }
+
   async function createSource() {
     return enqueue("create", async () => {
       if (sourceId && sourceOpen) {
@@ -1084,6 +1099,7 @@ export function mountRoadCamera(container, apiClient) {
     getSourceId,
     getState,
     configureCase,
+    restoreSource,
     startNextCase,
     setCase,
     injectScenarioEvent: (event) => injectEvent(event),

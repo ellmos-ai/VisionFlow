@@ -2,12 +2,91 @@ from __future__ import annotations
 
 import threading
 import time
+import gc
+import weakref
 
+import cv2
 import numpy as np
 import pytest
 
 from road_helpers import road_frames, vars_for_frame
 from visionflow.contracts import Frame
+
+
+def _assert_camera_images_released(session, image_refs):
+    gc.collect()
+    assert image_refs and all(ref() is None for ref in image_refs), "closed camera still owns raw images"
+    assert not session._frames and session._latest is None
+    preview = session.final_preview_jpeg()
+    assert isinstance(preview, bytes) and 0 < len(preview) < 1024 * 1024
+    image = cv2.imdecode(np.frombuffer(preview, dtype=np.uint8), cv2.IMREAD_COLOR)
+    assert image.shape == (540, 960, 3)
+
+
+def test_close_releases_raw_frames():
+    SimulationSession, _ = _load_simulation_types()
+    image_refs = []
+    ready = threading.Event()
+
+    def observe(frame):
+        image_refs.append(weakref.ref(frame.image))
+        ready.set()
+
+    session = SimulationSession("release-test", on_frame=observe)
+    reader = session.open_reader()
+    try:
+        session.start()
+        assert ready.wait(3)
+        image_refs.append(weakref.ref(session._world._static))
+    finally:
+        session.close()
+    assert not session._producer.is_alive()
+    _assert_camera_images_released(session, image_refs)
+    assert reader.read() is None
+    original_preview = session.final_preview_jpeg()
+    session.close()
+    assert session.final_preview_jpeg() == original_preview
+
+
+def test_producer_expiry_releases_raw_frames(monkeypatch):
+    import visionflow.simulation as simulation
+    monkeypatch.setattr(simulation, "_MAX_SESSION_SECONDS", 0.2)
+    image_refs = []
+    ready = threading.Event()
+
+    def observe(frame):
+        image_refs.append(weakref.ref(frame.image))
+        ready.set()
+
+    session = simulation.SimulationSession("expiry-test", on_frame=observe)
+    try:
+        session.start()
+        assert ready.wait(3)
+        session._producer.join(3)
+        assert not session._producer.is_alive()
+        assert session.closed and session.error_code is None
+        _assert_camera_images_released(session, image_refs)
+    finally:
+        session.close()
+
+
+def test_producer_failure_releases_raw_frames():
+    SimulationSession, _ = _load_simulation_types()
+    image_refs = []
+
+    def fail_recording(frame):
+        image_refs.append(weakref.ref(frame.image))
+        raise RuntimeError("recording failure")
+
+    session = SimulationSession("failed-producer", on_frame=fail_recording)
+    try:
+        session.start()
+        session._producer.join(3)
+        assert not session._producer.is_alive()
+        assert session.error_code == "producer_failed"
+        _assert_camera_images_released(session, image_refs)
+    finally:
+        session.close()
 
 
 def _load_road_world():

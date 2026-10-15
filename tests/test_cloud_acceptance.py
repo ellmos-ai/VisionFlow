@@ -26,6 +26,8 @@ def test_source_package_uses_committed_allowlist_and_rejects_tampering(tmp_path,
     repo.mkdir()
     subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
     for name, content in {"README.md": "public", "src/visionflow/a.py": "x=1",
+                          "THIRD_PARTY_NOTICES.md": "upstream notices",
+                          "requirements-browser.lock": "playwright==1.60.0",
                           "cloud/buildspec.yml": "version: 0.2", "private.txt": "secret",
                           "docs/STATE.md": "private plan", ".env": "token"}.items():
         path = repo / name
@@ -53,6 +55,9 @@ def test_source_package_uses_committed_allowlist_and_rejects_tampering(tmp_path,
         assert ".env" not in archive.namelist()
         assert "docs/STATE.md" not in archive.namelist()
         assert archive.read("README.md") == b"public"
+        assert "THIRD_PARTY_NOTICES.md" in archive.namelist()
+        assert archive.read("THIRD_PARTY_NOTICES.md") == b"upstream notices"
+        assert archive.read("requirements-browser.lock") == b"playwright==1.60.0"
         archive.extractall(unpacked)
     cloud().verify_source(unpacked)
     (unpacked / "README.md").write_text("tampered", encoding="utf-8")

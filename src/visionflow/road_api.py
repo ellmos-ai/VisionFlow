@@ -5,6 +5,8 @@ Simulator event labels never enter analysis results. The source override opens
 only a registered road session; HTTP callers must first pass the owner check.
 """
 from __future__ import annotations
+from contextlib import nullcontext
+from functools import wraps
 
 import base64
 import hashlib
@@ -147,6 +149,16 @@ class _RunBinding:
     clip_ref: ClipRef | None = None
 
 
+def _protected_source(operation):
+    @wraps(operation)
+    def call(self, owner_id, source_id, *args, **kwargs):
+        self.get(owner_id, source_id)  # ownership is checked before leasing
+        lease = self.retention.protect(source_id) if self.retention else nullcontext()
+        with lease:
+            return operation(self, owner_id, source_id, *args, **kwargs)
+    return call
+
+
 class RoadSessionService:
     """Owner-scoped façade over simulation, recording, and controller state.
 
@@ -162,12 +174,14 @@ class RoadSessionService:
         controller: Any,
         *,
         watcher_poll_seconds: float = 0.15,
+        retention: Any = None,
     ) -> None:
         if watcher_poll_seconds <= 0 or not math.isfinite(watcher_poll_seconds):
             raise ValueError("watcher_poll_seconds must be a finite positive value")
         self.sessions = sessions
         self.recordings = recordings
         self.controller = controller
+        self.retention = retention
         self._poll_seconds = float(watcher_poll_seconds)
         # The event excerpt needs ten real seconds of post-roll. Allow a small
         # margin for frame pacing jitter, but bound a completed run's watcher.
@@ -200,6 +214,20 @@ class RoadSessionService:
 
     def _create_session(self, owner_id: str, seed: int) -> SimulationSession:
         source_ref: dict[str, str] = {}
+        producer_lease = None
+
+        def producer_closed() -> None:
+            nonlocal producer_lease
+            if producer_lease is None:
+                return
+            try:
+                preview = session.final_preview_jpeg() or b""
+                with self.retention.change_usage(source_ref["source_id"], "volatile", len(preview)):
+                    pass
+                self.recordings.producer_finished(owner_id, source_ref["source_id"])
+            finally:
+                producer_lease.__exit__(None, None, None)
+                producer_lease = None
 
         def append_frame(frame: Any) -> None:
             source_id = source_ref.get("source_id")
@@ -207,13 +235,22 @@ class RoadSessionService:
                 raise RecordingError("source_not_open", "Die Aufnahmequelle wurde nicht geöffnet.")
             self.recordings.append(source_id, frame)
 
-        session = self.sessions.create(owner_id, seed, on_frame=append_frame)
+        session = self.sessions.create(owner_id, seed, on_frame=append_frame,
+                                       **({"on_closed": producer_closed} if self.retention else {}))
         source_id = session.source_id
         source_ref["source_id"] = source_id
         if not source_id.startswith(ROAD_SOURCE_PREFIX):
             session.close()
             raise RoadSessionError("invalid_source", "Die Quelle besitzt keine gültige Demo-Kennung.", 500)
         try:
+            if self.retention:
+                # Bounded 960x540 producer images, world and consumer scratch,
+                # separately charged from the full compressed recording reserve.
+                volatile_bytes = 32 * 1024 * 1024
+                self.retention.reserve_source(owner_id, source_id, self.recordings.max_bytes + volatile_bytes)
+                producer_lease = self.retention.protect(source_id, activity=True)
+                producer_lease.__enter__()
+                self.retention.ensure_usage(source_id, "volatile", volatile_bytes)
             # The recorder is ready before the first producer callback can run.
             self.recordings.open(owner_id, source_id)
             self._source_owners[source_id] = owner_id
@@ -224,6 +261,11 @@ class RoadSessionService:
             session.close()
             self._source_owners.pop(source_id, None)
             self._sessions_by_source.pop(source_id, None)
+            if self.retention:
+                try:
+                    self.retention.discard(source_id)
+                except KeyError:
+                    self.sessions.forget(owner_id, source_id)
             raise
         return session
 
@@ -251,6 +293,7 @@ class RoadSessionService:
             raise KeyError(source_id)
         return self.get(owner, source_id).open_reader()
 
+    @_protected_source
     def inject(self, owner_id: str, source_id: str, event: str) -> dict[str, Any]:
         session = self.get(owner_id, source_id)
         if session.closed:
@@ -266,20 +309,30 @@ class RoadSessionService:
         # Acknowledgement confirms only scene injection, never a detector result.
         return {"source_id": source_id, "accepted": True}
 
+    @_protected_source
     def frame(self, owner_id: str, source_id: str) -> dict[str, Any]:
         session = self.get(owner_id, source_id)
         try:
             frame = session.latest_frame()
             ok, encoded = cv2.imencode(".jpg", frame.image, [cv2.IMWRITE_JPEG_QUALITY, 88])
-        except (cv2.error, RuntimeError) as exc:
+            if not ok or encoded.size == 0:
+                raise RoadSessionError("frame_unavailable", "Das aktuelle Kamerabild ist nicht verfügbar.")
+            frame_id, timestamp = frame.frame_id, frame.timestamp_seconds
+            jpeg = encoded.tobytes()
+        except RuntimeError as exc:
+            # Closed producers retain only one compressed preview and its identity.
+            jpeg = session.final_preview_jpeg()
+            metadata = session.final_preview_metadata()
+            if jpeg is None or metadata is None:
+                raise RoadSessionError("frame_unavailable", "Das aktuelle Kamerabild ist nicht verfügbar.") from exc
+            frame_id, timestamp = metadata
+        except cv2.error as exc:
             raise RoadSessionError("frame_unavailable", "Das aktuelle Kamerabild ist nicht verfügbar.") from exc
-        if not ok or encoded.size == 0:
-            raise RoadSessionError("frame_unavailable", "Das aktuelle Kamerabild ist nicht verfügbar.")
         payload = {
             "source_id": source_id,
-            "frame_id": frame.frame_id,
-            "timestamp_seconds": float(frame.timestamp_seconds),
-            "image_base64": base64.b64encode(encoded.tobytes()).decode("ascii"),
+            "frame_id": frame_id,
+            "timestamp_seconds": float(timestamp),
+            "image_base64": base64.b64encode(jpeg).decode("ascii"),
         }
         if session.closed:
             payload["closed"] = True
@@ -287,6 +340,7 @@ class RoadSessionService:
             payload["error_code"] = session.error_code
         return payload
 
+    @_protected_source
     def recording(self, owner_id: str, source_id: str) -> dict[str, Any]:
         session = self.get(owner_id, source_id)
         try:
@@ -315,6 +369,14 @@ class RoadSessionService:
         owner = self._identifier(owner_id, "owner_id")
         try:
             ref = self.recordings.clip(owner, clip_id)
+        except RecordingError as exc:
+            raise self._recording_error(exc) from exc
+        lease = self.retention.protect(ref.source_id) if self.retention else nullcontext()
+        with lease:
+            return self._clip_payload(ref)
+
+    def _clip_payload(self, ref: ClipRef) -> tuple[dict[str, Any], bytes]:
+        try:
             size = ref.path.stat().st_size
             if size <= 0 or size > self.recordings.max_bytes:
                 raise RoadSessionError("clip_too_large", "Der Clip überschreitet die erlaubte Größe.", 413)
@@ -327,6 +389,7 @@ class RoadSessionService:
             raise RoadSessionError("clip_integrity", "Die Clip-Prüfsumme stimmt nicht.", 409)
         return self._clip_metadata(ref), payload
 
+    @_protected_source
     def reset(self, owner_id: str, source_id: str) -> dict[str, Any]:
         owner = self._identifier(owner_id, "owner_id")
         old = self.get(owner, source_id)
@@ -347,6 +410,7 @@ class RoadSessionService:
             "accepted": True,
         }
 
+    @_protected_source
     def stop(self, owner_id: str, source_id: str) -> dict[str, Any]:
         owner = self._identifier(owner_id, "owner_id")
         session = self.get(owner, source_id)
@@ -634,6 +698,29 @@ class RoadSessionService:
             if self._active_by_source.get(key) == binding.run_id:
                 self._active_by_source.pop(key, None)
 
+    def forget_source(self, owner_id: str, source_id: str) -> None:
+        with self._lock:
+            session = self._sessions_by_source.get(source_id)
+            if session is not None and (session.owner_id != owner_id or not session.closed):
+                raise RuntimeError("source still active or foreign")
+            bindings = [row for row in self._bindings.values()
+                        if row.owner_id == owner_id and row.source_id == source_id]
+        for binding in bindings:
+            binding.stop_event.set()
+            if binding.watcher is not None and binding.watcher is not threading.current_thread():
+                binding.watcher.join(timeout=1)
+                if binding.watcher.is_alive():
+                    raise RuntimeError("source watcher still active")
+        with self._lock:
+            for binding in bindings:
+                self._bindings.pop(binding.run_id, None)
+                self._run_sources.pop(binding.run_id, None)
+            self._active_by_source.pop((owner_id, source_id), None)
+            self._bindings_by_source.pop((owner_id, source_id), None)
+            self._sessions_by_source.pop(source_id, None)
+            self._source_owners.pop(source_id, None)
+            self.sessions.forget(owner_id, source_id)
+
     def close(self) -> None:
         with self._lock:
             if self._closed:
@@ -652,6 +739,8 @@ class RoadSessionService:
         for session in sessions:
             session.close()
         self.sessions.close()
+        if self.retention:
+            self.retention.close()
         for binding in bindings:
             if binding.watcher is not None and binding.watcher is not threading.current_thread():
                 binding.watcher.join(timeout=1.0)
@@ -734,6 +823,10 @@ def dispatch_road_get(
             result.update(cases.capabilities)
         return RoadHttpResponse(200, result)
     parts = route.strip("/").split("/")
+    if route == "/road/cases":
+        if cases is None:
+            raise RoadSessionError("road_cases_unavailable", "Die Fallprüfung ist nicht verfügbar.", 404)
+        return RoadHttpResponse(200, {"cases": cases.list_cases(owner_id)})
     if route == "/road/inbox":
         if cases is None:
             raise RoadSessionError("road_cases_unavailable", "Die Fallprüfung ist nicht verfügbar.", 404)

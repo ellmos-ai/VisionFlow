@@ -109,6 +109,8 @@ class _SourceSession:
     finish_ref: ClipRef | None = None
     dimensions: tuple[int, int] | None = None
     finished: bool = False
+    producer_ended: bool = False
+    active_exports: int = 0
 
 
 class RecordingStore:
@@ -125,6 +127,8 @@ class RecordingStore:
         ffmpeg_path: Path,
         max_seconds: float = MAX_RECORDING_SECONDS,
         max_bytes: int = MAX_RECORDING_BYTES,
+        *,
+        retention: Any = None,
     ) -> None:
         if isinstance(max_seconds, bool) or not isinstance(max_seconds, (int, float)):
             raise ValueError("max_seconds muss eine endliche positive Zahl sein.")
@@ -141,6 +145,7 @@ class RecordingStore:
         self.ffmpeg_path = Path(ffmpeg_path).expanduser()
         self.max_seconds = float(max_seconds)
         self.max_bytes = max_bytes
+        self.retention = retention
         self._lock = RLock()
         self._sessions: dict[tuple[str, str], _SourceSession] = {}
         self._active_by_source: dict[str, tuple[str, str]] = {}
@@ -289,6 +294,7 @@ class RecordingStore:
         )
         if projected_usage > self.max_bytes:
             raise RecordingError("byte_limit", "Das Speicherlimit dieser Aufzeichnung ist erreicht.")
+        self._reserve_usage(session, projected_usage)
 
         frame_path = self._safe_path(session.frames_directory / filename)
         try:
@@ -322,7 +328,8 @@ class RecordingStore:
     @_synchronized
     def manifest(self, owner_id: str, source_id: str) -> dict[str, Any]:
         session = self._get_session(owner_id, source_id)
-        self._write_manifest(session)
+        if self.retention is None:
+            self._write_manifest(session)
         return self._manifest_data(session)
 
     def event_clip(
@@ -445,10 +452,16 @@ class RecordingStore:
         end_seconds: float,
         available_preroll: float,
     ) -> ClipRef:
+        from contextlib import nullcontext
+        lease = self.retention.protect(session.source_id) if self.retention else nullcontext()
+        lease.__enter__()
+        allocation_key = "export:" + uuid.uuid4().hex
         with self._lock:
             if self._active_exports >= MAX_CONCURRENT_EXPORTS:
+                lease.__exit__(None, None, None)
                 raise RecordingError("export_busy", "Zu viele Videoexporte laufen gleichzeitig.")
             self._active_exports += 1
+            session.active_exports += 1
         try:
             return self._export_with_slot(
                 session,
@@ -457,10 +470,20 @@ class RecordingStore:
                 start_seconds=start_seconds,
                 end_seconds=end_seconds,
                 available_preroll=available_preroll,
+                allocation_key=allocation_key,
             )
         finally:
-            with self._lock:
-                self._active_exports -= 1
+            try:
+                with self._lock:
+                    self._active_exports -= 1
+                    session.active_exports -= 1
+                    if self.retention:
+                        with self.retention.change_usage(session.source_id, allocation_key, 0):
+                            pass
+                        if session.producer_ended and not session.active_exports:
+                            self._settle_usage(session)
+            finally:
+                lease.__exit__(None, None, None)
 
     def _export_with_slot(
         self,
@@ -471,6 +494,7 @@ class RecordingStore:
         start_seconds: float,
         end_seconds: float,
         available_preroll: float,
+        allocation_key: str | None = None,
     ) -> ClipRef:
         self._require_encoder()
         fps = self._source_fps(frames)
@@ -515,6 +539,17 @@ class RecordingStore:
         if remaining < MIN_MP4_BYTES:
             raise RecordingError("byte_limit", "Für den Clip ist das Speicherlimit erreicht.")
 
+        output_limit = min(remaining, MAX_CLIP_OUTPUT_BYTES)
+        if self.retention:
+            expected_input = sum(record.size_bytes for record in frames)
+            capacity = self.retention.component_capacity(session.source_id, allocation_key)
+            output_limit = min(output_limit, (capacity - expected_input - 2 * manifest_size_after) // 2)
+            if output_limit < MIN_MP4_BYTES:
+                from .retention import RetentionCapacityError
+                raise RetentionCapacityError("The hosted demo resource budget is full.")
+            self.retention.ensure_usage(session.source_id, allocation_key,
+                                        expected_input + 2 * output_limit + 2 * manifest_size_after)
+
         payload_parts: list[bytes] = []
         input_size = 0
         for record in frames:
@@ -535,7 +570,6 @@ class RecordingStore:
 
         executable = self._ffmpeg_executable
         assert executable is not None
-        output_limit = min(remaining, MAX_CLIP_OUTPUT_BYTES)
         if output_limit < MIN_MP4_BYTES:
             raise RecordingError("byte_limit", "Für den Clip ist das Speicherlimit erreicht.")
         args = [
@@ -576,6 +610,9 @@ class RecordingStore:
         ]
         output_bytes = self._encode_mp4_to_memory(args, payload_parts, output_limit)
         output_size = len(output_bytes)
+        if self.retention:
+            with self.retention.change_usage(session.source_id, allocation_key, input_size + output_size):
+                pass
         if output_size == 0:
             raise RecordingError("encoder_failed", "FFmpeg konnte keinen gültigen Videoexport erstellen.")
         if output_size >= output_limit:
@@ -592,6 +629,7 @@ class RecordingStore:
                     return latest
                 if self._usage(session) + output_size > self.max_bytes:
                     raise RecordingError("byte_limit", "Der Clip würde das Speicherlimit überschreiten.")
+                self._reserve_usage(session, self._usage(session) + output_size + manifest_size_after)
                 session.pending_export_bytes += output_size
                 pending_reserved = True
 
@@ -1081,6 +1119,7 @@ class RecordingStore:
         )
         if projected_usage > self.max_bytes:
             raise RecordingError("byte_limit", "Das Speicherlimit dieser Aufzeichnung ist erreicht.")
+        self._reserve_usage(session, projected_usage)
 
         temp_path: Path | None = None
         try:
@@ -1102,6 +1141,47 @@ class RecordingStore:
             if temp_path is not None:
                 self._unlink_if_exists(temp_path)
             raise RecordingError("manifest_write_failed", "Das Aufnahmemanifest konnte nicht gespeichert werden.") from exc
+
+    def _reserve_usage(self, session: _SourceSession, amount: int) -> None:
+        if self.retention:
+            self.retention.ensure_usage(session.source_id, "recording", amount)
+
+    def producer_finished(self, owner_id: str, source_id: str) -> None:
+        with self._lock:
+            session = self._get_session(owner_id, source_id)
+            session.producer_ended = True
+            if not session.active_exports:
+                self._write_manifest(session)
+                self._settle_usage(session)
+
+    def _settle_usage(self, session: _SourceSession) -> None:
+        if self.retention:
+            from .retention import owned_tree_bytes
+            amount = owned_tree_bytes(self.root, session.directory)
+            with self.retention.change_usage(session.source_id, "recording", amount):
+                pass
+            self.retention.settle(session.source_id)
+
+    def delete_source_files(self, owner_id: str, source_id: str) -> None:
+        from .retention import remove_owned_tree
+        with self._lock:
+            session = self._sessions.get((owner_id, source_id))
+            if session is None:
+                return
+            if not session.producer_ended or session.active_exports:
+                raise RuntimeError("recording still active")
+            remove_owned_tree(self.root, session.directory)
+
+    def forget_source(self, owner_id: str, source_id: str) -> None:
+        with self._lock:
+            self.delete_source_files(owner_id, source_id)
+            session = self._sessions.get((owner_id, source_id))
+            if session is None:
+                return
+            for clip in session.clip_history:
+                self._clips.pop(clip.clip_id, None)
+            self._active_by_source.pop(source_id, None)
+            self._sessions.pop((owner_id, source_id), None)
 
     def _source_fps(self, frames: list[_FrameRecord]) -> float:
         if len(frames) < 2:

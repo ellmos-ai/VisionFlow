@@ -134,6 +134,7 @@ def create_controller(
     model_factory: RunModelFactory | None = None,
     clock: Any = None,
     source_override: Callable[[InputConfig, int], Any | None] | None = None,
+    retention: Any = None,
 ):
     """Build a local controller, optionally replacing the default fixture factory.
 
@@ -247,6 +248,8 @@ def create_controller(
     }
     if clock is not None:
         controller_options["clock"] = clock
+    if retention is not None:
+        controller_options["retention"] = retention
     controller = Controller(
         create_registry(),
         **controller_options,

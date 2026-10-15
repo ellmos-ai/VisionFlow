@@ -295,6 +295,10 @@ class SimulatedAuthorityInbox:
             records.append(correction)
             return copy.deepcopy(correction)
 
+    def forget_case(self, owner_id: str, case_id: str) -> None:
+        with self._lock:
+            self._records.pop((owner_id, case_id), None)
+
     def list(self, owner_id: str) -> list[dict[str, Any]]:
         """Return detached records belonging only to the requested owner."""
         owner_id = _required_text(owner_id, "owner_id")

@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ from .gemini_video import GEMINI_MODEL_ID
 from .model import ModelAdapter, ModelRunContext
 from .model_exchange import ModelExchangeStore
 from .recording import ClipNotReady, ClipRef, RecordingError, RecordingStore
+from .retention import RetentionExpiredError
 from .runtime import create_default_fixture_adapter, create_registry
 from .video_model import (
     VideoAssessment,
@@ -31,7 +33,7 @@ from .workflow_resources import load_builtin_workflow
 
 _FIXTURE_PROFILES = frozenset({"pending", "high", "bird", "leaf", "followup", "unclear", "error"})
 _TERMINAL_PHASES = frozenset(
-    {"normal", "source_ended", "dismissed", "reported", "no_response", "rejected", "cancelled"}
+    {"normal", "source_ended", "dismissed", "reported", "no_response", "rejected", "cancelled", "corrected", "failed"}
 )
 # A run can spend 75 seconds observing, 30 seconds waiting for each of two clip
 # versions, and up to 30 seconds in each native call. 300 seconds also leaves
@@ -75,6 +77,7 @@ class _Case:
     monitor: threading.Thread | None = None
     finalized: bool = False
     stopped_reason: str | None = None
+    retention_lease: Any = None
 
 
 class RoadModelRouter:
@@ -248,6 +251,8 @@ class RoadCaseService:
         recordings: RecordingStore,
         exchanges: ModelExchangeStore,
         decisions: Any,
+        *,
+        retention: Any = None,
     ) -> None:
         if not callable(getattr(sessions, "get", None)) or not callable(
             getattr(sessions, "bind_run", None)
@@ -273,6 +278,7 @@ class RoadCaseService:
         self.recordings = recordings
         self.exchanges = exchanges
         self.decisions = decisions
+        self.retention = retention
         self.router = router
         self._lock = threading.RLock()
         self._closed = False
@@ -349,6 +355,20 @@ class RoadCaseService:
                 raise RoadCaseError("service_closed", status=503)
             if source_key in self._active_by_source:
                 raise RoadCaseError("source_in_use", "Für diese Quelle läuft bereits ein Fall.")
+            if self.retention:
+                if sum(row.source_id == source for row in self._cases.values()) >= 16:
+                    from .retention import RetentionCapacityError
+                    raise RetentionCapacityError("The hosted demo case budget is full.")
+                case.retention_lease = self.retention.protect(source, activity=True)
+                case.retention_lease.__enter__()
+                try:
+                    # Fixed offline exchanges plus at most 64 bounded decision
+                    # snapshots. This reserve remains until source collection.
+                    self.retention.ensure_usage(source, "case:" + case.case_id, 16 * 1024 * 1024)
+                except Exception:
+                    case.retention_lease.__exit__(None, None, None)
+                    case.retention_lease = None
+                    raise
             # Reservation precedes controller.start so the RunModelFactory can bind
             # safely even if the background run reaches ask_model before start returns.
             self._cases[key] = case
@@ -378,17 +398,49 @@ class RoadCaseService:
                 self._by_marker.pop(marker, None)
                 if self._active_by_source.get(source_key) == case.case_id:
                     self._active_by_source.pop(source_key, None)
-            if started and case.run_id:
+            if started:
                 try:
-                    self.controller.cancel(case.run_id)
+                    self.controller.cancel(run_id)
                 except Exception:
+                    pass
+            if case.retention_lease is not None:
+                case.retention_lease.__exit__(None, None, None)
+                case.retention_lease = None
+            if self.retention:
+                with self.retention.change_usage(source, "case:" + case.case_id, 0):
                     pass
             if isinstance(exc, RoadCaseError):
                 raise
+            from .retention import RetentionCapacityError
+            if isinstance(exc, RetentionCapacityError):
+                raise
             raise RoadCaseError("run_start_failed", status=500) from None
+
+    def list_cases(self, owner_id: str) -> list[dict[str, Any]]:
+        """Read owned cases in creation order without restarting any deadline."""
+        owner = _identifier(owner_id, "owner_id")
+        with self._lock:
+            owned = sorted(
+                (case for (case_owner, _), case in self._cases.items() if case_owner == owner),
+                key=lambda case: case.created_at,
+            )
+        rows = []
+        for case in owned:
+            try:
+                rows.append(self.snapshot(owner, case.case_id))
+            except (RoadCaseError, RetentionExpiredError) as exc:
+                # A retention collection may remove an inactive case after the list copy.
+                if isinstance(exc, RoadCaseError) and exc.code != "case_not_found":
+                    raise
+        return rows
 
     def snapshot(self, owner_id: str, case_id: str) -> dict[str, Any]:
         case = self._owned_case(owner_id, case_id)
+        lease = self.retention.protect(case.source_id) if self.retention else nullcontext()
+        with lease:
+            return self._snapshot_case(case)
+
+    def _snapshot_case(self, case: _Case) -> dict[str, Any]:
         result: RunResult | None = None
         if case.run_id is not None:
             try:
@@ -439,6 +491,11 @@ class RoadCaseService:
 
     def exchanges_for_case(self, owner_id: str, case_id: str) -> list[dict[str, Any]]:
         case = self._owned_case(owner_id, case_id)
+        lease = self.retention.protect(case.source_id) if self.retention else nullcontext()
+        with lease:
+            return self._exchange_rows(case)
+
+    def _exchange_rows(self, case: _Case) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for exchange_id in tuple(case.exchange_ids):
             try:
@@ -459,6 +516,16 @@ class RoadCaseService:
         idempotency_key: str,
     ) -> dict[str, Any]:
         case = self._owned_case(owner_id, case_id)
+        lease = self.retention.protect(case.source_id) if self.retention else nullcontext()
+        with lease:
+            result = self._decide_case(case, version, content_hash, decision, idempotency_key)
+            if self.retention:
+                self.retention.touch(case.source_id)
+            return result
+
+    def _decide_case(self, case: _Case, version: int, content_hash: str,
+                     decision: str, idempotency_key: str) -> dict[str, Any]:
+        owner_id, case_id = case.owner_id, case.case_id
         if not case.decision_open:
             raise RoadCaseError("case_not_found", status=404)
         try:
@@ -480,6 +547,12 @@ class RoadCaseService:
 
     def cancel(self, owner_id: str, case_id: str) -> dict[str, Any]:
         case = self._owned_case(owner_id, case_id)
+        lease = self.retention.protect(case.source_id) if self.retention else nullcontext()
+        with lease:
+            return self._cancel_case(case)
+
+    def _cancel_case(self, case: _Case) -> dict[str, Any]:
+        owner_id, case_id = case.owner_id, case.case_id
         with case.finalize_lock:
             case.cancel_event.set()
         if case.run_id is not None:
@@ -941,6 +1014,35 @@ class RoadCaseService:
             key = (case.owner_id, case.source_id)
             if self._active_by_source.get(key) == case.case_id:
                 self._active_by_source.pop(key, None)
+            lease, case.retention_lease = case.retention_lease, None
+        if lease is not None:
+            lease.__exit__(None, None, None)
+
+    def source_run_ids(self, owner_id: str, source_id: str) -> list[str]:
+        with self._lock:
+            cases = [case for case in self._cases.values()
+                     if case.owner_id == owner_id and case.source_id == source_id]
+        for case in cases:
+            if case.phase not in _TERMINAL_PHASES:
+                raise RuntimeError("case still active")
+            if case.monitor is not None and case.monitor is not threading.current_thread():
+                case.monitor.join(timeout=1)
+                if case.monitor.is_alive():
+                    raise RuntimeError("case monitor still active")
+        return [case.run_id for case in cases if case.run_id is not None]
+
+    def forget_source(self, owner_id: str, source_id: str) -> list[str]:
+        run_ids = self.source_run_ids(owner_id, source_id)
+        with self._lock:
+            cases = [case for case in self._cases.values()
+                     if case.owner_id == owner_id and case.source_id == source_id]
+            for case in cases:
+                self.exchanges.forget_case(owner_id, case.case_id)
+                self.decisions.forget_case(owner_id, case.case_id)
+                self._cases.pop((owner_id, case.case_id), None)
+                self._by_marker.pop(case.marker, None)
+            self._active_by_source.pop((owner_id, source_id), None)
+        return run_ids
 
 
 def _first_stable_candidate(

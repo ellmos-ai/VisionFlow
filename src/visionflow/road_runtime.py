@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
+from collections.abc import Callable
 
 from .decision_policy import DecisionPolicy, DecisionStore
 from .model_exchange import ModelExchangeStore
@@ -17,6 +18,7 @@ from .road_cases import RoadCaseService, RoadModelRouter
 from .runtime import create_controller
 from .simulated_authority import SimulatedAuthorityInbox
 from .simulation import SimulationStore
+from .retention import RetentionManager, RetentionPolicy
 
 
 @dataclass(slots=True)
@@ -27,6 +29,7 @@ class RoadRuntime:
     road_sessions: RoadSessionService | None
     road_cases: RoadCaseService | None
     road_unavailable_reason: str | None
+    retention: RetentionManager | None = None
 
     def close(self) -> None:
         if self.road_cases is not None:
@@ -55,6 +58,8 @@ def build_road_runtime(
     gemini_api_key: str | None = None,
     allow_native_costs: bool = False,
     max_live_sessions: int | None = None,
+    retention_policy: RetentionPolicy | None = None,
+    retention_clock: Callable[[], float] = time.monotonic,
 ) -> RoadRuntime:
     """Build a controller with explicit road routing and optional recording.
 
@@ -64,6 +69,8 @@ def build_road_runtime(
     """
     if type(allow_native_costs) is not bool:
         raise ValueError("allow_native_costs must be a boolean")
+    if retention_policy is not None and allow_native_costs:
+        raise ValueError("hosted retention uses the bounded offline road workflow only")
     cameras = {} if allowed_camera_sources is None else dict(allowed_camera_sources)
     ffmpeg = str(ffmpeg_path) if ffmpeg_path is not None else shutil.which("ffmpeg")
     unavailable_reason: str | None
@@ -76,6 +83,32 @@ def build_road_runtime(
 
     service_holder: dict[str, RoadSessionService] = {}
     controller_ref: dict[str, Any] = {}
+    case_holder: dict[str, RoadCaseService] = {}
+    recording_holder: dict[str, Any] = {}
+
+    def cleanup(owner: str, source: str) -> None:
+        cases = case_holder.get("cases")
+        recordings = recording_holder.get("recordings")
+        service = service_holder.get("service")
+        run_ids = set(cases.source_run_ids(owner, source) if cases is not None else [])
+        run_ids.update(controller_ref["controller"].run_ids_for_source(source))
+        # First remove every component's files, then release any references.
+        # A partial failure retains all maps and the original conservative charge.
+        for run_id in run_ids:
+            controller_ref["controller"].delete_run_files(run_id)
+        if recordings is not None:
+            recordings.delete_source_files(owner, source)
+        for run_id in run_ids:
+            controller_ref["controller"].forget_run(run_id)
+        if recordings is not None:
+            recordings.forget_source(owner, source)
+        if cases is not None:
+            cases.forget_source(owner, source)
+        if service is not None:
+            service.forget_source(owner, source)
+
+    retention = (RetentionManager(retention_policy, cleanup=cleanup, clock=retention_clock)
+                 if retention_policy is not None else None)
     native_transport = None
     if unavailable_reason is None and allow_native_costs:
         try:
@@ -106,6 +139,7 @@ def build_road_runtime(
         allowed_camera_sources=cameras,
         source_override=source_override,
         model_factory=router,
+        **({"retention": retention} if retention else {}),
     )
     controller_ref["controller"] = controller
     controller_ref["evidence_root"] = Path(
@@ -117,25 +151,32 @@ def build_road_runtime(
 
     from .recording import RecordingStore
 
-    recordings = RecordingStore(Path(data_dir) / "road-recordings", Path(ffmpeg))
+    recordings = RecordingStore(Path(data_dir) / "road-recordings", Path(ffmpeg), retention=retention)
+    recording_holder["recordings"] = recordings
     sessions = SimulationStore(max_live=max_live_sessions)
     road_sessions: RoadSessionService | None = None
     road_cases: RoadCaseService | None = None
     try:
-        road_sessions = RoadSessionService(sessions, recordings, controller)
+        road_sessions = RoadSessionService(sessions, recordings, controller, retention=retention)
         service_holder["service"] = road_sessions
         decisions = DecisionStore(
             DecisionPolicy(confidence_threshold=0.90, countdown_seconds=60.0),
             SimulatedAuthorityInbox(),
             SystemClock(),
+            max_idempotency_keys=64 if retention else None,
+            max_snapshot_bytes=65536 if retention else None,
         )
         road_cases = RoadCaseService(
             road_sessions,
             controller,
             recordings,
-            ModelExchangeStore(),
+            ModelExchangeStore(max_record_bytes=65536 if retention else None),
             decisions,
+            retention=retention,
         )
+        case_holder["cases"] = road_cases
+        if retention:
+            retention.start()
     except Exception:
         if road_cases is not None:
             road_cases.close()
@@ -145,7 +186,7 @@ def build_road_runtime(
             sessions.close()
         raise
 
-    return RoadRuntime(controller, road_sessions, road_cases, None)
+    return RoadRuntime(controller, road_sessions, road_cases, None, retention)
 
 
 def _has_h264_encoder(executable: str) -> bool:

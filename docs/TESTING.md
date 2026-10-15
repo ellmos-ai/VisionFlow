@@ -101,12 +101,15 @@ The browser acceptance runs are standalone scripts and are not collected by `pyt
 its own loopback server with a fresh data folder and writes evidence only under `.local/`.
 Requirements:
 
-- Playwright in the project environment: `.\.venv\Scripts\python.exe -m pip install playwright`
-  (not part of the lock file).
+- Pinned browser dependencies: `.\.venv\Scripts\python.exe -m pip install -r requirements-browser.lock`.
+  Playwright 1.60.0 and its installed dependency versions were verified on 15 October 2026.
 - A Chromium-based browser: Microsoft Edge on Windows, otherwise an installed Chromium or the one
   from Playwright. `VISIONFLOW_BROWSER` selects a browser executable explicitly.
 
 ```powershell
+# Complete own-server harness: errors/empty states, ticket journeys, recovery
+.\.venv\Scripts\python.exe tests\run_browser_acceptance.py --output .local/acceptance/final-browser
+
 # Camera phase (controls, no browser errors, no external requests)
 .\.venv\Scripts\python.exe tests\road_browser_acceptance.py --phase camera --output .local/acceptance/run-camera-01
 
@@ -120,6 +123,16 @@ Requirements:
 The interface is English by default. The multi-event script first checks the English default
 (`lang="en"`, product name, inject button) and then runs its case assertions on the German
 interface via `?lang=de`; waits and assertions are unchanged.
+
+The complete harness owns fresh local and public-mode loopback servers, records commit and
+source hashes, interpreter/platform/Playwright versions, child exit codes, browser errors,
+screenshots and UTF-8 JSON receipts, and terminates its own process trees even on failure.
+`--only errors`, `--only guidance` and `--only recovery` allow targeted diagnostics. Expected
+HTTP failures are injected only in the error probe; the ticket, clip, deadline and correction
+journeys use the real server. The 60-second deadline is never shortened. In GitHub Actions,
+the separate Windows/Edge browser job preserves receipts, screenshots and logs even on failure.
+Guidance explicitly requires advancing H.264 playback with decoded video dimensions; a browser
+without that decoder fails the check. See [Playwright browser and codec documentation](https://playwright.dev/python/docs/browsers#media-codecs).
 
 `road_browser_acceptance.py` writes `acceptance.json`, the server log and screenshots.
 `game_multievent_acceptance.py` plays three cases:
