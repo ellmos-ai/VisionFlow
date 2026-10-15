@@ -421,6 +421,22 @@ def test_closed_preview_remains_accounted_after_producer_reservation_settles(tmp
         runtime.close()
 
 
+def test_live_reservation_covers_full_raw_buffer_and_rendering_scratch(tmp_path):
+    from visionflow.simulation import _RAW_BUFFER_SIZE
+    api = _api()
+    runtime = _runtime(tmp_path, api.RetentionPolicy(), Clock())
+    try:
+        source = runtime.road_sessions.create("alice")["source_id"]
+        frame = runtime.road_sessions.get("alice", source).latest_frame()
+        # The deque, background and next rendered full frame can coexist.
+        required = (_RAW_BUFFER_SIZE + 2) * frame.image.nbytes
+        entry = runtime.retention._sources[source]
+        assert entry.usage["volatile"] >= required
+        assert entry.floor >= runtime.road_sessions.recordings.max_bytes + required
+    finally:
+        runtime.close()
+
+
 def test_clip_download_is_pinned_until_its_bytes_are_read(tmp_path, monkeypatch):
     from pathlib import Path
     api = _api()

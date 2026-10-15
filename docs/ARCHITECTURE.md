@@ -64,7 +64,7 @@ flowchart LR
   managed through SSM. Provider calls and cameras are disabled in this mode.
   A shared retention manager admits at most 32 retained sources against a 512 MiB data
   budget (recordings, clips, evidence, traces, bounded case metadata and export scratch).
-  A new source reserves a full recording plus 16 MiB of volatile image/scratch capacity;
+  A new source reserves a full recording plus 32 MiB of volatile image/scratch capacity;
   each case reserves 16 MiB for its fixed offline exchanges and up to 64 decision keys,
   with the final key reserved for a late correction. Byte admission can therefore reject
   earlier than the count limits. This is a data budget, not a claim about total process RSS.

@@ -246,7 +246,7 @@ class RoadSessionService:
             if self.retention:
                 # Bounded 960x540 producer images, world and consumer scratch,
                 # separately charged from the full compressed recording reserve.
-                volatile_bytes = 16 * 1024 * 1024
+                volatile_bytes = 32 * 1024 * 1024
                 self.retention.reserve_source(owner_id, source_id, self.recordings.max_bytes + volatile_bytes)
                 producer_lease = self.retention.protect(source_id, activity=True)
                 producer_lease.__enter__()
