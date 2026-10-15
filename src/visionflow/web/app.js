@@ -55,6 +55,10 @@
 
   // Server messages are German; known codes get a message in the UI language.
   const ERROR_TEXT = {
+    session_required: L(
+      "Die Sitzung ist abgelaufen. Bitte lade die Seite neu; eine neue Sitzung kann alte Fälle nicht übernehmen.",
+      "The session has expired. Please reload the page; a new session cannot recover previous cases.",
+    ),
     demo_busy: L(
       "Alle Demo-Kameras sind belegt. Jede Sitzung endet nach zwei Minuten – bitte gleich erneut versuchen.",
       "All demo cameras are busy. Each session ends after two minutes – please try again shortly.",
@@ -103,12 +107,17 @@
       ...(options.headers || {}),
     };
     if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
-    const response = await fetch(path, {
-      ...options,
-      headers,
-      credentials: "same-origin",
-      cache: "no-store",
-    });
+    let response;
+    try {
+      response = await fetch(path, {
+        ...options,
+        headers,
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+    } catch (_error) {
+      throw new Error(L("Die Verbindung wurde unterbrochen. Bitte erneut versuchen.", "The connection was interrupted. Please try again."));
+    }
     let payload;
     try {
       payload = await response.json();
@@ -1007,7 +1016,10 @@
         credentials: "same-origin",
         cache: "no-store",
       });
-      if (!sessionResponse.ok) throw new Error(L("Der lokale Sitzungsschutz konnte nicht eingerichtet werden.", "The local session protection could not be set up."));
+      if (!sessionResponse.ok) {
+        const failure = await sessionResponse.json();
+        throw apiError(failure, sessionResponse.status);
+      }
       const session = await sessionResponse.json();
       if (typeof session.csrf_token !== "string" || !session.csrf_token) {
         throw new Error(L("Der lokale Server lieferte kein gültiges Sitzungstoken.", "The local server returned no valid session token."));
@@ -1017,6 +1029,9 @@
       descriptors = (await jsonRequest("/tools")).tools || [];
       renderToolChoices();
       const publicDemo = session.public_demo === true;
+      document.title = publicDemo
+        ? L("VisionFlow – öffentliche Straßendemo", "VisionFlow – public road demo")
+        : L("VisionFlow – lokaler Analyse-Arbeitsplatz", "VisionFlow – local analysis workplace");
       $("public-demo-note").hidden = !publicDemo;
       $("analysis-tab").hidden = publicDemo;
       $("analysis-tab").disabled = publicDemo;
@@ -1099,27 +1114,27 @@
     ctx.font = "bold 13px sans-serif";
     ctx.fillText(L("Position", "Item"), 75, 225);
     ctx.fillText(L("Beschreibung", "Description"), 180, 225);
-    ctx.fillText(L("Messwert", "Measurement"), 440, 225);
+    ctx.fillText(L("Ergebnis", "Result"), 440, 225);
 
     ctx.font = "12px sans-serif";
     ctx.fillText("01", 75, 270);
     ctx.fillText(L("Schärfemessung Laplace-Varianz", "Sharpness (Laplacian variance)"), 180, 270);
-    ctx.fillText(blurred ? L("24.1 (UNSCHARF)", "24.1 (BLURRED)") : L("420.8 (SCHARF)", "420.8 (SHARP)"), 440, 270);
+    ctx.fillText(L("noch offen", "pending"), 440, 270);
 
     ctx.fillText("02", 75, 305);
     ctx.fillText(L("Kontrast- und Helligkeitsprüfung", "Contrast and brightness check"), 180, 305);
-    ctx.fillText("0.88 OK", 440, 305);
+    ctx.fillText(L("noch offen", "pending"), 440, 305);
 
     ctx.fillText("03", 75, 340);
     ctx.fillText(L("Perspektivenentzerrung", "Perspective correction"), 180, 340);
-    ctx.fillText(L("0.02 Radian", "0.02 rad"), 440, 340);
+    ctx.fillText(L("noch offen", "pending"), 440, 340);
 
     ctx.save();
     ctx.translate(320, 420);
     ctx.fillStyle = blurred ? "rgba(239, 68, 68, 0.85)" : "rgba(16, 185, 129, 0.85)";
     ctx.font = "bold 15px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(blurred ? L("QUALITÄTSPRÜFUNG: UNSCHARF · NEUAUFNAHME ERFORDERLICH", "QUALITY CHECK: BLURRED · RE-CAPTURE REQUIRED") : L("QUALITÄTSPRÜFUNG: BESTANDEN · HOHE SCHÄRFE", "QUALITY CHECK: PASSED · HIGH SHARPNESS"), 0, 0);
+    ctx.fillText(L("MUSTER · ERGEBNISSE ERST NACH DER ANALYSE", "SAMPLE · RESULTS REQUIRE AN ANALYSIS"), 0, 0);
     ctx.restore();
 
     canvas.toBlob((blob) => {

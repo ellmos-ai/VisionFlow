@@ -106,6 +106,10 @@ def run(base_url: str, output: Path) -> dict:
             page.locator("#btn-schmidt-radio").wait_for()
             page.wait_for_function("() => !document.querySelector('#btn-schmidt-radio').disabled", timeout=10000)
             page.locator("#cartoon-review-video-box video").wait_for(timeout=15000)
+            video = page.locator("#cartoon-review-video-box video")
+            assert video.evaluate("el => Boolean(el.canPlayType('video/mp4; codecs=\"avc1.42E01E\"'))"), "H.264 decoder required"
+            page.wait_for_function("() => { const v = document.querySelector('#cartoon-review-video-box video'); return v && !v.error && v.currentTime > 0 && v.videoWidth > 0; }", timeout=15000)
+            checks["actual_h264_playback"] = True
             assert "checksum confirmed by server" in page.locator("#cartoon-review-video-box").inner_text()
             assert "s left" in page.locator("#schmidt-countdown").inner_text()
             page.locator("#btn-schmidt-coffee").click()
@@ -125,6 +129,7 @@ def run(base_url: str, output: Path) -> dict:
             page.locator("#nav-node-room-1").click()
             page.locator("#btn-toggle-cam").click()
             page.wait_for_function("() => document.querySelector('#cartoon-cam-status').textContent.includes('STANDBY')", timeout=20000)
+            page.wait_for_function("() => !document.querySelector('#btn-toggle-cam').disabled", timeout=60000)
             page.locator("#cartoon-fixture-profile").select_option("leaf")
             page.locator("#btn-sim-bird").click()
             page.wait_for_function("() => document.querySelector('#journey-ticket-title').textContent === 'Ticket #2' && document.querySelector('#journey-ticket-status').textContent.includes('All-clear by model')", timeout=90000)
@@ -141,6 +146,7 @@ def run(base_url: str, output: Path) -> dict:
             page.locator("#nav-node-room-1").click()
             page.locator("#btn-toggle-cam").click()
             page.wait_for_function("() => document.querySelector('#cartoon-cam-status').textContent.includes('STANDBY')", timeout=20000)
+            page.wait_for_function("() => !document.querySelector('#btn-toggle-cam').disabled", timeout=60000)
             page.locator("#cartoon-fixture-profile").select_option("bird")
             page.locator("#btn-sim-bird").click()
             page.wait_for_function("() => [...document.querySelector('#journey-ticket-select').options].some(o => o.textContent.includes('Ticket #3') && o.textContent.includes('All-clear by model'))", timeout=90000)
@@ -156,7 +162,8 @@ def run(base_url: str, output: Path) -> dict:
             result["bird_case_id"] = bird_case
             page.screenshot(path=str(output / "bird-profile-closed.png"), full_page=True)
             checks["actual_bird_fixture_closes_without_human_review"] = True
-            page.goto(base_url.rstrip("/") + "/?lang=de", wait_until="networkidle")
+            page.goto(base_url.rstrip("/") + "/?lang=de", wait_until="domcontentloaded")
+            page.locator(".road-cartoon-stage").wait_for()
             assert page.evaluate("document.documentElement.lang") == "de"
             assert "auswählen" in page.locator(".ticket-picker").inner_text()
             assert "Falschfahrer" in page.locator("#btn-sim-wrongway").inner_text()
@@ -167,6 +174,13 @@ def run(base_url: str, output: Path) -> dict:
         except Exception as exc:
             result.update(status="failed", error_type=type(exc).__name__, error=str(exc))
             try:
+                result["camera_controls"] = page.evaluate("""() => ({
+                    state: document.querySelector('#cartoon-cam-status')?.textContent,
+                    message: document.querySelector('#speech-alex')?.textContent,
+                    stopDisabled: document.querySelector('#btn-toggle-cam')?.disabled,
+                    injectDisabled: document.querySelector('#btn-sim-bird')?.disabled,
+                    recorder: document.querySelector('.road-camera__status')?.textContent
+                })""")
                 result["camera_case_id"] = page.locator("section.road-camera").get_attribute("data-case-id")
                 result["camera_run_id"] = page.locator("section.road-camera").get_attribute("data-run-id")
                 case_id = result["camera_case_id"]
