@@ -46,9 +46,26 @@ class _Source:
     pending: dict[str, int] = field(default_factory=dict)
     writers: dict[str, threading.RLock] = field(default_factory=dict)
 
+    @staticmethod
+    def additional(component: str) -> bool:
+        """Exports and review records must not borrow recording capacity."""
+        return component.startswith(("case:", "run:", "evidence:", "export:"))
+
+    def parts(self, *, excluding: str | None = None) -> tuple[int, int]:
+        recording = additional = 0
+        for key in self.usage.keys() | self.pending.keys():
+            if key == excluding:
+                continue
+            amount = max(self.usage.get(key, 0), self.pending.get(key, 0))
+            if self.additional(key):
+                additional += amount
+            else:
+                recording += amount
+        return recording, additional
+
     def held(self) -> int:
-        return max(self.floor, sum(max(self.usage.get(key, 0), self.pending.get(key, 0))
-                                   for key in self.usage.keys() | self.pending.keys()))
+        recording, additional = self.parts()
+        return max(self.floor, recording) + additional
 
 
 class RetentionManager:
@@ -130,9 +147,10 @@ class RetentionManager:
         with self._lock:
             entry = self._entry(source_id)
             other_sources = sum(row.held() for row in self._sources.values() if row is not entry)
-            other_parts = sum(max(entry.usage.get(key, 0), entry.pending.get(key, 0))
-                              for key in entry.usage.keys() | entry.pending.keys() if key != component)
-            return max(0, self.policy.max_bytes - other_sources - other_parts)
+            recording, additional = entry.parts(excluding=component)
+            if entry.additional(component):
+                recording = max(entry.floor, recording)
+            return max(0, self.policy.max_bytes - other_sources - recording - additional)
 
     def ensure_usage(self, source_id: str, component: str, new_bytes: int) -> None:
         """Keep a conservative high-water charge until verified reconciliation."""

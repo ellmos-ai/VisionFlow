@@ -146,6 +146,22 @@ def test_unused_reservation_is_released_after_source_finishes():
     assert manager.snapshot()["reserved_bytes"] == 10
 
 
+def test_exports_cannot_consume_the_promised_full_recording_reservation():
+    api, manager, _, _ = make_manager(budget=15)
+    manager.reserve_source("alice", "camera", 10)
+    with manager.change_usage("camera", "recording", 3):
+        pass
+    assert manager.component_capacity("camera", "export:one") == 5
+    with manager.change_usage("camera", "export:one", 5):
+        pass
+    assert manager.snapshot()["reserved_bytes"] == 15
+    with pytest.raises(api.RetentionCapacityError):
+        manager.reserve_source("bob", "next", 1)
+    with manager.change_usage("camera", "recording", 10):
+        pass  # The recording admitted at source creation still fits completely.
+    assert manager.snapshot()["reserved_bytes"] == 15
+
+
 def test_cleanup_never_follows_outside_symlink(tmp_path):
     api = _api()
     root = tmp_path / "data"
