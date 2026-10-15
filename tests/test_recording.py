@@ -204,6 +204,36 @@ def test_compressed_source_bytes_are_bounded_before_frame_write(tmp_path: Path) 
     assert not list(store.root.rglob("*.jpg"))
 
 
+def test_hosted_recording_at_byte_limit_still_exports_every_accepted_frame(tmp_path: Path) -> None:
+    from visionflow.retention import RetentionManager, RetentionPolicy
+
+    budget = 256 * 1024
+    retention = RetentionManager(RetentionPolicy(max_bytes=8 * budget), cleanup=lambda *_: None)
+    retention.reserve_source("alice", "camera-full", budget)
+    store = RecordingStore(tmp_path / "recording", ffmpeg_path(), max_bytes=budget, retention=retention)
+    store.open("alice", "camera-full")
+    background = np.random.default_rng(99).integers(0, 256, (64, 96, 3), dtype=np.uint8)
+    accepted = 0
+    for index in range(200):
+        image = background.copy()
+        cv2.putText(image, str(index), (8, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        try:
+            store.append("camera-full", Frame(frame_id=f"frame-{index}", image=image,
+                                               timestamp_seconds=index / 20))
+        except RecordingError as exc:
+            assert exc.code == "byte_limit"
+            break
+        accepted += 1
+    else:
+        pytest.fail("the bounded recording did not reach its byte limit")
+    assert accepted > 2
+    store.producer_finished("alice", "camera-full")
+    clip = store.finish("alice", "camera-full")
+    assert len(decode_all_frames(clip.path)) == accepted
+    assert sha256_file(clip.path) == clip.sha256
+    assert _persisted_source_bytes(clip.path.parent.parent) <= budget
+
+
 def test_export_bytes_are_included_in_source_budget(tmp_path: Path) -> None:
     image = np.random.default_rng(42).integers(
         0, 256, size=(540, 960, 3), dtype=np.uint8

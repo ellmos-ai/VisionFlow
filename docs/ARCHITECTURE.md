@@ -67,6 +67,9 @@ flowchart LR
   A new source reserves a full recording plus 32 MiB of volatile image/scratch capacity;
   exports and case/run/evidence records are charged on top of this recording reservation,
   so additional work cannot consume space already promised to a running producer.
+  Within each hosted recording's 128 MiB limit, a quarter stays available for the
+  final MP4 and manifest; frames and event exports cannot consume that space.
+  The byte limit can end recording before the 120-second maximum.
   each case reserves 16 MiB for its fixed offline exchanges and up to 64 decision keys,
   with the final key reserved for a late correction. Byte admission can therefore reject
   earlier than the count limits. This is a data budget, not a claim about total process RSS.
