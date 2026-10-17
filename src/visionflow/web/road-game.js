@@ -1226,7 +1226,7 @@
         details(L("Meldungsbeleg und weitere Tickets", "Report receipt and other tickets"), [h("p", { id: "beta-receipt-detail", className: "case-technical-data" }), h("div", { id: "beta-ticket-list", className: "beta-ticket-list" })]),
       ]),
     ]);
-    root.appendChild(h("div", { className: "patrol-car-stage", hidden: true, "aria-label": L("Simulierter Einsatz", "Simulated dispatch") }, [h("p", { className: "patrol-dispatch-label", textContent: L("Meldung an simuliertes Behördenpostfach gesendet", "Report sent to simulated authority inbox") }), h("div", { className: "patrol-car-road" }), h("div", { id: "cartoon-patrol-car", className: "patrol-car" }, [h("img", { src: "/assets/patrol.png", alt: L("Spielzeug-Polizeiauto für den simulierten Einsatz", "Toy police car for the simulated dispatch"), width: "210", height: "145" })])]));
+    root.appendChild(h("div", { className: "patrol-car-stage", hidden: true, "aria-label": L("Simulierter Einsatz", "Simulated dispatch") }, [h("p", { className: "patrol-dispatch-label", textContent: L("Meldung an simuliertes Behördenpostfach gesendet", "Report sent to simulated authority inbox") }), h("div", { className: "patrol-car-road" }), h("div", { id: "cartoon-patrol-car", className: "patrol-car" }, [h("img", { src: "/assets/patrol-side.png", alt: L("Metall-Spielzeug-Polizeiauto für den simulierten Einsatz", "Die-cast toy police car for the simulated dispatch"), width: "520", height: "194" })])]));
     root.querySelector("#journey-ticket-select").addEventListener("change", event => selectTicket(event.target.value));
     return root;
   }

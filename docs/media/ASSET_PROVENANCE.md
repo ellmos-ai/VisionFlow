@@ -5,10 +5,20 @@ and the leaf, bird, wrong-way-driver icons and toy police car were generated for
 14 October 2026 with OpenAI image generation. They depict fictional characters
 and illustrated events, rather than photographs of real staff or road incidents.
 
-All eight PNG files are bundled locally under `src/visionflow/web/assets/`.
+All these PNG files are bundled locally under `src/visionflow/web/assets/`.
 The browser retrieves them from the same VisionFlow server; no external image
 service is contacted during a demonstration. Portraits and icons decorate the
 interface only. They are not input to the OpenCV analysis or evidence recording.
+
+The die-cast toy police car shown driving after a report (`patrol-side.png`) was generated
+on 17 October 2026 with Google Imagen 3 through Antigravity (agy) and keyed out of a green
+background with OpenCV (colour-difference alpha, spill suppression). The delivered
+1536×1024 side view was cropped to its alpha box and scaled to 520×194 px for the web
+(premultiplied resampling); SHA-256 of the bundled file:
+`ca9b36f56410b6f30f12c167d0f057db71eaaa03175d931a0d661c21fc392502` (delivered master:
+`58a64d4a48c71cabbc55d98e44276152bd8e040211f1c84f3bba220d05932337`). Like the other
+artwork it decorates the interface only; it is no sensor input and no evidence. The earlier
+`patrol.png` stays bundled for existing references.
 
 The road image and evidence clips are still produced by the deterministic
 RoadWorld renderer. Detection results, model answers, decisions and report

@@ -771,7 +771,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                 "/road-cartoon.css", "/road-sfx.js", "/road-game.js", "/i18n.js", "/favicon.ico",
                 "/assets/alex.png", "/assets/kira.png", "/assets/schmidt.png", "/assets/weber.png",
                 "/assets/leaf.png", "/assets/bird.png", "/assets/wrong-way.png",
-                "/assets/patrol.png",
+                "/assets/patrol.png", "/assets/patrol-side.png",
             }:
                 self._serve_web(path)
                 return
@@ -832,6 +832,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             "/assets/bird.png": "assets/bird.png",
             "/assets/wrong-way.png": "assets/wrong-way.png",
             "/assets/patrol.png": "assets/patrol.png",
+            "/assets/patrol-side.png": "assets/patrol-side.png",
         }
         if path not in mapping:
             raise _ApiFault(404, "not_found", "The requested local resource does not exist.")

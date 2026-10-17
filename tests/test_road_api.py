@@ -514,6 +514,7 @@ def test_road_assets_are_allowlisted_and_video_blob_csp_is_enabled(road_server):
         ("/road-model.js", {"text/javascript", "application/javascript"}),
         ("/road-workplace.js", {"text/javascript", "application/javascript"}),
         ("/road.css", {"text/css"}),
+        ("/assets/patrol-side.png", {"image/png"}),
     ):
         status, payload, asset_headers = client.request("GET", route)
         assert status == 200
