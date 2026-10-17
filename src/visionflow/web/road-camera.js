@@ -325,10 +325,11 @@ export function mountRoadCamera(container, apiClient) {
     if (!analysis) return L("OpenCV-5-Richtungswerkzeug · keine laufende Analyse · Livebild", "OpenCV 5 direction tool · no analysis running · live image");
     const rate = formatNumber(analysis.analyses_per_second, 1);
     const lag = formatNumber(analysis.lag_seconds, 1);
-    return L(
-      `OpenCV-5-Richtungswerkzeug · ${rate} Analysen/s · grün = mit dem Verkehr, rot = dagegen · Analysebild ${lag} s hinter Live`,
-      `OpenCV 5 direction tool · ${rate} analyses/s · green = with traffic, red = against · analysed frame ${lag} s behind live`,
-    );
+    // The legend and lag are a second part that narrow monitors may hide.
+    return [
+      L(`OpenCV-5-Richtungswerkzeug · ${rate} Analysen/s`, `OpenCV 5 direction tool · ${rate} analyses/s`),
+      L(` · grün = mit dem Verkehr, rot = dagegen · Analysebild ${lag} s hinter Live`, ` · green = with traffic, red = against · analysed frame ${lag} s behind live`),
+    ];
   }
 
   function updateOverlayToggle() {
@@ -350,7 +351,9 @@ export function mountRoadCamera(container, apiClient) {
     const active = Boolean(overlayEnabled && analysis && Array.isArray(analysis.tracks) && space && context);
     viewport.dataset.overlayFrameId = active ? String(analysis.frame_id) : "";
     viewport.dataset.overlayTracks = active ? String(analysis.tracks.length) : "0";
-    analysisText.textContent = analysisCaption(analysis, state);
+    const caption = analysisCaption(analysis, state);
+    const [main, detail] = Array.isArray(caption) ? caption : [caption, ""];
+    analysisText.replaceChildren(document.createTextNode(main), element("span", "road-camera__analysis-detail", detail));
     if (!context) return;
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, overlay.width, overlay.height);

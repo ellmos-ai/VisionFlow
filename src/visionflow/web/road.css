@@ -360,6 +360,13 @@
   overflow-wrap: anywhere;
 }
 
+@media (max-width: 600px) {
+  /* Narrow monitors keep the tool and rate line; the legend would cover the scene. */
+  .road-camera__analysis-detail {
+    display: none;
+  }
+}
+
 .road-camera__overlay-toggle {
   flex: none;
   min-height: 28px;
