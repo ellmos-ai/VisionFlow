@@ -141,6 +141,15 @@ def run(base_url: str, output: Path) -> dict:
             page.locator("#nav-node-room-4").click()
             page.wait_for_function("() => !document.querySelector('#beta-alert-msg').hidden", timeout=70000)
             assert page.locator("#journey-ticket-select").input_value() == case_id
+            # The automatic report dispatches the patrol car; it must drive left to right.
+            car_x = "() => document.querySelector('#cartoon-patrol-car').getBoundingClientRect().left"
+            page.wait_for_function("() => document.querySelector('#cartoon-patrol-car').classList.contains('dispatching')", timeout=10000)
+            first_x = page.evaluate(car_x)
+            time.sleep(1.5)
+            second_x = page.evaluate(car_x)
+            result["patrol_car_x"] = [first_x, second_x]
+            assert second_x > first_x + 40, (first_x, second_x)
+            checks["patrol_car_drives_after_report"] = True
             page.screenshot(path=str(output / "ticket1-deadline-expired.png"), full_page=True)
             page.wait_for_function("() => !document.querySelector('#btn-weber-reject').disabled", timeout=10000)
             page.locator("#btn-weber-reject").click()
