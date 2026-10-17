@@ -470,7 +470,7 @@ class Controller:
             if run.cancel_event.is_set():
                 return
             finding = self._normalize_finding(raw_finding, tool_name, frame, evidence_ref)
-            self._publish_live(run, finding, frame)
+            self._publish_live(run, finding, frame, node.id)
             with run.lock:
                 if run.result.status in _TERMINAL:
                     return
@@ -491,7 +491,7 @@ class Controller:
         if processed == 0:
             raise MediaError("source produced no analyzable frames")
 
-    def _publish_live(self, run: _Run, finding: Finding, frame: Frame) -> None:
+    def _publish_live(self, run: _Run, finding: Finding, frame: Frame, node_id: str) -> None:
         """Expose the newest analysed frame before an observation publishes its findings."""
         analysed_at = float(self.clock.monotonic())
         with run.lock:
@@ -499,6 +499,7 @@ class Controller:
             del run.live_times[:-_LIVE_HISTORY]
             run.live_frame = frame
             run.live_analysis = {
+                "node_id": node_id,
                 "frame_id": frame.frame_id,
                 "tool": finding.tool,
                 "region": copy.deepcopy(finding.region),
@@ -881,7 +882,7 @@ class Controller:
             if run.cancel_event.is_set():
                 return []
             finding = self._normalize_finding(raw, tool, frame, evidence_ref, observation.region)
-            self._publish_live(run, finding, frame)
+            self._publish_live(run, finding, frame, node_id)
             self._record(
                 run,
                 {

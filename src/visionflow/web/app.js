@@ -76,6 +76,10 @@
       "The public demo upload storage is full. It is cleared every day.",
     ),
     service_closed: L("Die Kamerademo ist beendet.", "The camera demo has ended."),
+    event_cooldown: L(
+      "Das vorherige Ereignis wird noch analysiert. Das nächste Ereignis ist gleich wieder möglich.",
+      "The previous event is still being analysed. The next event is possible again shortly.",
+    ),
     demo_capacity_full: L(
       "Das Datenbudget der Demo ist belegt. Bitte in einer Minute erneut versuchen; laufende Prüfungen bleiben erhalten.",
       "The demo resource budget is full. Please retry in a minute; ongoing reviews are preserved.",
@@ -87,6 +91,7 @@
     if (error && typeof error.code === "string" && ERROR_TEXT[error.code]) {
       const known = new Error(`${ERROR_TEXT[error.code]} (HTTP ${status})`);
       known.code = error.code;
+      if (Number.isFinite(error.retry_after_seconds)) known.retryAfter = error.retry_after_seconds;
       return known;
     }
     if (status === 429) {

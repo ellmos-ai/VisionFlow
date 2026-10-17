@@ -104,6 +104,8 @@ class VisionFlowHTTPServer(ThreadingHTTPServer):
 
     daemon_threads = True
     allow_reuse_address = True
+    # Several polling views per tab; a short backlog refused connections under load.
+    request_queue_size = 64
 
     def server_close(self) -> None:
         try:
@@ -625,6 +627,10 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                             extra_headers={"Retry-After": "60"})
         elif isinstance(exc, RetentionExpiredError):
             self._send_error(404, "case_not_found", "Der Fall ist nicht mehr verfügbar.")
+        elif isinstance(exc, RoadSessionError) and getattr(exc, "retry_after", None):
+            self._send_json(exc.status, {"error": {"code": exc.code, "message": str(exc),
+                                                   "retry_after_seconds": exc.retry_after}},
+                            extra_headers={"Retry-After": str(exc.retry_after)})
         elif isinstance(exc, (RoadSessionError, RoadCaseError)):
             self._send_error(exc.status, exc.code, str(exc))
         elif isinstance(exc, DecisionError):

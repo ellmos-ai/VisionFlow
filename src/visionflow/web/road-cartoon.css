@@ -1436,3 +1436,5 @@ body { background: var(--control-sky); }
 }
 /* W8: event banners sit at the bottom so the analysis header line stays readable. */
 .traffic-anomaly-banner { top: auto; bottom: 10px; }
+/* W4: countdown until the next scenario event can be injected. */
+.event-cooldown-note { margin: 0; padding: .45rem .6rem; border-left: 3px solid var(--control-blue); border-radius: 4px; background: #e3f0fa; color: #164c74; font-size: .85rem; line-height: 1.45; }

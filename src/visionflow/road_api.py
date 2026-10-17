@@ -35,6 +35,16 @@ ROAD_SOURCE_PREFIX = "road-sim-"
 # Analysis overlay: only during dense sampling and while the analysed frame is recent.
 _OVERLAY_MIN_RATE = 1.2
 _OVERLAY_MAX_LAG_SECONDS = 4.0
+# One scenario event per analysis (W4). Without a candidate, an event is over once
+# the analysis has looked at this many seconds of footage after it (the slowest
+# object crosses the scene in about 8.5 s); this is measured on the analysed
+# frames, so a lagging analysis extends the wait. Once the run moved past the node
+# that watched the event, a candidate keeps the source busy through its 10 s tail,
+# clip and model review until the run ends (the estimate only feeds the countdown).
+# The cap bounds every wait.
+_EVENT_SCENE_SECONDS = 10.0
+_EVENT_REVIEW_SECONDS = 20.0
+_EVENT_MAX_COOLDOWN_SECONDS = 60.0
 _TERMINAL_RUN_STATES = frozenset({"completed", "failed", "cancelled"})
 # RecordingStore.finish() reports a session without frames as ClipNotReady.
 _EMPTY_RECORDING_CODES = frozenset({"empty_recording", "clip_not_ready"})
@@ -127,10 +137,11 @@ def road_monitor_workflow() -> dict[str, Any]:
 class RoadSessionError(RuntimeError):
     """A safe road-service error with a stable code and HTTP status."""
 
-    def __init__(self, code: str, message: str, status: int = 409) -> None:
+    def __init__(self, code: str, message: str, status: int = 409, *, retry_after: int | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.status = status
+        self.retry_after = retry_after
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,6 +213,8 @@ class RoadSessionService:
         self._bindings: dict[str, _RunBinding] = {}
         self._bindings_by_source: dict[tuple[str, str], list[str]] = {}
         self._active_by_source: dict[tuple[str, str], str] = {}
+        # (owner, source) -> [run_id, analysing node, injected at, candidate seen at]
+        self._last_events: dict[tuple[str, str], list[Any]] = {}
 
     def create(self, owner_id: str, seed: int = 42) -> dict[str, Any]:
         owner = self._identifier(owner_id, "owner_id")
@@ -307,6 +320,43 @@ class RoadSessionService:
             raise KeyError(source_id)
         return self.get(owner, source_id).open_reader()
 
+    def _live_progress(self, run_id: str | None) -> tuple[str | None, float | None]:
+        """Node and source time of the run's newest analysed frame."""
+        if run_id is None:
+            return None, None
+        try:
+            live = self.controller.live_analysis(run_id)
+        except (UnknownRun, AttributeError):
+            return None, None
+        if not live:
+            return None, None
+        return live.get("node_id"), live.get("timestamp_seconds")
+
+    def event_cooldown(self, owner_id: str, source_id: str) -> float | None:
+        """Seconds until the previous event of this source has been analysed, else None."""
+        key = (owner_id, source_id)
+        with self._lock:
+            record = self._last_events.get(key)
+            active = self._active_by_source.get(key)
+        if record is None:
+            return None
+        run_id, node_id, injected_at, candidate_at, event_source_time = record
+        now = time.monotonic()
+        if run_id is None or active != run_id or now - injected_at >= _EVENT_MAX_COOLDOWN_SECONDS:
+            return None
+        live_node, analysed_time = self._live_progress(run_id)
+        if candidate_at is not None or (node_id is not None and live_node not in (None, node_id)):
+            # The watching node stopped: a candidate is in its tail, clip and review.
+            if candidate_at is None:
+                with self._lock:
+                    candidate_at = record[3] = now
+            return max(1.0, candidate_at + _EVENT_REVIEW_SECONDS - now)
+        if isinstance(analysed_time, (int, float)) and isinstance(event_source_time, (int, float)):
+            remaining = event_source_time + _EVENT_SCENE_SECONDS - analysed_time
+        else:
+            remaining = _EVENT_SCENE_SECONDS - (now - injected_at)
+        return remaining if remaining > 0 else None
+
     @_protected_source
     def inject(self, owner_id: str, source_id: str, event: str) -> dict[str, Any]:
         session = self.get(owner_id, source_id)
@@ -314,12 +364,26 @@ class RoadSessionService:
             raise RoadSessionError("source_closed", "Die Kameraquelle ist beendet.")
         if event not in {"wrong_way", "bird", "leaf"}:
             raise RoadSessionError("event_rejected", "Dieses Verkehrsszenario ist nicht verfügbar.", 422)
+        remaining = self.event_cooldown(owner_id, source_id)
+        if remaining is not None:
+            raise RoadSessionError(
+                "event_cooldown",
+                "Das vorherige Ereignis wird noch analysiert. Bitte warte, bis es abgeschlossen ist.",
+                409,
+                retry_after=max(1, math.ceil(remaining)),
+            )
+        with self._lock:
+            run_id = self._active_by_source.get((owner_id, source_id))
+        node_id, _analysed = self._live_progress(run_id)
         try:
+            event_source_time = float(session.latest_frame().timestamp_seconds)
             session.inject(event)
         except ValueError as exc:
             raise RoadSessionError("event_rejected", "Dieses Verkehrsszenario ist nicht verfügbar.", 422) from exc
         except RuntimeError as exc:
             raise RoadSessionError("source_closed", "Die Kameraquelle ist beendet.") from exc
+        with self._lock:
+            self._last_events[(owner_id, source_id)] = [run_id, node_id, time.monotonic(), None, event_source_time]
         # Acknowledgement confirms only scene injection, never a detector result.
         return {"source_id": source_id, "accepted": True}
 
@@ -427,6 +491,8 @@ class RoadSessionService:
             payload["analysis_state"] = analysis_state if analysis or analysis_state != "paired" else "none"
         if session.closed:
             payload["closed"] = True
+        cooldown = None if session.closed else self.event_cooldown(owner_id, source_id)
+        payload["next_event_in_seconds"] = None if cooldown is None else round(cooldown, 1)
         payload["end_reason"] = session.end_reason
         if session.error_code:
             payload["error_code"] = session.error_code
@@ -810,6 +876,7 @@ class RoadSessionService:
                 self._run_sources.pop(binding.run_id, None)
             self._active_by_source.pop((owner_id, source_id), None)
             self._bindings_by_source.pop((owner_id, source_id), None)
+            self._last_events.pop((owner_id, source_id), None)
             self._sessions_by_source.pop(source_id, None)
             self._source_owners.pop(source_id, None)
             self.sessions.forget(owner_id, source_id)

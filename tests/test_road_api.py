@@ -702,3 +702,93 @@ def test_live_frame_carries_the_detector_tracks_of_exactly_that_frame(road_serve
     while service.frame("owner-a", source_id, analysed=True)["analysis"] is not None and time.monotonic() < deadline:
         time.sleep(0.1)
     assert service.frame("owner-a", source_id, analysed=True)["analysis"] is None  # finished run, no stale overlay
+
+
+def _waiting_camera_run(controller, source_id: str):
+    from visionflow.config import validate_workflow
+    from visionflow.runtime import create_registry
+
+    return controller.start(validate_workflow({
+        "schema_version": 1,
+        "name": "cooldown",
+        "input": {"kind": "camera", "source": source_id},
+        "limits": {"max_observation_seconds": 1, "max_frames": 2, "max_llm_calls": 1},
+        "nodes": [{"id": "wait", "type": "request_input", "params": {"reason": "hold"}, "next": []}],
+        "outputs": [],
+    }, create_registry()))
+
+
+def test_second_event_waits_until_the_first_has_been_analysed(road_server):
+    """W4: one event per analysis; the server rejects a second one with retry_after."""
+    from visionflow.road_api import RoadSessionError
+
+    _base_url, service, controller, _sessions = road_server
+    source_id = service.create("owner-a", seed=42)["source_id"]
+    assert service.frame("owner-a", source_id)["next_event_in_seconds"] is None
+    run = _waiting_camera_run(controller, source_id)
+    service.bind_run("owner-a", source_id, run.run_id, monitor_clip=False)
+
+    assert service.inject("owner-a", source_id, "wrong_way")["accepted"] is True
+    with pytest.raises(RoadSessionError) as rejected:
+        service.inject("owner-a", source_id, "bird")
+    assert rejected.value.code == "event_cooldown" and rejected.value.status == 409
+    assert 1 <= rejected.value.retry_after <= 10
+    waiting = service.frame("owner-a", source_id)["next_event_in_seconds"]
+    assert 0 < waiting <= 10
+
+    service.cancel_run("owner-a", run.run_id)  # the analysis of the first event has ended
+    assert service.frame("owner-a", source_id)["next_event_in_seconds"] is None
+    assert service.inject("owner-a", source_id, "bird")["accepted"] is True
+
+
+def test_event_cooldown_ends_when_the_event_left_the_scene_without_a_candidate(road_server, monkeypatch):
+    import visionflow.road_api as road_api
+
+    _base_url, service, controller, _sessions = road_server
+    monkeypatch.setattr(road_api, "_EVENT_SCENE_SECONDS", 0.3)
+    source_id = service.create("owner-a", seed=42)["source_id"]
+    run = _waiting_camera_run(controller, source_id)
+    service.bind_run("owner-a", source_id, run.run_id, monitor_clip=False)
+    service.inject("owner-a", source_id, "leaf")
+    time.sleep(0.4)
+    assert service.frame("owner-a", source_id)["next_event_in_seconds"] is None
+    assert service.inject("owner-a", source_id, "bird")["accepted"] is True
+
+
+def test_event_cooldown_is_a_409_with_retry_after_over_http(road_server):
+    base_url, service, controller, _sessions = road_server
+    client = ApiClient(base_url)
+    client.bootstrap()
+    source_id = client.request("POST", "/road/sessions", {})[1]["source_id"]
+    owner = service.source_owner(source_id)
+    run = _waiting_camera_run(controller, source_id)
+    service.bind_run(owner, source_id, run.run_id, monitor_clip=False)
+    assert client.request("POST", f"/road/sessions/{source_id}/events", {"event": "wrong_way"})[0] == 200
+    status, body, headers = client.request("POST", f"/road/sessions/{source_id}/events", {"event": "leaf"})
+    assert status == 409
+    assert body["error"]["code"] == "event_cooldown"
+    assert 1 <= body["error"]["retry_after_seconds"] <= 10
+    assert headers["retry-after"] == str(body["error"]["retry_after_seconds"])
+
+
+def test_event_cooldown_follows_the_analysed_footage_and_a_candidate(road_server, monkeypatch):
+    """A lagging analysis extends the wait; a candidate keeps it until the run ends."""
+    _base_url, service, controller, _sessions = road_server
+    source_id = service.create("owner-a", seed=42)["source_id"]
+    run = _waiting_camera_run(controller, source_id)
+    service.bind_run("owner-a", source_id, run.run_id, monitor_clip=False)
+    progress = {"node_id": "monitor", "timestamp_seconds": 0.0}
+    monkeypatch.setattr(controller, "live_analysis", lambda _run_id: dict(progress))
+    service.inject("owner-a", source_id, "bird")
+    event_time = service._last_events[("owner-a", source_id)][4]
+
+    progress["timestamp_seconds"] = event_time + 4.0  # analysis is 4 s past the event
+    assert service.event_cooldown("owner-a", source_id) == pytest.approx(6.0)
+    progress["timestamp_seconds"] = event_time + 10.5  # the bird has left the analysed footage
+    assert service.event_cooldown("owner-a", source_id) is None
+
+    service._last_events[("owner-a", source_id)][4] = progress["timestamp_seconds"]
+    progress["node_id"] = "tail"  # the watching node stopped: a candidate is reviewed
+    assert service.event_cooldown("owner-a", source_id) >= 1.0
+    service.cancel_run("owner-a", run.run_id)
+    assert service.event_cooldown("owner-a", source_id) is None

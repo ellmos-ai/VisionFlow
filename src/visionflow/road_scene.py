@@ -33,9 +33,12 @@ _AWAY_LANES = 3
 _TRAFFIC_LANES = (0, 1, 4, 5)
 _CARS_PER_LANE = 2
 _WRONG_WAY_LANES = (2, 3)
-# Event speeds in pixels per second at 540 px height (scaled with the scene).
+# Event speeds in pixels per second at 540 px height (scaled with the scene). Slow
+# enough that bird and leaf stay trackable even when a loaded host analyses only
+# about two frames per second (measured, see docs/SYNTHETIC_EVALUATION.md).
 _WRONG_WAY_SPEED = 70.0
-_BIRD_SPEED = 105.0
+_BIRD_SPEED = 75.0
+_LEAF_SPEED = 65.0
 _CAR_COLORS = (
     (72, 95, 186),
     (42, 140, 212),
@@ -395,7 +398,7 @@ class RoadWorld:
                     x = self._lane_center(4, y)
                     self._draw_bird(image, x, y, depth, elapsed, event.color)
             else:
-                y = self._horizon + self.height * 0.025 + elapsed * 90.0 * speed
+                y = self._horizon + self.height * 0.025 + elapsed * _LEAF_SPEED * speed
                 if -self.height * 0.1 <= y <= self.height * 1.1:
                     depth = self._depth(y)
                     wind = math.sin(elapsed * 2.7) * self.width * 0.01

@@ -60,7 +60,9 @@
     warming_up: L("Die Analyse wärmt sich noch auf (drei echte Startframes).", "The analysis is still warming up (three real start frames)."),
     run_inactive: L("Der Analyse-Lauf dieses Falls ist beendet.", "The analysis run of this case has ended."),
     source_changed: L("Die Kameraquelle wurde inzwischen gewechselt.", "The camera source has been changed in the meantime."),
+    event_cooldown: L("Das vorherige Ereignis wird noch analysiert. Bitte warte den Countdown ab.", "The previous event is still being analysed. Please wait for the countdown."),
   };
+  const INJECT_BUTTONS = ["btn-sim-wrongway", "btn-sim-bird", "btn-sim-leaf"];
   // A camera that stopped at one of its limits says so instead of silently showing STANDBY.
   function sourceEndedNotice(reason) {
     const isPublic = Boolean($("public-demo-note")) && !$("public-demo-note").hidden;
@@ -525,6 +527,7 @@
       const state = cameraState();
       if (!state) throw new Error(INJECT_BLOCK_REASONS.destroyed);
       if (!state.injectBlocker) return state;
+      if (state.injectBlocker === "event_cooldown") throw new Error(INJECT_BLOCK_REASONS.event_cooldown);
       if (state.injectBlocker === "run_inactive" && state.warmedUp) {
         throw new Error(INJECT_BLOCK_REASONS[state.injectBlocker]);
       }
@@ -571,6 +574,29 @@
       const button = $(id);
       if (button) button.disabled = Boolean(disabled);
     }
+    if (!disabled) renderEventCooldown();
+  }
+
+  // W4: one event at a time. The inject buttons count down until the server says the
+  // previous event has been analysed (scene left without a candidate, or case reviewed).
+  function renderEventCooldown() {
+    const state = cameraState();
+    const remaining = state && state.sourceOpen ? state.eventCooldownSeconds || 0 : 0;
+    for (const id of INJECT_BUTTONS) {
+      const button = $(id);
+      if (!button) continue;
+      if (!button.dataset.label) button.dataset.label = button.textContent;
+      const label = remaining > 0 ? `${button.dataset.label} · ${remaining} s` : button.dataset.label;
+      if (button.textContent !== label) button.textContent = label;
+      if (!eventBusy) button.disabled = remaining > 0;
+    }
+    const note = $("event-cooldown-note");
+    if (note) {
+      note.hidden = remaining <= 0;
+      setText("event-cooldown-note", remaining > 0
+        ? L(`Nächstes Ereignis in ${remaining} s: Das vorherige Ereignis durchläuft noch die Analyse (Erkennung, Beweisclip, Modellprüfung).`, `Next event in ${remaining} s: the previous event is still being analysed (detection, evidence clip, model review).`)
+        : "");
+    }
   }
 
   async function triggerEvent(eventType) {
@@ -584,6 +610,9 @@
     if (global.RoadSFX) global.RoadSFX.playEventTrigger();
     try {
       let state = cameraState();
+      if (state && state.injectBlocker === "event_cooldown") {
+        throw new Error(INJECT_BLOCK_REASONS.event_cooldown);
+      }
       if (!state.available) {
         throw new Error((capabilities && capabilities.message) || L("Die Straßenkamera ist nicht verfügbar (FFmpeg mit libx264 erforderlich).", "The road camera is not available (FFmpeg with libx264 required)."));
       }
@@ -596,7 +625,14 @@
         await startNewCase(true);
       }
       state = await waitForInjectable(20000);
-      const result = await env.roadMount.injectScenarioEvent(eventType);
+      let result = await env.roadMount.injectScenarioEvent(eventType);
+      if (result && !result.injected && result.reason === "run_inactive") {
+        // The case ended between the click and the event; open the next one first.
+        setText("speech-alex", L("Die Kamera läuft weiter. Ich öffne darauf einen neuen Fall und warte auf drei echte Startframes …", "The camera keeps running. I am opening a new case on it and waiting for three real start frames …"));
+        await startNewCase(true);
+        state = await waitForInjectable(20000);
+        result = await env.roadMount.injectScenarioEvent(eventType);
+      }
       if (!result || !result.injected) {
         throw new Error(INJECT_BLOCK_REASONS[result && result.reason] || L("Das Ereignis wurde nicht eingeblendet.", "The event was not injected."));
       }
@@ -1144,6 +1180,7 @@
             inject("bird", "btn-sim-bird", "bird", L("Vogel einblenden", "Inject bird"), "chunky-btn--bird"),
             inject("leaf", "btn-sim-leaf", "leaf", L("Blatt einblenden", "Inject leaf"), "chunky-btn--leaf"),
           ]),
+          h("p", { id: "event-cooldown-note", className: "event-cooldown-note", role: "status", hidden: true }),
           h("p", { className: "scenario-note", textContent: L("Ein Ereignis verändert die Szene. Erst die Bildanalyse erstellt ein Ticket.", "An event changes the scene. Only the image analysis creates a ticket.") }),
         ]),
       ]),
@@ -1253,6 +1290,7 @@
     const modeSelect = $("cartoon-model-mode");
     if (modeSelect) modeSelect.addEventListener("change", renderModelOptions);
     const tickTimer = window.setInterval(() => {
+      renderEventCooldown();
       renderBeta();
       if (currentRoom === 3) renderSchmidt();
     }, 500);

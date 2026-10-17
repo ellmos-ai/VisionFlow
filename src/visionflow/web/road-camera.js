@@ -136,6 +136,8 @@ export function mountRoadCamera(container, apiClient) {
   const pendingFrameUrls = new Set();
   let autoDemoActive = false;
   let endReason = null;
+  let nextEventAt = null; // server estimate: when the previous event has been analysed
+  let eventBusyUntil = 0; // the server reported the previous event as still in analysis
   let overlayEnabled = overlayPreference();
   let shownAnalysis = null;
   let shownState = "none";
@@ -555,6 +557,14 @@ export function mountRoadCamera(container, apiClient) {
       );
       if (!current(source, generation, view)) return;
       analysisBar.hidden = false;
+      if (typeof payload.next_event_in_seconds === "number") {
+        nextEventAt = Date.now() + payload.next_event_in_seconds * 1000;
+        // Stay busy between polls; only the server ends the wait (or 5 s without polls).
+        eventBusyUntil = Date.now() + 5000;
+      } else {
+        nextEventAt = null;
+        eventBusyUntil = 0;
+      }
       if (typeof payload.image_base64 === "string" && payload.image_base64) {
         const analysis = payload.analysis && payload.analysis.frame_id === payload.frame_id ? payload.analysis : null;
         setFrameImage(payload.image_base64, analysis, String(payload.frame_id || ""), String(payload.analysis_state || "none"));
@@ -853,6 +863,8 @@ export function mountRoadCamera(container, apiClient) {
     sourceId = nextSource;
     sourceOpen = true;
     endReason = null;
+    nextEventAt = null; // a new source has no event in analysis yet
+    eventBusyUntil = 0;
     root.dataset.sourceId = nextSource;
     currentClipId = null;
     sourceSummary.textContent = L("Quelle: ", "Source: ") + nextSource;
@@ -906,9 +918,16 @@ export function mountRoadCamera(container, apiClient) {
     });
   }
 
+  function eventCooldownSeconds() {
+    if (nextEventAt === null) return 0;
+    const remaining = Math.ceil((nextEventAt - Date.now()) / 1000);
+    return Date.now() < eventBusyUntil ? Math.max(1, remaining) : Math.max(0, remaining);
+  }
+
   function injectBlocker() {
     if (destroyed) return "destroyed";
     if (!sourceId || !sourceOpen) return "source_closed";
+    if (eventCooldownSeconds() > 0) return "event_cooldown";
     if (!warmedUp) return "warming_up";
     if (!runActive) return "run_inactive";
     return null;
@@ -927,12 +946,32 @@ export function mountRoadCamera(container, apiClient) {
       if (source !== sourceId || generation !== sourceGeneration) {
         return { injected: false, reason: "source_changed" };
       }
+      // The polled run state can be half a second old; an event must reach a run
+      // that still analyses the scene, so confirm the run state first.
+      if (runId) {
+        try {
+          const latest = await apiClient.get("/runs/" + encodeURIComponent(runId));
+          if (current(source, generation)) renderRun(latest);
+        } catch (_error) {
+          // Keep the polled state; the server still validates the event.
+        }
+      }
       const blockedNow = injectBlocker();
       if (blockedNow) return { injected: false, reason: blockedNow };
-      await apiClient.post(
-        `/road/sessions/${encodeURIComponent(source)}/events`,
-        { event },
-      );
+      try {
+        await apiClient.post(
+          `/road/sessions/${encodeURIComponent(source)}/events`,
+          { event },
+        );
+      } catch (error) {
+        if (error && error.code === "event_cooldown") {
+          nextEventAt = Date.now() + (Number(error.retryAfter) || 1) * 1000;
+          return { injected: false, reason: "event_cooldown" };
+        }
+        throw error;
+      }
+      // Until the next frame poll corrects it, assume the event needs its scene time.
+      nextEventAt = Date.now() + 10000;
       if (current(source, generation)) {
         const label = { wrong_way: L("Falschfahrer", "Wrong-way driver"), bird: L("Vogel", "Bird"), leaf: L("Blatt", "Leaf") }[event] || L("Szenarioereignis", "Scenario event");
         setStatus(L(`${label} in die Szene eingeblendet. Das ist noch kein Analysebefund.`, `${label} injected into the scene. This is not an analysis finding yet.`));
@@ -1221,6 +1260,7 @@ export function mountRoadCamera(container, apiClient) {
       capabilities,
       endReason,
       overlayEnabled,
+      eventCooldownSeconds: eventCooldownSeconds(),
       injectBlocker: injectBlocker(),
     };
   }
