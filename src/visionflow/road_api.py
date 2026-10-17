@@ -21,7 +21,7 @@ from typing import Any
 
 import cv2
 
-from visionflow.contracts import UnknownRun
+from visionflow.contracts import Frame, UnknownRun
 from visionflow.recording import ClipNotReady, ClipRef, RecordingError, RecordingStore
 from visionflow.simulation import (
     ProducerLimitReached,
@@ -32,6 +32,9 @@ from visionflow.simulation import (
 
 
 ROAD_SOURCE_PREFIX = "road-sim-"
+# Analysis overlay: only during dense sampling and while the analysed frame is recent.
+_OVERLAY_MIN_RATE = 1.2
+_OVERLAY_MAX_LAG_SECONDS = 4.0
 _TERMINAL_RUN_STATES = frozenset({"completed", "failed", "cancelled"})
 # RecordingStore.finish() reports a session without frames as ClipNotReady.
 _EMPTY_RECORDING_CODES = frozenset({"empty_recording", "clip_not_ready"})
@@ -320,11 +323,82 @@ class RoadSessionService:
         # Acknowledgement confirms only scene injection, never a detector result.
         return {"source_id": source_id, "accepted": True}
 
-    @_protected_source
-    def frame(self, owner_id: str, source_id: str) -> dict[str, Any]:
-        session = self.get(owner_id, source_id)
+    def _live_overlay(self, owner_id: str, source_id: str, session: SimulationSession):
+        """Pair the bound run's newest direction result with that very analysed frame.
+
+        Only while the run samples densely (watch phase, >= 1.2 analyses/s) and the
+        analysed frame is at most 4 s behind the camera; otherwise there is no
+        overlay. The measured lag behind the newest camera frame is reported.
+        """
+        with self._lock:
+            run_id = self._active_by_source.get((owner_id, source_id))
+        if run_id is None or session.closed:
+            return None, None
         try:
-            frame = session.latest_frame()
+            live = self.controller.live_analysis(run_id)
+        except (UnknownRun, AttributeError):
+            return None, None
+        if not live or live.get("tool") != "direction" or live.get("region") is not None:
+            return None, None
+        metrics = live.get("metrics") or {}
+        tracks = metrics.get("tracks")
+        frame = live.get("frame")
+        rate = live.get("analyses_per_second")
+        try:
+            newest = session.latest_frame()
+        except RuntimeError:
+            return None, None
+        if (
+            not isinstance(frame, Frame)
+            or frame.frame_id != live.get("frame_id")
+            or not isinstance(tracks, list)
+            or not isinstance(rate, (int, float))
+            or rate < _OVERLAY_MIN_RATE
+            or newest.timestamp_seconds - frame.timestamp_seconds > _OVERLAY_MAX_LAG_SECONDS
+        ):
+            return None, None
+        height, width = frame.image.shape[:2]
+        return frame, {
+            "frame_id": frame.frame_id,
+            "run_id": run_id,
+            "tool": "direction",
+            "coordinate_space": [int(width), int(height)],
+            "opposition_count": metrics.get("opposition_count"),
+            "analyses_per_second": live.get("analyses_per_second"),
+            "lag_seconds": round(max(0.0, newest.timestamp_seconds - frame.timestamp_seconds), 2),
+            "tracks": [
+                {
+                    "region": list(track["region"]),
+                    "dx_px": track["dx_px"],
+                    "dy_px": track["dy_px"],
+                    "opposition": track["opposition"],
+                    "frames": len(track.get("frame_ids", [])),
+                }
+                for track in tracks
+                if isinstance(track, dict)
+            ],
+        }
+
+    @_protected_source
+    def frame(self, owner_id: str, source_id: str, *, analysed: bool = False) -> dict[str, Any]:
+        """Newest camera frame; with *analysed* the frame the bound run analysed last.
+
+        The analysed variant carries that frame's own direction tracks, so an
+        overlay can only ever show results of the image it is drawn on. Without
+        a densely sampling run it falls back to the newest frame and analysis null.
+        """
+        session = self.get(owner_id, source_id)
+        analysis = None
+        analysis_state = "none"
+        try:
+            frame = None
+            if analysed:
+                frame, analysis = self._live_overlay(owner_id, source_id, session)
+                with self._lock:
+                    bound = (owner_id, source_id) in self._active_by_source
+                analysis_state = "paired" if analysis else "active" if bound and not session.closed else "none"
+            if frame is None:
+                frame = session.latest_frame()
             ok, encoded = cv2.imencode(".jpg", frame.image, [cv2.IMWRITE_JPEG_QUALITY, 88])
             if not ok or encoded.size == 0:
                 raise RoadSessionError("frame_unavailable", "Das aktuelle Kamerabild ist nicht verfügbar.")
@@ -332,6 +406,7 @@ class RoadSessionService:
             jpeg = encoded.tobytes()
         except RuntimeError as exc:
             # Closed producers retain only one compressed preview and its identity.
+            analysis = None
             jpeg = session.final_preview_jpeg()
             metadata = session.final_preview_metadata()
             if jpeg is None or metadata is None:
@@ -344,7 +419,12 @@ class RoadSessionService:
             "frame_id": frame_id,
             "timestamp_seconds": float(timestamp),
             "image_base64": base64.b64encode(jpeg).decode("ascii"),
+            "analysis": analysis,
         }
+        if analysed:
+            # paired: image and tracks of one analysed frame; active: a run analyses
+            # this source but no recent analysed frame fits; none: no analysis run.
+            payload["analysis_state"] = analysis_state if analysis or analysis_state != "paired" else "none"
         if session.closed:
             payload["closed"] = True
         payload["end_reason"] = session.end_reason
@@ -877,6 +957,8 @@ def dispatch_road_get(
         _owned_source(service, owner_id, source_id)
         if parts[3] == "frame":
             return RoadHttpResponse(200, service.frame(owner_id, source_id))
+        if parts[3] == "analysis-frame":
+            return RoadHttpResponse(200, service.frame(owner_id, source_id, analysed=True))
         if parts[3] == "recording":
             return RoadHttpResponse(200, service.recording(owner_id, source_id))
     return None

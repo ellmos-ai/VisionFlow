@@ -55,6 +55,15 @@ const FIXTURE_PROFILE_LABELS = {
   error: L("Offline-Testantwort · Modellfehler", "Offline test answer · model error"),
 };
 const LOCKED_CASE_PHASES = new Set(["model_review", "human_review", "no_response"]);
+const OVERLAY_KEY = "visionflow.road.overlay";
+
+function overlayPreference() {
+  try {
+    return window.localStorage.getItem(OVERLAY_KEY) !== "off";
+  } catch (_error) {
+    return true;
+  }
+}
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -127,6 +136,9 @@ export function mountRoadCamera(container, apiClient) {
   const pendingFrameUrls = new Set();
   let autoDemoActive = false;
   let endReason = null;
+  let overlayEnabled = overlayPreference();
+  let shownAnalysis = null;
+  let shownState = "none";
 
   const root = element("section", "road-camera");
   root.setAttribute("aria-labelledby", `road-camera-title-${instanceId}`);
@@ -208,7 +220,16 @@ export function mountRoadCamera(container, apiClient) {
   frame.alt = L("Aktuelles Bild der synthetischen Straßenkamera", "Current image of the synthetic road camera");
   frame.decoding = "async";
   frame.src = getStandbyUrl();
-  viewport.append(frame, hud);
+  // Boxes, arrows and labels come only from the direction result of the shown frame.
+  const overlay = element("canvas", "road-camera__overlay");
+  overlay.setAttribute("aria-hidden", "true");
+  const analysisBar = element("div", "road-camera__analysis-bar");
+  const analysisText = element("span", "road-camera__analysis-text", "");
+  const overlayToggle = button("", "road-camera__overlay-toggle");
+  overlayToggle.id = "road-camera-overlay-toggle";
+  analysisBar.append(analysisText, overlayToggle);
+  analysisBar.hidden = true;
+  viewport.append(frame, overlay, hud, analysisBar);
   const frameMeta = element("p", "road-camera__frame-meta", L("Bereit. Starte eine Sitzung oder nutze die ⚡ 1-Klick Demo.", "Ready. Start a session or use the ⚡ 1-click demo."));
   livePanel.append(liveTitle, viewport, frameMeta);
 
@@ -296,8 +317,93 @@ export function mountRoadCamera(container, apiClient) {
     runTimer = null;
   }
 
+  function analysisCaption(analysis, state) {
+    if (!overlayEnabled) return L("Analyse-Rahmen ausgeblendet · Livebild", "Analysis boxes hidden · live image");
+    if (!analysis && state === "active") return L("OpenCV-5-Richtungswerkzeug · Analyse läuft · gerade kein passendes Analysebild · Livebild", "OpenCV 5 direction tool · analysis running · no matching analysed frame right now · live image");
+    if (!analysis) return L("OpenCV-5-Richtungswerkzeug · keine laufende Analyse · Livebild", "OpenCV 5 direction tool · no analysis running · live image");
+    const rate = formatNumber(analysis.analyses_per_second, 1);
+    const lag = formatNumber(analysis.lag_seconds, 1);
+    return L(
+      `OpenCV-5-Richtungswerkzeug · ${rate} Analysen/s · grün = mit dem Verkehr, rot = dagegen · Analysebild ${lag} s hinter Live`,
+      `OpenCV 5 direction tool · ${rate} analyses/s · green = with traffic, red = against · analysed frame ${lag} s behind live`,
+    );
+  }
+
+  function updateOverlayToggle() {
+    overlayToggle.textContent = overlayEnabled ? L("Rahmen: an", "Boxes: on") : L("Rahmen: aus", "Boxes: off");
+    overlayToggle.setAttribute("aria-pressed", String(overlayEnabled));
+    overlayToggle.setAttribute("aria-label", L("Analyse-Rahmen im Kamerabild ein- oder ausblenden", "Show or hide the analysis boxes in the camera image"));
+  }
+
+  function drawOverlay(analysis, state = analysis ? "paired" : "none") {
+    shownAnalysis = analysis || null;
+    shownState = state;
+    const width = frame.clientWidth;
+    const height = frame.clientHeight;
+    const ratio = window.devicePixelRatio || 1;
+    overlay.width = Math.max(1, Math.round(width * ratio));
+    overlay.height = Math.max(1, Math.round(height * ratio));
+    const context = overlay.getContext("2d");
+    const space = analysis && Array.isArray(analysis.coordinate_space) ? analysis.coordinate_space : null;
+    const active = Boolean(overlayEnabled && analysis && Array.isArray(analysis.tracks) && space && context);
+    viewport.dataset.overlayFrameId = active ? String(analysis.frame_id) : "";
+    viewport.dataset.overlayTracks = active ? String(analysis.tracks.length) : "0";
+    analysisText.textContent = analysisCaption(analysis, state);
+    if (!context) return;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, overlay.width, overlay.height);
+    if (!active) return;
+    // Map source pixels onto the displayed image (object-fit contain, cover or fill).
+    const fit = getComputedStyle(frame).objectFit;
+    const fx = width / space[0];
+    const fy = height / space[1];
+    const uniform = fit === "cover" ? Math.max(fx, fy) : Math.min(fx, fy);
+    const kx = fit === "fill" ? fx : uniform;
+    const ky = fit === "fill" ? fy : uniform;
+    const ox = (width - space[0] * kx) / 2;
+    const oy = (height - space[1] * ky) / 2;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.lineJoin = "round";
+    for (const track of analysis.tracks) {
+      if (!track || !Array.isArray(track.region) || track.region.length !== 4) continue;
+      const [x, y, w, h] = track.region.map(Number);
+      const color = track.opposition ? "#ff4d4d" : "#34d399";
+      const pad = 4;
+      const left = ox + x * kx - pad;
+      const top = oy + y * ky - pad;
+      context.strokeStyle = color;
+      context.fillStyle = color;
+      context.lineWidth = 2;
+      context.strokeRect(left, top, w * kx + 2 * pad, h * ky + 2 * pad);
+      const cx = ox + (x + w / 2) * kx;
+      const cy = oy + (y + h / 2) * ky;
+      const ex = cx + Number(track.dx_px) * 3 * kx;
+      const ey = cy + Number(track.dy_px) * 3 * ky;
+      const angle = Math.atan2(ey - cy, ex - cx);
+      context.beginPath();
+      context.moveTo(cx, cy);
+      context.lineTo(ex, ey);
+      context.stroke();
+      context.beginPath();
+      context.moveTo(ex, ey);
+      context.lineTo(ex - 8 * Math.cos(angle - 0.45), ey - 8 * Math.sin(angle - 0.45));
+      context.lineTo(ex - 8 * Math.cos(angle + 0.45), ey - 8 * Math.sin(angle + 0.45));
+      context.closePath();
+      context.fill();
+      if (track.opposition) {
+        const label = L("GEGENBEWEGUNG", "OPPOSING MOTION");
+        context.font = "700 12px system-ui, sans-serif";
+        context.lineWidth = 3;
+        context.strokeStyle = "rgba(10, 10, 10, 0.85)";
+        context.strokeText(label, left, Math.max(12, top - 5));
+        context.fillText(label, left, Math.max(12, top - 5));
+      }
+    }
+  }
+
   function clearFrameImage() {
     frameSequence += 1;
+    drawOverlay(null);
     frame.src = getStandbyUrl();
     for (const url of pendingFrameUrls) URL.revokeObjectURL(url);
     pendingFrameUrls.clear();
@@ -305,7 +411,7 @@ export function mountRoadCamera(container, apiClient) {
     frameObjectUrl = null;
   }
 
-  function setFrameImage(encoded) {
+  function setFrameImage(encoded, analysis = null, frameId = "", state = "none") {
     const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
     const url = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
     const sequence = ++frameSequence;
@@ -323,6 +429,9 @@ export function mountRoadCamera(container, apiClient) {
       frameObjectUrl = url;
       frame.onload = null;
       frame.onerror = null;
+      // Image and its own overlay change together.
+      viewport.dataset.frameId = frameId;
+      drawOverlay(analysis, state);
     };
     frame.onerror = () => {
       if (pendingFrameUrls.delete(url)) URL.revokeObjectURL(url);
@@ -440,12 +549,15 @@ export function mountRoadCamera(container, apiClient) {
     const view = viewGeneration;
     if (!source || !sourceOpen || destroyed) return;
     try {
+      const route = overlayEnabled ? "analysis-frame" : "frame";
       const payload = await apiClient.get(
-        `/road/sessions/${encodeURIComponent(source)}/frame`,
+        `/road/sessions/${encodeURIComponent(source)}/${route}`,
       );
       if (!current(source, generation, view)) return;
+      analysisBar.hidden = false;
       if (typeof payload.image_base64 === "string" && payload.image_base64) {
-        setFrameImage(payload.image_base64);
+        const analysis = payload.analysis && payload.analysis.frame_id === payload.frame_id ? payload.analysis : null;
+        setFrameImage(payload.image_base64, analysis, String(payload.frame_id || ""), String(payload.analysis_state || "none"));
         frameMeta.textContent =
           L(`Frame ${String(payload.frame_id || "–")} · Quellenzeit ${formatNumber(payload.timestamp_seconds, 2)} Sek.`, `Frame ${String(payload.frame_id || "–")} · source time ${formatNumber(payload.timestamp_seconds, 2)} s`);
         recText.textContent = " LIVE / REC";
@@ -1032,6 +1144,19 @@ export function mountRoadCamera(container, apiClient) {
     injectEvent().catch((error) => setStatus(error.message, true));
   });
   modeSelect.addEventListener("change", updateSourceControls);
+  overlayToggle.addEventListener("click", () => {
+    overlayEnabled = !overlayEnabled;
+    try {
+      window.localStorage.setItem(OVERLAY_KEY, overlayEnabled ? "on" : "off");
+    } catch (_error) {
+      // The choice still applies to this page.
+    }
+    updateOverlayToggle();
+    drawOverlay(overlayEnabled ? shownAnalysis : null, shownState);
+  });
+  updateOverlayToggle();
+  const resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => drawOverlay(shownAnalysis, shownState)) : null;
+  if (resizeObserver) resizeObserver.observe(viewport);
 
   function setCase(caseInfo) {
     const nextId = caseInfo && typeof caseInfo.case_id === "string"
@@ -1076,6 +1201,7 @@ export function mountRoadCamera(container, apiClient) {
     clearRecordingTimer();
     clearRunTimer();
     clearFrameImage();
+    if (resizeObserver) resizeObserver.disconnect();
     for (const entry of clipUrls.values()) URL.revokeObjectURL(entry.url);
     clipUrls.clear();
     clipInflight.clear();
@@ -1094,6 +1220,7 @@ export function mountRoadCamera(container, apiClient) {
       available: roadAvailable,
       capabilities,
       endReason,
+      overlayEnabled,
       injectBlocker: injectBlocker(),
     };
   }

@@ -39,6 +39,9 @@ from .trace import TraceRecorder
 
 _TERMINAL = frozenset({"completed", "failed", "cancelled"})
 _WAITING = frozenset({"waiting_for_input", "waiting_for_approval"})
+# Live views keep only the newest analysed frame and a short timestamp history.
+_LIVE_HISTORY = 16
+_LIVE_RATE_WINDOW_SECONDS = 3.0
 
 
 class _SystemClock:
@@ -73,6 +76,9 @@ class _Run:
     output_index: int = 0
     retained_metadata_bytes: int = 0
     retained_evidence_bytes: int = 0
+    live_analysis: dict[str, Any] | None = None
+    live_frame: Frame | None = None
+    live_times: list[float] = field(default_factory=list)
 
 
 class Controller:
@@ -464,6 +470,7 @@ class Controller:
             if run.cancel_event.is_set():
                 return
             finding = self._normalize_finding(raw_finding, tool_name, frame, evidence_ref)
+            self._publish_live(run, finding, frame)
             with run.lock:
                 if run.result.status in _TERMINAL:
                     return
@@ -483,6 +490,44 @@ class Controller:
             processed += 1
         if processed == 0:
             raise MediaError("source produced no analyzable frames")
+
+    def _publish_live(self, run: _Run, finding: Finding, frame: Frame) -> None:
+        """Expose the newest analysed frame before an observation publishes its findings."""
+        analysed_at = float(self.clock.monotonic())
+        with run.lock:
+            run.live_times.append(analysed_at)
+            del run.live_times[:-_LIVE_HISTORY]
+            run.live_frame = frame
+            run.live_analysis = {
+                "frame_id": frame.frame_id,
+                "tool": finding.tool,
+                "region": copy.deepcopy(finding.region),
+                "timestamp_seconds": float(frame.timestamp_seconds),
+                "metrics": copy.deepcopy(finding.metrics),
+            }
+
+    def live_analysis(self, run_id: str) -> dict[str, Any] | None:
+        """Copy of the newest analysed frame's result, with the measured analysis rate.
+
+        The rate counts analyses per wall-clock second over the last three seconds.
+
+        ``frame`` is that analysed Frame itself (shared, read-only, not copied).
+        """
+        with self._runs_lock:
+            run = self._runs.get(run_id)
+        if run is None:
+            raise UnknownRun(run_id)
+        with run.lock:
+            live = copy.deepcopy(run.live_analysis)
+            frame = run.live_frame
+            times = list(run.live_times)
+        if live is None:
+            return None
+        live["frame"] = frame
+        recent = [value for value in times if value >= times[-1] - _LIVE_RATE_WINDOW_SECONDS]
+        span = recent[-1] - recent[0] if len(recent) >= 2 else 0.0
+        live["analyses_per_second"] = round((len(recent) - 1) / span, 2) if span > 0 else None
+        return live
 
     def _tool_context(self, run: _Run, node: Node, tool: str, source: Any) -> dict[str, Any]:
         return self._tool_context_for_region(run, node, tool, source, None)
@@ -836,6 +881,7 @@ class Controller:
             if run.cancel_event.is_set():
                 return []
             finding = self._normalize_finding(raw, tool, frame, evidence_ref, observation.region)
+            self._publish_live(run, finding, frame)
             self._record(
                 run,
                 {

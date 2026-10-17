@@ -651,3 +651,54 @@ def test_open_and_stopped_sources_report_their_end_reason(road_server):
     client.request("POST", f"/road/sessions/{source_id}/stop", {})
     status, frame, _ = client.request("GET", f"/road/sessions/{source_id}/frame")
     assert status == 200 and frame["closed"] is True and frame["end_reason"] == "stopped"
+
+
+def test_live_frame_carries_the_detector_tracks_of_exactly_that_frame(road_server):
+    """W8: overlay data is the real direction result of the very frame that is served."""
+    _base_url, service, controller, _sessions = road_server
+    from visionflow.config import validate_workflow
+    from visionflow.road_api import road_monitor_workflow
+    from visionflow.runtime import create_registry
+
+    source_id = service.create("owner-a", seed=42)["source_id"]
+    idle = service.frame("owner-a", source_id, analysed=True)
+    assert idle["analysis"] is None and idle["analysis_state"] == "none"  # no run, no overlay
+    config = road_monitor_workflow()
+    config["input"]["source"] = source_id
+    run = controller.start(validate_workflow(config, create_registry()))
+    service.bind_run("owner-a", source_id, run.run_id, monitor_clip=False)
+    served = {}
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and len(served) < 8:
+        assert service.frame("owner-a", source_id)["analysis"] is None  # live route never overlays
+        payload = service.frame("owner-a", source_id, analysed=True)
+        analysis = payload["analysis"]
+        assert payload["analysis_state"] in {"paired", "active"}
+        if analysis is not None:
+            assert payload["analysis_state"] == "paired"
+            assert analysis["frame_id"] == payload["frame_id"]
+            assert analysis["run_id"] == run.run_id and analysis["tool"] == "direction"
+            assert analysis["coordinate_space"] == [960, 540]
+            assert 0 <= analysis["lag_seconds"] <= 4.0
+            served[payload["frame_id"]] = analysis
+        time.sleep(0.12)
+    assert len(served) >= 4
+    rates = [row["analyses_per_second"] for row in served.values() if row["analyses_per_second"] is not None]
+    assert rates and all(0.2 <= rate <= 20.0 for rate in rates), rates  # measured, not configured
+
+    final = controller.wait(run.run_id, timeout=30)
+    assert final.status == "completed"
+    by_frame = {finding.frame_ids[0]: finding for finding in final.findings if finding.tool == "direction"}
+    for frame_id, analysis in served.items():
+        expected = by_frame[frame_id].metrics
+        assert analysis["opposition_count"] == expected["opposition_count"]
+        assert analysis["tracks"] == [
+            {"region": track["region"], "dx_px": track["dx_px"], "dy_px": track["dy_px"],
+             "opposition": track["opposition"], "frames": len(track["frame_ids"])}
+            for track in expected["tracks"]
+        ]
+    assert any(analysis["tracks"] for analysis in served.values())
+    deadline = time.monotonic() + 5
+    while service.frame("owner-a", source_id, analysed=True)["analysis"] is not None and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert service.frame("owner-a", source_id, analysed=True)["analysis"] is None  # finished run, no stale overlay

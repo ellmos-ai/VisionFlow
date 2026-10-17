@@ -1400,11 +1400,9 @@ body { background: var(--control-sky); }
 .traffic-monitor { gap: .25rem; }
 .traffic-monitor__header { gap: .35rem; flex-wrap: wrap; padding: .15rem .25rem; }
 .traffic-monitor__header .chunky-btn--power { min-height: 36px; padding: .35rem .65rem; font-size: .78rem; }
-@media (min-width: 851px) {
-  #cartoon-feed-mount { max-height: 335px; }
-  #cartoon-feed-mount .road-camera__viewport { height: 100%; }
-  #cartoon-feed-mount .road-camera__frame { object-fit: contain; }
-}
+/* W8: the camera scene fills the monitor edge to edge at 16:9 (no letterbox). */
+#cartoon-feed-mount .road-camera__viewport { height: 100%; border: 0; border-radius: 0; }
+#cartoon-feed-mount .road-camera__frame { object-fit: cover; }
 
 /* Workspace choice belongs in the global header; IDs retain their bindings. */
 .app-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: .6rem 1rem; }
@@ -1436,3 +1434,5 @@ body { background: var(--control-sky); }
   /* No driving for reduced motion: the car stays visible in the middle of its road. */
   .patrol-car.dispatching { left: 50%; transform: translateX(-50%); }
 }
+/* W8: event banners sit at the bottom so the analysis header line stays readable. */
+.traffic-anomaly-banner { top: auto; bottom: 10px; }
