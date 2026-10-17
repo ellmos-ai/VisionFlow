@@ -70,6 +70,47 @@ def test_producer_expiry_releases_raw_frames(monkeypatch):
         session.close()
 
 
+def test_producer_limit_ends_the_session_without_a_technical_error():
+    import visionflow.simulation as simulation
+    image_refs = []
+
+    def limited_recording(frame):
+        image_refs.append(weakref.ref(frame.image))
+        if len(image_refs) >= 3:
+            raise simulation.ProducerLimitReached("recording_limit")
+
+    session = simulation.SimulationSession("limited-producer", on_frame=limited_recording)
+    try:
+        session.start()
+        session._producer.join(3)
+        assert not session._producer.is_alive()
+        assert session.closed
+        assert session.error_code is None
+        assert session.end_reason == "recording_limit"
+        _assert_camera_images_released(session, image_refs)
+    finally:
+        session.close()
+
+
+def test_time_cap_and_stop_report_their_end_reason(monkeypatch):
+    import visionflow.simulation as simulation
+    monkeypatch.setattr(simulation, "_MAX_SESSION_SECONDS", 0.2)
+    expiring = simulation.SimulationSession("expiry-reason")
+    stopped = simulation.SimulationSession("stop-reason")
+    try:
+        assert expiring.end_reason is None
+        expiring.start()
+        expiring._producer.join(3)
+        assert expiring.end_reason == "time_limit"
+        stopped.start()
+        stopped.latest_frame()
+        stopped.close()
+        assert stopped.end_reason == "stopped"
+    finally:
+        expiring.close()
+        stopped.close()
+
+
 def test_producer_failure_releases_raw_frames():
     SimulationSession, _ = _load_simulation_types()
     image_refs = []
@@ -84,6 +125,7 @@ def test_producer_failure_releases_raw_frames():
         session._producer.join(3)
         assert not session._producer.is_alive()
         assert session.error_code == "producer_failed"
+        assert session.end_reason == "producer_failed"
         _assert_camera_images_released(session, image_refs)
     finally:
         session.close()

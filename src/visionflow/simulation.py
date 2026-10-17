@@ -22,6 +22,14 @@ _RAW_BUFFER_SIZE = 10
 _MAX_SESSION_SECONDS = 120.0
 
 
+class ProducerLimitReached(Exception):
+    """Raised by an on_frame consumer that cannot accept more frames (not a failure)."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 class SimulationSession:
     """One private road world shared by bounded multicast frame readers."""
 
@@ -53,6 +61,7 @@ class SimulationSession:
         self._producer: threading.Thread | None = None
         # Keeping an exception would retain its traceback and the raw frame locals.
         self._producer_error = False
+        self._end_reason: str | None = None
         self._preview_jpeg: bytes | None = None
         self._preview_metadata: tuple[str, float] | None = None
         self._images_released = threading.Event()
@@ -68,6 +77,14 @@ class SimulationSession:
         """Return a safe producer status without exposing exception text."""
         with self._condition:
             return "producer_failed" if self._producer_error else None
+
+    @property
+    def end_reason(self) -> str | None:
+        """Why production stopped: stopped, time_limit, recording_limit or producer_failed."""
+        with self._condition:
+            if self._producer_error:
+                return "producer_failed"
+            return self._end_reason if self._closed else None
 
     def start(self) -> None:
         """Start the producer once; the first frame is produced immediately."""
@@ -128,6 +145,8 @@ class SimulationSession:
     def close(self) -> None:
         """Stop production and wake every reader; safe to call more than once."""
         with self._condition:
+            if self._end_reason is None:
+                self._end_reason = "stopped"
             self._closed = True
             self._condition.notify_all()
             producer = self._producer
@@ -186,6 +205,7 @@ class SimulationSession:
                     capture_time = time.monotonic()
                     source_time = max(0.0, capture_time - started_at)
                     if source_time >= _MAX_SESSION_SECONDS:
+                        self._end_reason = "time_limit"
                         return
 
                 with self._world_lock:
@@ -210,6 +230,10 @@ class SimulationSession:
 
                 # Schedule from capture start: slow rendering never causes a catch-up burst.
                 next_capture_at = capture_time + _FRAME_PERIOD_SECONDS
+        except ProducerLimitReached as limit:
+            with self._condition:
+                if self._end_reason is None:
+                    self._end_reason = limit.reason
         except Exception:
             with self._condition:
                 self._producer_error = True
@@ -354,4 +378,4 @@ class SimulationStore:
             session.close()
 
 
-__all__ = ["SimulationCapacityError", "SimulationSession", "SimulationStore"]
+__all__ = ["ProducerLimitReached", "SimulationCapacityError", "SimulationSession", "SimulationStore"]

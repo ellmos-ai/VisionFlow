@@ -69,6 +69,19 @@ function button(text, className = "button secondary") {
   return node;
 }
 
+// Why a source stopped producing, as reported by the server (end_reason).
+function sourceEndedText(reason, errorCode) {
+  if (reason === "recording_limit") {
+    return L("Die Quelle hat ihr Aufnahmelimit erreicht und wurde beendet; Tickets und Clips bleiben erhalten.", "The source reached its recording limit and was stopped; tickets and clips are kept.");
+  }
+  if (reason === "time_limit") {
+    return L("Die Quelle hat ihre Höchstdauer erreicht und wurde beendet; Tickets und Clips bleiben erhalten.", "The source reached its maximum duration and was stopped; tickets and clips are kept.");
+  }
+  return errorCode
+    ? L("Quelle mit einem technischen Fehler beendet.", "Source ended with a technical error.")
+    : L("Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.", "Source ended; the last real camera image stays visible.");
+}
+
 function formatNumber(value, digits = 1) {
   return typeof value === "number" && Number.isFinite(value)
     ? value.toLocaleString(L("de-DE", "en-US"), { maximumFractionDigits: digits })
@@ -113,6 +126,7 @@ export function mountRoadCamera(container, apiClient) {
   let frameObjectUrl = null;
   const pendingFrameUrls = new Set();
   let autoDemoActive = false;
+  let endReason = null;
 
   const root = element("section", "road-camera");
   root.setAttribute("aria-labelledby", `road-camera-title-${instanceId}`);
@@ -398,11 +412,10 @@ export function mountRoadCamera(container, apiClient) {
           L(`${state} · ${frames} Frames · ${fps} Bilder/Sek. gemessen · ${seconds} Sek. · ${compressed} Byte`, `${state} · ${frames} frames · ${fps} frames/s measured · ${seconds} s · ${compressed} bytes`);
         if (payload.closed) {
           sourceOpen = false;
+          endReason = typeof payload.end_reason === "string" ? payload.end_reason : endReason;
           clearFrameTimer();
           updateEventControls();
-          setStatus(payload.error_code
-            ? L("Quelle mit einem technischen Fehler beendet.", "Source ended with a technical error.")
-            : L("Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.", "Source ended; the last real camera image stays visible."));
+          setStatus(sourceEndedText(endReason, payload.error_code));
         }
       }
     } catch (error) {
@@ -440,13 +453,12 @@ export function mountRoadCamera(container, apiClient) {
       }
       if (payload.closed) {
         sourceOpen = false;
+        endReason = typeof payload.end_reason === "string" ? payload.end_reason : null;
         clearFrameTimer();
         updateEventControls();
         recText.textContent = " STANDBY";
         recDot.classList.add("road-camera__rec-dot--standby");
-        setStatus(payload.error_code
-          ? L("Quelle mit einem technischen Fehler beendet.", "Source ended with a technical error.")
-          : L("Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.", "Source ended; the last real camera image stays visible."));
+        setStatus(sourceEndedText(endReason, payload.error_code));
         refreshRecording(source, generation, view);
         return;
       }
@@ -728,6 +740,7 @@ export function mountRoadCamera(container, apiClient) {
     warmedUp = false;
     sourceId = nextSource;
     sourceOpen = true;
+    endReason = null;
     root.dataset.sourceId = nextSource;
     currentClipId = null;
     sourceSummary.textContent = L("Quelle: ", "Source: ") + nextSource;
@@ -1080,6 +1093,7 @@ export function mountRoadCamera(container, apiClient) {
       warmedUp,
       available: roadAvailable,
       capabilities,
+      endReason,
       injectBlocker: injectBlocker(),
     };
   }

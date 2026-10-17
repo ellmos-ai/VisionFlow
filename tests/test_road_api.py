@@ -617,3 +617,37 @@ def test_decision_idempotency_key_with_control_characters_is_rejected(key):
     assert raised.value.code == "invalid_idempotency_key"
     assert raised.value.status == 422
     assert not Cases.decided
+
+
+def test_recording_byte_limit_ends_the_source_with_a_visible_reason(tmp_path):
+    ffmpeg = shutil.which("ffmpeg")
+    assert ffmpeg, "the local FFmpeg installation is required"
+    recordings = RecordingStore(tmp_path / "recordings", Path(ffmpeg), max_bytes=600_000)
+    service = RoadSessionService(SimulationStore(), recordings, create_controller(tmp_path / "controller"))
+    try:
+        source_id = service.create("owner")["source_id"]
+        session = service.get("owner", source_id)
+        deadline = time.monotonic() + 10
+        while not session.closed and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert session.closed
+
+        frame = service.frame("owner", source_id)
+        assert frame["closed"] is True
+        assert frame["end_reason"] == "recording_limit"
+        assert "error_code" not in frame
+        assert service.recording("owner", source_id)["end_reason"] == "recording_limit"
+    finally:
+        service.close()
+
+
+def test_open_and_stopped_sources_report_their_end_reason(road_server):
+    base_url, _service, _controller, _sessions = road_server
+    client = ApiClient(base_url)
+    client.bootstrap()
+    source_id = client.request("POST", "/road/sessions", {})[1]["source_id"]
+    status, frame, _ = client.request("GET", f"/road/sessions/{source_id}/frame")
+    assert status == 200 and frame.get("end_reason") is None
+    client.request("POST", f"/road/sessions/{source_id}/stop", {})
+    status, frame, _ = client.request("GET", f"/road/sessions/{source_id}/frame")
+    assert status == 200 and frame["closed"] is True and frame["end_reason"] == "stopped"

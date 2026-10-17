@@ -61,6 +61,20 @@
     run_inactive: L("Der Analyse-Lauf dieses Falls ist beendet.", "The analysis run of this case has ended."),
     source_changed: L("Die Kameraquelle wurde inzwischen gewechselt.", "The camera source has been changed in the meantime."),
   };
+  // A camera that stopped at one of its limits says so instead of silently showing STANDBY.
+  function sourceEndedNotice(reason) {
+    const isPublic = Boolean($("public-demo-note")) && !$("public-demo-note").hidden;
+    if (reason === "recording_limit") {
+      return isPublic
+        ? L("Die Kamera hat das Aufnahmelimit der öffentlichen Demo erreicht und wurde beendet. Alle Tickets und Clips bleiben erhalten. Schalte die Kamera mit „Kamera ein / aus“ wieder ein, um mit einer neuen Aufnahme weiterzumachen.", "The camera reached the public demo's recording limit and was stopped. All tickets and clips are kept. Switch the camera back on with “Camera on / off” to continue with a new recording.")
+        : L("Die Kamera hat ihr Aufnahmelimit erreicht und wurde beendet. Alle Tickets und Clips bleiben erhalten. Schalte die Kamera mit „Kamera ein / aus“ wieder ein, um mit einer neuen Aufnahme weiterzumachen.", "The camera reached its recording limit and was stopped. All tickets and clips are kept. Switch the camera back on with “Camera on / off” to continue with a new recording.");
+    }
+    if (reason === "time_limit") {
+      return L("Die Kamera-Sitzung hat ihre Höchstdauer von zwei Minuten erreicht und wurde beendet. Alle Tickets und Clips bleiben erhalten. Schalte die Kamera mit „Kamera ein / aus“ wieder ein, um weiterzumachen.", "The camera session reached its two-minute maximum and was stopped. All tickets and clips are kept. Switch the camera back on with “Camera on / off” to continue.");
+    }
+    return null;
+  }
+
   const REVIEW_PHASES = new Set(["model_review", "human_review"]);
   const ACTIVE_PHASES = new Set(["starting", "running", "model_review", "human_review"]);
   const MONITOR_PHASES = new Set(["starting", "running"]);
@@ -86,6 +100,7 @@
   let startPromise = null;
   let eventBusy = false;
   let bannerTimer = null;
+  let notifiedEndReason = null;
   let clipView = { caseId: null, clipId: null, url: null, generation: 0 };
 
   // Translation table (static labels; live case data is shown as delivered)
@@ -1013,6 +1028,14 @@
     setText("cartoon-cam-status", state && state.sourceOpen
       ? (state.runActive ? L("[● LIVE · ANALYSE LÄUFT]", "[● LIVE · ANALYSIS RUNNING]") : "[● LIVE]")
       : "[● STANDBY]");
+    const endedNotice = state && !state.sourceOpen ? sourceEndedNotice(state.endReason) : null;
+    const notice = $("cartoon-source-notice");
+    if (notice) {
+      notice.hidden = !endedNotice;
+      if (endedNotice) setText("cartoon-source-notice", endedNotice);
+    }
+    if (endedNotice && notifiedEndReason !== state.endReason) setText("speech-alex", endedNotice);
+    notifiedEndReason = endedNotice ? state.endReason : null;
     renderDatacenter();
     renderSchmidt();
     renderBeta();
@@ -1109,6 +1132,7 @@
       h("div", { className: "traffic-screen-wrap" }, [
         h("div", { className: "traffic-monitor" }, [
           h("div", { className: "traffic-monitor__header" }, [h("span", { textContent: L("B4 Nord · synthetische Straße", "B4 North · synthetic road") }), h("span", { id: "cartoon-cam-status", textContent: "[● STANDBY]" }), action("btn-toggle-cam", L("Kamera ein / aus", "Camera on / off"), () => void toggleCamera(), "chunky-btn--power")]),
+          h("p", { id: "cartoon-source-notice", className: "source-ended-notice", role: "status", hidden: true }),
           h("div", { id: "cartoon-feed-mount", className: "traffic-feed-box" }),
         ]),
         h("div", { className: "traffic-control-panel" }, [

@@ -1429,3 +1429,5 @@ body { background: var(--control-sky); }
 .patrol-car.dispatching { animation: patrolArrive 1.2s ease-out both; }
 .patrol-car-road { bottom: 18px; }
 @keyframes patrolArrive { from { transform: translateX(-8px); opacity: .5; } to { transform: translateX(0); opacity: 1; } }
+/* A source that ended at a limit explains why and how to continue (M1). */
+.source-ended-notice { margin: .25rem 0; padding: .45rem .65rem; border-left: 3px solid #c9952e; border-radius: 4px; background: #fff6dc; color: #6b4300; font-size: .85rem; line-height: 1.45; }

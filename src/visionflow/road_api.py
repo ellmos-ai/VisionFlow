@@ -23,7 +23,12 @@ import cv2
 
 from visionflow.contracts import UnknownRun
 from visionflow.recording import ClipNotReady, ClipRef, RecordingError, RecordingStore
-from visionflow.simulation import SimulationCapacityError, SimulationSession, SimulationStore
+from visionflow.simulation import (
+    ProducerLimitReached,
+    SimulationCapacityError,
+    SimulationSession,
+    SimulationStore,
+)
 
 
 ROAD_SOURCE_PREFIX = "road-sim-"
@@ -233,7 +238,13 @@ class RoadSessionService:
             source_id = source_ref.get("source_id")
             if source_id is None:
                 raise RecordingError("source_not_open", "Die Aufnahmequelle wurde nicht geöffnet.")
-            self.recordings.append(source_id, frame)
+            try:
+                self.recordings.append(source_id, frame)
+            except RecordingError as exc:
+                # A full recording ends the camera like its time cap, not as a fault.
+                if exc.code in {"byte_limit", "duration_limit"}:
+                    raise ProducerLimitReached("recording_limit") from None
+                raise
 
         session = self.sessions.create(owner_id, seed, on_frame=append_frame,
                                        **({"on_closed": producer_closed} if self.retention else {}))
@@ -336,6 +347,7 @@ class RoadSessionService:
         }
         if session.closed:
             payload["closed"] = True
+        payload["end_reason"] = session.end_reason
         if session.error_code:
             payload["error_code"] = session.error_code
         return payload
@@ -360,6 +372,7 @@ class RoadSessionService:
         result.update(
             source_id=source_id,
             closed=session.closed,
+            end_reason=session.end_reason,
             error_code=session.error_code,
             clips=clips,
         )
