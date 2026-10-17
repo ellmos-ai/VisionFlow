@@ -94,18 +94,18 @@ def test_producer_limit_ends_the_session_without_a_technical_error():
 
 def test_time_cap_and_stop_report_their_end_reason(monkeypatch):
     import visionflow.simulation as simulation
-    monkeypatch.setattr(simulation, "_MAX_SESSION_SECONDS", 0.2)
-    expiring = simulation.SimulationSession("expiry-reason")
     stopped = simulation.SimulationSession("stop-reason")
+    expiring = simulation.SimulationSession("expiry-reason")
     try:
-        assert expiring.end_reason is None
-        expiring.start()
-        expiring._producer.join(3)
-        assert expiring.end_reason == "time_limit"
+        assert stopped.end_reason is None
         stopped.start()
         stopped.latest_frame()
         stopped.close()
         assert stopped.end_reason == "stopped"
+        monkeypatch.setattr(simulation, "_MAX_SESSION_SECONDS", 0.2)
+        expiring.start()
+        expiring._producer.join(3)
+        assert expiring.end_reason == "time_limit"
     finally:
         expiring.close()
         stopped.close()
@@ -195,6 +195,80 @@ def test_wrong_way_event_moves_against_both_normal_lane_directions():
     # The odd seed selects a car normally travelling down; even selects up.
     assert down_lane_centers[-1] < down_lane_centers[0] - 25
     assert up_lane_centers[-1] > up_lane_centers[0] + 25
+
+
+def _overlaps(first, second) -> bool:
+    return not (first[2] <= second[0] or second[2] <= first[0] or first[3] <= second[1] or second[3] <= first[1])
+
+
+@pytest.mark.parametrize("seed", (17, 18, 42, 101))
+def test_traffic_in_a_lane_shares_one_speed_and_never_overlaps(seed):
+    RoadWorld = _load_road_world()
+    world = RoadWorld(seed=seed)
+    speeds: dict[int, set[float]] = {}
+    for car in world._traffic:
+        speeds.setdefault(car.lane, set()).add(car.speed)
+    assert all(len(values) == 1 for values in speeds.values()), speeds
+    assert sum(1 for _ in world._traffic) >= 6
+    # Neighbouring lanes are a full lane apart and a car fills 44 % of its lane, so
+    # only cars sharing a lane could touch; check them over two traffic cycles.
+    for step in range(0, 600):
+        boxes = [row for row in world._vehicle_boxes(step / 20.0) if row["kind"] == "traffic"]
+        for index, first in enumerate(boxes):
+            for second in boxes[index + 1:]:
+                if first["lane"] == second["lane"]:
+                    assert not _overlaps(first["box"], second["box"]), (step / 20.0, first, second)
+
+
+@pytest.mark.parametrize("seed", (17, 18, 42, 101))
+def test_wrong_way_driver_uses_a_free_lane_and_never_covers_traffic(seed):
+    RoadWorld = _load_road_world()
+    world = RoadWorld(seed=seed)
+    world.render(3.0)
+    world.inject("wrong_way")
+    seen = 0
+    for step in range(0, 200):
+        t = 3.0 + step / 20.0
+        boxes = world._vehicle_boxes(t)
+        driver = [row for row in boxes if row["kind"] == "wrong_way"]
+        traffic = [row for row in boxes if row["kind"] == "traffic"]
+        if not driver:
+            continue
+        seen += 1
+        assert all(row["lane"] != driver[0]["lane"] for row in traffic)
+        assert not any(_overlaps(driver[0]["box"], row["box"]) for row in traffic), (t, driver, traffic)
+    assert seen >= 100  # at least five seconds in view
+
+
+def _visible_track(event: str, seed: int, seconds: float):
+    RoadWorld = _load_road_world()
+    baseline = RoadWorld(seed=seed)
+    candidate = RoadWorld(seed=seed)
+    candidate.inject(event)
+    track = []
+    for step in range(int(seconds * 10)):
+        t = step / 10.0
+        mask = np.max(np.abs(candidate.render(t).astype(np.int16) - baseline.render(t).astype(np.int16)), axis=2) > 30
+        ys, _xs = np.where(mask)
+        if ys.size > 20:
+            track.append((t, float(ys.mean())))
+    return track
+
+
+@pytest.mark.parametrize(("event", "seed", "starts", "min_seconds"), [
+    ("wrong_way", 18, "top", 6.0),     # even seed: drives down from the horizon
+    ("wrong_way", 17, "bottom", 6.0),  # odd seed: drives up from the bottom edge
+    ("bird", 17, "bottom", 5.0),
+])
+def test_events_enter_at_the_start_of_their_direction_and_stay_in_view(event, seed, starts, min_seconds):
+    track = _visible_track(event, seed, 10.0)
+    assert track, f"{event} never became visible"
+    first_y = track[0][1]
+    if starts == "top":
+        assert first_y < 540 * 0.25, track[:3]
+    else:
+        assert first_y > 540 * 0.85, track[:3]
+    assert track[-1][0] - track[0][0] >= min_seconds, (track[0], track[-1])
 
 
 @pytest.mark.parametrize("seed", (17, 42))
