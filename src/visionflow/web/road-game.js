@@ -224,6 +224,7 @@
         exchanges: [],
         lastPhase: null,
         dispatched: false,
+        observedLive: false, // set when this page started the case and saw its injections
       };
       tickets.set(caseId, ticket);
       ticketOrder.unshift(caseId);
@@ -280,6 +281,12 @@
   }
 
   function onTicketCreated(ticket) {
+    // Injected events are only known for cases this page started; a resumed case says so.
+    if (!ticket.observedLive) {
+      showBanner(L(`${ticketName(ticket)} wiederaufgenommen: Die Bildanalyse hatte in diesem Fall angeschlagen. Eingeblendete Ereignisse sind nach dem Neuladen nicht bekannt. Clip gesichert → Rechenzentrum`, `${ticketName(ticket)} resumed: the image analysis had triggered in this case. Injected events are not known after reloading. Clip sealed → datacenter`));
+      appendDatacenterLog(L(`[${ticketName(ticket)}] Ticket nach Wiederaufnahme aus gespeichertem Fall übernommen`, `[${ticketName(ticket)}] Ticket taken over from a stored case after resuming`));
+      return;
+    }
     const scenario = ticket.scenario.length ? scenarioText(ticket) : L("ohne eingeblendetes Ereignis", "without an injected event");
     showBanner(L(`${ticketName(ticket)} erstellt: Die Bildanalyse hat angeschlagen (${scenario}). Clip gesichert → Rechenzentrum`, `${ticketName(ticket)} created: the image analysis triggered (${scenario}). Clip sealed → datacenter`));
     appendDatacenterLog(L(`[${ticketName(ticket)}] Neues Ticket aus Befund der Bildanalyse`, `[${ticketName(ticket)}] New ticket from an image-analysis finding`));
@@ -310,6 +317,7 @@
   }
 
   function scenarioText(ticket) {
+    if (ticket && ticket.scenario.length === 0 && !ticket.observedLive) return L("nicht bekannt (Fall nach dem Neuladen wiederaufgenommen)", "not known (case resumed after reloading)");
     if (!ticket || ticket.scenario.length === 0) return L("keine Ereignisse aus dem Spiel eingeblendet", "no events injected from the game");
     return ticket.scenario.map((entry) => EVENT_LABELS[entry.type] || entry.type).join(" → ");
   }
@@ -376,6 +384,7 @@
     const detail = event && event.detail ? event.detail : {};
     if (typeof detail.caseId !== "string") return;
     const ticket = ticketFor(detail.caseId);
+    ticket.observedLive = true;
     if (detail.case) updateTicket(detail.caseId, detail.case);
     selectedCaseId = ticket.caseId;
     appendDatacenterLog(L(`[${ticketName(ticket)}] Neuer Fall auf ${detail.sourceId || "Kamera"} gestartet · ${modelSourceText(ticket)}`, `[${ticketName(ticket)}] New case started on ${detail.sourceId || "camera"} · ${modelSourceText(ticket)}`));

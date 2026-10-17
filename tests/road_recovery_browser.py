@@ -38,6 +38,12 @@ def run(base_url: str, output: Path) -> dict:
             assert page.locator("#journey-ticket-select").input_value() == case_id
             assert page.locator("#journey-ticket-title").inner_text() == "Ticket #1"
             checks["reload_restores_selected_ticket"] = True
+            # The reloaded page cannot know which events were injected; it must not claim "none".
+            page.wait_for_function("() => { const b = document.querySelector('#live-anomaly-banner'); return b && !b.hidden && b.textContent.includes('Ticket #1'); }", timeout=10000)
+            banner = page.locator("#live-anomaly-banner").inner_text()
+            result["resumed_banner"] = banner
+            assert "resumed" in banner and "without an injected event" not in banner, banner
+            checks["resumed_ticket_wording_is_neutral"] = True
             after = page.evaluate("id => window.roadApiClient.get('/road/cases/' + id)", case_id)
             assert before["content_hash"] == after["content_hash"]
             assert before["clip"] == after["clip"]
