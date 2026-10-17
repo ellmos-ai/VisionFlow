@@ -47,6 +47,8 @@
   let roadViewedCaseId = null;
   let roadRefreshGeneration = 0;
   let sessionReady = false;
+  let publicDemo = false;
+  let sampleTemplates = [];
 
   function setMessage(element, message, isError = false) {
     element.textContent = message;
@@ -79,6 +81,14 @@
     event_cooldown: L(
       "Das vorherige Ereignis wird noch analysiert. Das nächste Ereignis ist gleich wieder möglich.",
       "The previous event is still being analysed. The next event is possible again shortly.",
+    ),
+    public_demo_run_limit: L(
+      "Dein Beispiel-Ablauf läuft noch. Schließe ihn ab oder brich ihn ab, bevor du einen neuen startest.",
+      "Your sample workflow is still running. Finish or cancel it before starting a new one.",
+    ),
+    public_demo_workflow_disabled: L(
+      "Die öffentliche Demo führt nur die unveränderten Vorlagen mit ihren Beispiel-Eingaben aus.",
+      "The public demo runs only the unchanged templates with their sample inputs.",
     ),
     demo_capacity_full: L(
       "Das Datenbudget der Demo ist belegt. Bitte in einer Minute erneut versuchen; laufende Prüfungen bleiben erhalten.",
@@ -155,8 +165,55 @@
     renderToolChoices();
   }
 
+  // Public demo: the template is fixed; only one of its bundled samples is chosen.
+  const SAMPLE_LABELS = {
+    "samples/document-blurred.png": L("Beispieldokument (unscharf, PNG)", "Sample document (blurred, PNG)"),
+    "samples/document-sharp.png": L("Beispieldokument (scharf, PNG)", "Sample document (sharp, PNG)"),
+    "samples/motion.avi": L("Bewegungsvideo (synthetisch, AVI, 3 s)", "Motion video (synthetic, AVI, 3 s)"),
+  };
+
+  function sampleTemplate() {
+    return sampleTemplates.find((item) => item.id === $("workflow-preset").value) || null;
+  }
+
+  function fillSampleSelect(select, sources) {
+    select.replaceChildren(...sources.map((source) => {
+      const option = document.createElement("option");
+      option.value = source;
+      option.textContent = SAMPLE_LABELS[source] || source;
+      return option;
+    }));
+  }
+
+  function configurePublicWorkflows() {
+    const hide = (selector) => document.querySelectorAll(selector).forEach((node) => { node.hidden = true; });
+    hide('label[for="input-kind"], #input-kind, #file-source, #camera-source, label[for="tool-select"], #tool-select, #tool-description');
+    hide("#model-question-group, .limits-grid, label[for=\"approval-draft\"], label[for=\"approval-draft\"] + .hint");
+    $("public-sample-group").hidden = false;
+    renderPublicSamples();
+  }
+
+  function renderPublicSamples() {
+    const template = sampleTemplate();
+    if (!template) return;
+    fillSampleSelect($("public-sample"), template.samples);
+    const limits = template.config.limits || {};
+    $("public-template-limits").textContent = L(
+      `Feste Grenzwerte der Vorlage: ${limits.max_frames} Frames · ${limits.max_observation_seconds} Sek. Beobachtung · ${limits.max_llm_calls} Modellaufrufe (Offline-Testantwort).`,
+      `Fixed template limits: ${limits.max_frames} frames · ${limits.max_observation_seconds} s observation · ${limits.max_llm_calls} model calls (offline test answer).`,
+    );
+    $("input-kind").value = template.kind;
+  }
+
   function applyPreset() {
     const preset = $("workflow-preset").value;
+    if (publicDemo) {
+      $("preset-description").textContent = preset === "document-quality"
+        ? L("Misst Schärfe und Helligkeit der Beispielseite, fordert eine Neuaufnahme an und misst die gewählte Ersatzaufnahme erneut.", "Measures sharpness and brightness of the sample page, requests a re-capture and measures the chosen replacement again.")
+        : L("Misst Bewegung im Beispielvideo und beobachtet nach der festen Offline-Modellentscheidung einen kurzen Folgeausschnitt.", "Measures motion in the sample video and observes a short follow-up after the fixed offline model decision.");
+      renderPublicSamples();
+      return;
+    }
     $("model-question-group").hidden = preset === "document-quality";
     if (preset === "document-quality") {
       $("input-kind").value = "image";
@@ -278,6 +335,13 @@
   }
 
   async function buildConfig() {
+    if (publicDemo) {
+      const template = sampleTemplate();
+      if (!template) throw new Error(L("Die Vorlagen der öffentlichen Demo sind nicht geladen.", "The public demo templates are not loaded."));
+      const config = JSON.parse(JSON.stringify(template.config));
+      config.input.source = $("public-sample").value;
+      return config;
+    }
     const kind = $("input-kind").value;
     const preset = $("workflow-preset").value;
     const tool = $("tool-select").value;
@@ -579,6 +643,19 @@
     $("approval-panel").hidden = !waitingForApproval;
     if (waitingForInput) {
       $("input-reason").textContent = inputRequest.reason || L("Der Lauf wartet auf eine Eingabe.", "The run is waiting for input.");
+      for (const selector of ['label[for="public-replacement"]', "#public-replacement"]) document.querySelector(selector).hidden = !publicDemo;
+      for (const selector of ['label[for="replacement-file"]', '#replacement-file', 'label[for="resume-json"]', "#resume-json"]) {
+        document.querySelector(selector).hidden = publicDemo;
+      }
+      if (publicDemo) {
+        const template = sampleTemplates.find((item) => item.kind === currentInputKind);
+        const replacement = $("public-replacement");
+        if (template && replacement.options.length !== template.samples.length) {
+          fillSampleSelect(replacement, template.samples);
+          replacement.value = template.samples.at(-1);
+        }
+        return;
+      }
       $("replacement-file").hidden = currentInputKind === "camera";
       $("replacement-file").accept = currentInputKind === "image" ? "image/*" : "video/*,.avi,.mp4,.mov,.mkv,.webm";
     }
@@ -623,7 +700,10 @@
       }
       const payload = { input: value };
       const file = $("replacement-file").files && $("replacement-file").files[0];
-      if (file) payload.source = await resolveSource(currentInputKind, $("replacement-file"));
+      if (publicDemo) {
+        payload.input = {};
+        payload.source = $("public-replacement").value;
+      } else if (file) payload.source = await resolveSource(currentInputKind, $("replacement-file"));
       const result = await postJson(`/runs/${encodeURIComponent(currentRunId)}/input`, payload);
       currentResult = result;
       renderResult(result);
@@ -1033,14 +1113,16 @@
       sessionReady = true;
       descriptors = (await jsonRequest("/tools")).tools || [];
       renderToolChoices();
-      const publicDemo = session.public_demo === true;
+      publicDemo = session.public_demo === true;
+      if (publicDemo) {
+        sampleTemplates = (await jsonRequest("/samples")).workflows || [];
+        configurePublicWorkflows();
+        applyPreset();
+      }
       document.title = publicDemo
         ? L("VisionFlow – öffentliche Straßendemo", "VisionFlow – public road demo")
         : L("VisionFlow – lokaler Analyse-Arbeitsplatz", "VisionFlow – local analysis workplace");
       $("public-demo-note").hidden = !publicDemo;
-      $("analysis-tab").hidden = publicDemo;
-      $("analysis-tab").disabled = publicDemo;
-      $("hero-reuse").hidden = publicDemo;
       $("connection-status").textContent = publicDemo
         ? L("Öffentliche Demo · Sitzung aktiv", "Public demo · session active")
         : L("Lokaler Server verbunden · Sitzung aktiv", "Local server connected · session active");

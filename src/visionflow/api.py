@@ -36,16 +36,21 @@ SESSION_TTL_SECONDS = 8 * 60 * 60
 MAX_PUBLIC_SESSIONS = 128
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 DEFAULT_PUBLIC_UPLOAD_QUOTA_BYTES = 200 * 1024 * 1024
+# Public sample workflows: one active run per session, a few at once, and only
+# the newest finished runs are kept (older ones lose their files and records).
+MAX_PUBLIC_SAMPLE_RUNS = 32
+MAX_ACTIVE_PUBLIC_SAMPLE_RUNS = 8
 _PUBLIC_UPLOAD_REF = re.compile(r"uploads/vf_[0-9a-f]{48}\.bin")
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 class _ApiFault(Exception):
-    def __init__(self, status: int, code: str, message: str) -> None:
+    def __init__(self, status: int, code: str, message: str, *, retry_after: int | None = None) -> None:
         super().__init__(message)
         self.status = status
         self.code = code
         self.message = message
+        self.retry_after = retry_after
 
 
 class _ApiState:
@@ -91,6 +96,8 @@ class _ApiState:
         self.road_unavailable_reason = road_unavailable_reason or "ffmpeg_required"
         self.sessions: dict[str, tuple[str, float]] = {}
         self.run_sessions: dict[str, str] = {}
+        # Public sample runs in start order: run_id -> (session_id, input kind).
+        self.sample_runs: dict[str, tuple[str, str]] = {}
         self.lock = threading.RLock()
         def forget_owner(run_id: str) -> None:
             with self.lock:
@@ -170,8 +177,9 @@ def create_server(
     """Create a local server. It is loopback-only and does not start automatically.
 
     With public_demo the server is prepared for a hosted demo behind a reverse
-    proxy: workflows may only read synthetic road simulation sources. Uploads
-    are disabled in this mode. The bind stays loopback-only.
+    proxy: workflows may only read synthetic road simulation sources, and the
+    unchanged bundled templates may run on their sample media. Uploads are
+    disabled in this mode. The bind stays loopback-only.
     """
     return VisionFlowHTTPServer(
         (host, port),
@@ -313,7 +321,12 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
 
     def _send_fault(self, fault: _ApiFault) -> None:
         self.close_connection = True
-        self._send_error(fault.status, fault.code, fault.message)
+        if fault.retry_after:
+            self._send_json(fault.status, {"error": {"code": fault.code, "message": fault.message,
+                                                     "retry_after_seconds": fault.retry_after}},
+                            extra_headers={"Retry-After": str(fault.retry_after)})
+        else:
+            self._send_error(fault.status, fault.code, fault.message)
         self.wfile.flush()
         self._discard_unread_body()
 
@@ -469,12 +482,15 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             raise _ApiFault(404, "road_source_not_found", "Die Kameraquelle wurde nicht gefunden.") from exc
 
     def _check_public_source(self, kind: Any, source: Any) -> None:
-        """In the public demo only synthetic road simulations are readable."""
+        """In the public demo only road simulations and bundled samples are readable."""
         if not self.server.state.public_demo:
             return
         from visionflow.road_api import ROAD_SOURCE_PREFIX
+        from visionflow.samples import SAMPLE_SOURCES
 
         if kind == "camera" and isinstance(source, str) and source.startswith(ROAD_SOURCE_PREFIX):
+            return
+        if isinstance(source, str) and source in SAMPLE_SOURCES and SAMPLE_SOURCES[source][0] == kind:
             return
         raise _ApiFault(
             403,
@@ -482,8 +498,19 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             "The public demo only reads the synthetic road simulation.",
         )
 
-    def _check_public_resume(self, body: Any) -> None:
+    def _check_public_resume(self, run_id: str, body: Any) -> None:
         if not self.server.state.public_demo or not isinstance(body, dict):
+            return
+        with self.server.state.lock:
+            sample = self.server.state.sample_runs.get(run_id)
+        if sample is not None:
+            # A public sample run continues only with another sample of its kind.
+            if set(body) - {"source", "input"} or body.get("input", {}) != {} or (
+                "source" in body and body["source"] is not None
+                and not self._is_sample_of_kind(body["source"], sample[1])
+            ):
+                raise _ApiFault(403, "public_demo_source_rejected",
+                                "The public demo only reads its bundled samples.")
             return
         nested = body.get("input")
         for container in (body, nested if isinstance(nested, dict) else {}):
@@ -497,6 +524,49 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                 road = isinstance(source, str) and source.startswith(ROAD_SOURCE_PREFIX)
                 kind = "camera" if road else "image"
             self._check_public_source(kind, source)
+
+    @staticmethod
+    def _is_sample_of_kind(source: Any, kind: str) -> bool:
+        from visionflow.samples import SAMPLE_SOURCES
+
+        return isinstance(source, str) and SAMPLE_SOURCES.get(source, ("",))[0] == kind
+
+    def _admit_public_sample_run(self, session_id: str, body: Any) -> str:
+        """Allow only an unchanged bundled template on its own samples, within bounds."""
+        from visionflow.samples import matching_sample_template
+
+        template = matching_sample_template(body)
+        if template is None:
+            raise _ApiFault(403, "public_demo_workflow_disabled",
+                            "The public demo runs the road cases and the bundled sample workflows only.")
+        state = self.server.state
+        controller = state.controller
+        with state.lock:
+            known = list(state.sample_runs.items())
+        active = []
+        finished = []
+        for run_id, (owner, _kind) in known:
+            try:
+                status = controller.status(run_id).status
+            except UnknownRun:
+                with state.lock:
+                    state.sample_runs.pop(run_id, None)
+                continue
+            (finished if status in {"completed", "failed", "cancelled"} else active).append((run_id, owner))
+        if any(hmac.compare_digest(owner, session_id) for _run, owner in active):
+            raise _ApiFault(429, "public_demo_run_limit",
+                            "Finish or cancel your running sample workflow first.", retry_after=5)
+        if len(active) >= MAX_ACTIVE_PUBLIC_SAMPLE_RUNS:
+            from visionflow.retention import RetentionCapacityError
+            raise RetentionCapacityError("The public sample workflow slots are busy.")
+        for run_id, _owner in finished[: max(0, len(known) + 1 - MAX_PUBLIC_SAMPLE_RUNS)]:
+            try:
+                controller.forget_run(run_id)  # deletes its evidence, then the record
+            except (RuntimeError, OSError, UnknownRun):
+                continue
+            with state.lock:
+                state.sample_runs.pop(run_id, None)
+        return template["kind"]
 
     def _authorize_workflow_source(self, session_id: str, workflow: Any) -> str | None:
         from visionflow.road_api import ROAD_SOURCE_PREFIX
@@ -688,6 +758,12 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
             if path == "/tools":
                 self._send_json(200, {"tools": self.server.state.registry.descriptors})
                 return
+            if path == "/samples":
+                from visionflow.samples import sample_templates
+
+                self._send_json(200, {"workflows": sample_templates(),
+                                      "public_demo": self.server.state.public_demo})
+                return
 
             if path in {
                 "/", "/index.html", "/app.js", "/style.css", "/road-camera.js",
@@ -835,9 +911,9 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                     getattr(getattr(workflow, "input", None), "kind", None),
                     getattr(getattr(workflow, "input", None), "source", None),
                 )
+                sample_kind = None
                 if self.server.state.public_demo:
-                    raise _ApiFault(403, "public_demo_workflow_disabled",
-                                    "The public demo runs the bounded road case workflow only.")
+                    sample_kind = self._admit_public_sample_run(session_id, body)
                 road_source_id = self._authorize_workflow_source(session_id, workflow)
                 result = self.server.state.controller.start(workflow)
                 run_id = getattr(result, "run_id", None)
@@ -847,6 +923,8 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                     if run_id in self.server.state.run_sessions:
                         raise _ApiFault(409, "run_id_conflict", "The controller returned a duplicate run ID.")
                     self.server.state.run_sessions[run_id] = session_id
+                    if sample_kind is not None:
+                        self.server.state.sample_runs[run_id] = (session_id, sample_kind)
                 if road_source_id is not None:
                     try:
                         self._road_service().bind_run(session_id, road_source_id, run_id)
@@ -874,7 +952,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                     return
                 if action == "input":
                     self._require_run_owner(run_id, session_id)
-                    self._check_public_resume(body)
+                    self._check_public_resume(run_id, body)
                     road_source_id = self._resume_source(body)
                     if road_source_id is not None:
                         self._authorize_road_source(session_id, road_source_id)

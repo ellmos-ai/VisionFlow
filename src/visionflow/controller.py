@@ -95,6 +95,7 @@ class Controller:
         approval_store: Any = None,
         observer: Callable[..., Any] | None = None,
         retention: Any = None,
+        retention_scope: Callable[[str], bool] | None = None,
     ) -> None:
         if not isinstance(registry, ToolRegistry):
             raise TypeError("registry must be a ToolRegistry")
@@ -107,6 +108,8 @@ class Controller:
         self._approval_lock = threading.Lock()
         self.observer = observer
         self.retention = retention
+        # Sources whose runs are charged to the retention budget (None: all sources).
+        self.retention_scope = retention_scope
         self._forget_callbacks: set[Callable[[str], None]] = set()
         self._runs: dict[str, _Run] = {}
         self._runs_lock = threading.RLock()
@@ -117,7 +120,7 @@ class Controller:
             raise ConfigError("config must be a validated WorkflowConfig")
         run_config = copy.deepcopy(config)
         run_id = uuid.uuid4().hex
-        if self.retention is not None:
+        if self._charges(run_config.input.source):
             self.retention.ensure_usage(run_config.input.source, "run:" + run_id, 4096)
         limits = run_config.limits
         budget = Budget(
@@ -615,7 +618,7 @@ class Controller:
                 image_bytes = encoded.tobytes()
             except ImportError as exc:
                 raise MediaError("NumPy/OpenCV is required to store array evidence") from exc
-        if self.retention is not None:
+        if self._charges(run.config.input.source):
             self.retention.ensure_usage(run.config.input.source, "evidence:" + run.result.run_id,
                                         run.retained_evidence_bytes + len(image_bytes))
         path = store_evidence(self.evidence_root, run.result.run_id, evidence_id, image_bytes)
@@ -1266,8 +1269,11 @@ class Controller:
         with run.lock:
             self._record_locked(run, event)
 
+    def _charges(self, source: str) -> bool:
+        return self.retention is not None and (self.retention_scope is None or self.retention_scope(source))
+
     def _account_metadata(self, run: _Run, value: Any) -> None:
-        if self.retention is None:
+        if not self._charges(run.config.input.source):
             return
         size = 2 * len(json.dumps(self._json_safe(value), ensure_ascii=False, allow_nan=False).encode("utf-8"))
         self.retention.ensure_usage(run.config.input.source, "run:" + run.result.run_id,

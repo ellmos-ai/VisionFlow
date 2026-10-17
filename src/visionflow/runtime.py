@@ -135,6 +135,8 @@ def create_controller(
     clock: Any = None,
     source_override: Callable[[InputConfig, int], Any | None] | None = None,
     retention: Any = None,
+    retention_scope: Callable[[str], bool] | None = None,
+    samples: bool = False,
 ):
     """Build a local controller, optionally replacing the default fixture factory.
 
@@ -172,6 +174,11 @@ def create_controller(
 
     if source_override is not None and not callable(source_override):
         raise ConfigError("source_override must be callable")
+    sample_paths: dict[str, Path] = {}
+    if samples:
+        from visionflow.samples import SAMPLE_SOURCES, prepare_samples
+
+        sample_paths = prepare_samples(root / "samples")
 
     def source_factory(input_config: InputConfig, max_frames: int):
         if not isinstance(input_config, InputConfig):
@@ -201,6 +208,16 @@ def create_controller(
                 return overridden
 
         source = input_config.source
+        if source in sample_paths:
+            # Bundled sample media keep their public reference as source ID.
+            if SAMPLE_SOURCES[source][0] != input_config.kind:
+                raise ConfigError("the sample does not match the workflow input kind")
+            inner = media.open_source(
+                InputConfig(input_config.kind, str(sample_paths[source])),
+                max_frames,
+                allowed_camera_sources=permitted_cameras,
+            )
+            return _SourceIdView(inner, source)
         if source.startswith("uploads/"):
             relative = PurePosixPath(source)
             if (
@@ -250,6 +267,7 @@ def create_controller(
         controller_options["clock"] = clock
     if retention is not None:
         controller_options["retention"] = retention
+        controller_options["retention_scope"] = retention_scope
     controller = Controller(
         create_registry(),
         **controller_options,

@@ -298,7 +298,7 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Hosted jury demo behind a reverse proxy: only synthetic road simulations "
-            "are readable, uploads are disabled and live road "
+            "and the bundled sample workflows are readable, uploads are disabled and live road "
             "sessions are limited. The bind stays loopback-only."
         ),
     )
