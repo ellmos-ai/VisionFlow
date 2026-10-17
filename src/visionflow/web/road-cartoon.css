@@ -1220,6 +1220,9 @@ body { background: var(--control-sky); }
 .intro-details .hero { background: var(--control-paper); border-color: var(--control-line); margin: .7rem 0; }
 .intro-details .hero h2, .intro-details .hero-step-label { color: var(--control-ink); }
 .intro-details .hero-lead, .intro-details .hero-reuse, .intro-details .hero-steps li { color: #445d71; }
+/* Light tiles on the light intro: dark text keeps WCAG AA (>= 4.5:1). */
+.intro-details .hero-steps li { background: #f4f8fb; border-right-color: var(--control-line); border-bottom-color: var(--control-line); border-left-color: var(--control-line); color: #2f4a60; }
+.intro-details .public-demo-note { background: #fff6dc; border-color: #c9952e; color: #6b4300; }
 .workspace-tabs .button { font-size: .85rem; }
 .workspace-tabs .button.secondary { color: var(--control-ink); background: #fff; border-color: var(--control-line); }
 .workspace-tabs .button.primary { background: var(--control-blue); color: #fff; border-color: var(--control-blue); }
