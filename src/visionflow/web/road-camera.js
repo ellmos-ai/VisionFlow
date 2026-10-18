@@ -421,30 +421,27 @@ export function mountRoadCamera(container, apiClient) {
     const url = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
     const sequence = ++frameSequence;
     pendingFrameUrls.add(url);
-    frame.onload = () => {
-      if (!pendingFrameUrls.has(url)) return;
-      pendingFrameUrls.delete(url);
+    // Decode off screen first: swapping src to an undecoded image leaves the monitor
+    // unpainted for some compositor frames while the overlay is already drawn (W3).
+    const next = new Image();
+    next.src = url;
+    next.decode().then(() => {
+      if (!pendingFrameUrls.delete(url)) return;
       if (sequence !== frameSequence) {
         URL.revokeObjectURL(url);
         return;
       }
-      if (frameObjectUrl && frameObjectUrl !== url) URL.revokeObjectURL(frameObjectUrl);
+      if (frameObjectUrl) URL.revokeObjectURL(frameObjectUrl);
       for (const pending of pendingFrameUrls) URL.revokeObjectURL(pending);
       pendingFrameUrls.clear();
       frameObjectUrl = url;
-      frame.onload = null;
-      frame.onerror = null;
       // Image and its own overlay change together.
+      frame.src = url;
       viewport.dataset.frameId = frameId;
       drawOverlay(analysis, state);
-    };
-    frame.onerror = () => {
+    }, () => {
       if (pendingFrameUrls.delete(url)) URL.revokeObjectURL(url);
-      if (frameObjectUrl === url) frameObjectUrl = null;
-      frame.onload = null;
-      frame.onerror = null;
-    };
-    frame.src = url;
+    });
   }
 
   function clearRecordingTimer() {

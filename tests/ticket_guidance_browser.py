@@ -11,7 +11,12 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from browser_support import assert_event_cooldown, assert_overlay_bound_to_frames, launch_browser
+from browser_support import (
+    assert_camera_image_always_painted,
+    assert_event_cooldown,
+    assert_overlay_bound_to_frames,
+    launch_browser,
+)
 
 # WCAG 2.x contrast of every visible intro text against its first opaque background.
 INTRO_CONTRAST_JS = """() => {
@@ -108,6 +113,8 @@ def run(base_url: str, output: Path) -> dict:
             checks["analysis_overlay_bound_to_its_frame"] = True
             result["cooldown"] = assert_event_cooldown(page)
             checks["second_event_waits_for_countdown_and_server_rejects_it"] = True
+            result["painted"] = assert_camera_image_always_painted(page)
+            checks["live_camera_image_never_unpainted"] = True
             page.wait_for_function("() => document.querySelector('#journey-ticket-title').textContent === 'Ticket #1'", timeout=90000)
             page.wait_for_function("() => document.querySelector('#journey-ticket-status').textContent.includes('Human review')", timeout=90000)
             case_id = page.locator("#journey-ticket-select").input_value()

@@ -107,6 +107,49 @@ def assert_overlay_bound_to_frames(page: object, seconds: float = 6.0) -> dict:
     return {"samples": len(samples), "with_overlay": len(drawn)}
 
 
+def assert_camera_image_always_painted(page: object, seconds: float = 6.0) -> dict:
+    """W3: no composited frame shows the live camera without its image (dark monitor).
+
+    Records a CDP screencast and counts frames where most of the camera viewport
+    shows its background colour (#0b1220) instead of the road scene.
+    """
+    import base64
+    import time
+
+    import cv2
+    import numpy as np
+
+    rect = page.evaluate(  # type: ignore[attr-defined]
+        """() => { const r = document.querySelector('#cartoon-feed-mount .road-camera__viewport').getBoundingClientRect();
+        return [r.left, r.top, r.width, r.height, innerWidth]; }"""
+    )
+    cdp = page.context.new_cdp_session(page)  # type: ignore[attr-defined]
+    frames: list[bytes] = []
+
+    def on_frame(event: dict) -> None:
+        frames.append(base64.b64decode(event["data"]))
+        cdp.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
+
+    cdp.on("Page.screencastFrame", on_frame)
+    cdp.send("Page.startScreencast", {"format": "jpeg", "quality": 80, "everyNthFrame": 1})
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        page.wait_for_timeout(100)  # type: ignore[attr-defined]
+    cdp.send("Page.stopScreencast")
+    cdp.detach()
+    background = np.array([32, 18, 11], np.int16)  # #0b1220 in BGR
+    dark = 0
+    for jpeg in frames:
+        image = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+        scale = image.shape[1] / rect[4]
+        x, y, w, h = (int(round(value * scale)) for value in rect[:4])
+        crop = image[y + 4:y + h - 4, x + 4:x + w - 4].astype(np.int16)
+        dark += float(np.all(np.abs(crop - background) < 18, axis=2).mean()) > 0.6
+    assert len(frames) >= 30, len(frames)
+    assert dark == 0, f"{dark} of {len(frames)} composited frames show the camera without its image"
+    return {"frames": len(frames), "dark": dark}
+
+
 def launch_browser(playwright: object) -> tuple[object, str]:
     executable, label = browser_executable()
     options: dict[str, object] = {
