@@ -343,18 +343,20 @@ class RoadWorld:
             return None
         return lane, self._lane_center(lane, y), y, self._depth(y), direction
 
-    def _vehicle_boxes(self, source_time: float) -> list[dict[str, object]]:
-        """Axis-aligned image boxes of every drawn car (scene geometry for tests)."""
+    def _vehicle_tiles(self, source_time: float) -> list[dict[str, object]]:
+        """Every drawn car as (x0, y0, premultiplied, alpha) tile (scene geometry for tests)."""
         rows: list[dict[str, object]] = []
-        for car, x, y, depth, _direction in self._traffic_positions(source_time):
-            rows.append({"kind": "traffic", "lane": car.lane, "box": self._car_box(x, y, depth, car.lane)})
+        for car, x, y, depth, direction in self._traffic_positions(source_time):
+            rows.append({"kind": "traffic", "lane": car.lane,
+                         "tile": self._car_tile(x, y, depth, car.color, direction, car.lane)})
         for event in self._events:
             if event.kind != "wrong_way":
                 continue
             position = self._wrong_way_position(event, source_time)
             if position is not None:
-                lane, x, y, depth, _direction = position
-                rows.append({"kind": "wrong_way", "lane": lane, "box": self._car_box(x, y, depth, lane)})
+                lane, x, y, depth, direction = position
+                rows.append({"kind": "wrong_way", "lane": lane,
+                             "tile": self._car_tile(x, y, depth, event.color, direction, lane)})
         return rows
 
     def _car_size(self, depth: float) -> tuple[int, int]:
@@ -366,13 +368,6 @@ class RoadWorld:
         top_x, bottom_x = _persp(_LANE_CENTERS[lane])
         travel = max(1, self.height - 1 - self._horizon)
         return math.degrees(math.atan2((bottom_x - top_x) * self.width, travel))
-
-    def _car_box(self, x: float, y: float, depth: float, lane: int) -> tuple[float, float, float, float]:
-        car_width, car_height = self._car_size(depth)
-        angle = math.radians(abs(self._lane_angle(lane)))
-        half_w = (car_width * math.cos(angle) + car_height * math.sin(angle)) / 2
-        half_h = (car_height * math.cos(angle) + car_width * math.sin(angle)) / 2
-        return x - half_w, y - half_h, x + half_w, y + half_h
 
     def _draw_traffic(self, image: np.ndarray, source_time: float) -> None:
         for car, x, y, depth, direction in self._traffic_positions(source_time):
@@ -420,15 +415,8 @@ class RoadWorld:
         The tile is drawn twice (black and white background); their difference gives
         an exact anti-aliased alpha without a key colour.
         """
-        scale = min(self.width / 960.0, self.height / 540.0)
-        car_width, car_height = self._car_size(depth)
-        angle = self._lane_angle(lane)
-        premultiplied, alpha = _car_sprite(
-            tuple(color), direction, car_width, car_height, round(angle, 2), scale
-        )
+        x0, y0, premultiplied, alpha = self._car_tile(center_x, center_y, depth, color, direction, lane)
         side = premultiplied.shape[0]
-        half = side // 2
-        x0, y0 = round(center_x) - half, round(center_y) - half
         ix0, iy0 = max(0, x0), max(0, y0)
         ix1, iy1 = min(image.shape[1], x0 + side), min(image.shape[0], y0 + side)
         if ix0 >= ix1 or iy0 >= iy1:
@@ -439,6 +427,24 @@ class RoadWorld:
         a = alpha[ty0:ty1, tx0:tx1]
         blended = region * (1.0 - a) + premultiplied[ty0:ty1, tx0:tx1]
         image[iy0:iy1, ix0:ix1] = np.clip(blended, 0, 255).astype(np.uint8)
+
+    def _car_tile(
+        self,
+        center_x: float,
+        center_y: float,
+        depth: float,
+        color: tuple[int, int, int],
+        direction: int,
+        lane: int,
+    ) -> tuple[int, int, np.ndarray, np.ndarray]:
+        """Top-left corner, premultiplied colour and alpha of one car as drawn."""
+        scale = min(self.width / 960.0, self.height / 540.0)
+        car_width, car_height = self._car_size(depth)
+        premultiplied, alpha = _car_sprite(
+            tuple(color), direction, car_width, car_height, round(self._lane_angle(lane), 2), scale
+        )
+        half = premultiplied.shape[0] // 2
+        return round(center_x) - half, round(center_y) - half, premultiplied, alpha
 
     @staticmethod
     def _draw_car_upright(

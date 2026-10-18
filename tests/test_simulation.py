@@ -197,8 +197,18 @@ def test_wrong_way_event_moves_against_both_normal_lane_directions():
     assert up_lane_centers[-1] > up_lane_centers[0] + 25
 
 
-def _overlaps(first, second) -> bool:
-    return not (first[2] <= second[0] or second[2] <= first[0] or first[3] <= second[1] or second[3] <= first[1])
+def _covered_pixels(first, second) -> int:
+    """Pixels where two drawn cars are both at least half opaque (exact sprite alpha)."""
+    ax, ay, _premultiplied, alpha_a = first["tile"]
+    bx, by, _premultiplied, alpha_b = second["tile"]
+    size_a, size_b = alpha_a.shape[0], alpha_b.shape[0]
+    x0, y0 = max(ax, bx), max(ay, by)
+    x1, y1 = min(ax + size_a, bx + size_b), min(ay + size_a, by + size_b)
+    if x0 >= x1 or y0 >= y1:
+        return 0
+    a = alpha_a[y0 - ay:y1 - ay, x0 - ax:x1 - ax, 0] > 0.5
+    b = alpha_b[y0 - by:y1 - by, x0 - bx:x1 - bx, 0] > 0.5
+    return int(np.count_nonzero(a & b))
 
 
 @pytest.mark.parametrize("seed", (17, 18, 42, 101))
@@ -210,14 +220,12 @@ def test_traffic_in_a_lane_shares_one_speed_and_never_overlaps(seed):
         speeds.setdefault(car.lane, set()).add(car.speed)
     assert all(len(values) == 1 for values in speeds.values()), speeds
     assert sum(1 for _ in world._traffic) >= 6
-    # Neighbouring lanes are a full lane apart and a car fills 44 % of its lane, so
-    # only cars sharing a lane could touch; check them over two traffic cycles.
-    for step in range(0, 600):
-        boxes = [row for row in world._vehicle_boxes(step / 20.0) if row["kind"] == "traffic"]
-        for index, first in enumerate(boxes):
-            for second in boxes[index + 1:]:
-                if first["lane"] == second["lane"]:
-                    assert not _overlaps(first["box"], second["box"]), (step / 20.0, first, second)
+    # Pixel-exact over two traffic cycles: same lane and neighbouring lanes.
+    for step in range(0, 600, 2):
+        tiles = world._vehicle_tiles(step / 20.0)
+        for index, first in enumerate(tiles):
+            for second in tiles[index + 1:]:
+                assert _covered_pixels(first, second) == 0, (step / 20.0, first["lane"], second["lane"])
 
 
 @pytest.mark.parametrize("seed", (17, 18, 42, 101))
@@ -229,14 +237,14 @@ def test_wrong_way_driver_uses_a_free_lane_and_never_covers_traffic(seed):
     seen = 0
     for step in range(0, 200):
         t = 3.0 + step / 20.0
-        boxes = world._vehicle_boxes(t)
-        driver = [row for row in boxes if row["kind"] == "wrong_way"]
-        traffic = [row for row in boxes if row["kind"] == "traffic"]
+        tiles = world._vehicle_tiles(t)
+        driver = [row for row in tiles if row["kind"] == "wrong_way"]
+        traffic = [row for row in tiles if row["kind"] == "traffic"]
         if not driver:
             continue
         seen += 1
         assert all(row["lane"] != driver[0]["lane"] for row in traffic)
-        assert not any(_overlaps(driver[0]["box"], row["box"]) for row in traffic), (t, driver, traffic)
+        assert not any(_covered_pixels(driver[0], row) for row in traffic), t
     assert seen >= 100  # at least five seconds in view
 
 
