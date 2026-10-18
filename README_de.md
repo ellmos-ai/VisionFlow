@@ -33,8 +33,19 @@ mit zwei echten aufgezeichneten Abläufen und elektronischer Originalmusik.
 
 Die Oberfläche ist standardmäßig englisch; Deutsch über den Knopf „DE“ oder `?lang=de`.
 
-Die öffentliche Demo zeigt ausschließlich synthetischen Straßenverkehr mit festen
-Offline-Antworten. Bild- und Videouploads sowie die anderen Abläufe stehen in der lokalen App bereit.
+Die öffentliche Demo zeigt synthetischen Straßenverkehr mit festen Offline-Antworten. Über den
+zweiten Knopf in der Kopfzeile laufen dort auch die wiederverwendbaren Abläufe, allerdings nur die
+zwei mitgelieferten Vorlagen (Dokumentqualität, Bewegungsbeobachtung) mit vom Server erzeugten
+Beispiel-Eingaben; Uploads, Dateipfade und Kameras werden abgelehnt. Eigene Bilder und Videos
+lassen sich in der lokalen App prüfen.
+
+Das Kamerabild zeichnet Rahmen, Bewegungspfeile und das Label „GEGENBEWEGUNG“ nur aus den Spuren
+des Richtungswerkzeugs für genau das gezeigte Bild; die Kopfzeile nennt die gemessenen Analysen pro
+Sekunde und den Abstand zum Livebild, der Schalter „Rahmen“ blendet die Überlagerung aus
+(Standard: an). Es wird jeweils ein Szenarioereignis analysiert: Die Einblende-Knöpfe zählen herunter,
+bis das vorherige Ereignis ausgewertet ist, und der Server lehnt ein früheres Ereignis mit
+`409 event_cooldown` und `Retry-After` ab. Endet eine Kamera an ihrem Aufnahme- oder Zeitlimit,
+erklärt Raum 1, wie es weitergeht.
 
 Jede Erkennung erzeugt ein nummeriertes Ticket an seiner aktuellen Station: Modellprüfung
 in Raum 2, menschliche Prüfung in Raum 3 und abgelaufene Fristen in Raum 4. Ein zweites Ereignis

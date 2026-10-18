@@ -15,6 +15,9 @@ and reports are simulated. A visible time-jump label identifies the shortened wa
    start the camera with its own control, then press **Inject wrong-way driver** (or bird / leaf).
    Injecting is not a detection: the server
    analyses the rendered frames with OpenCV and opens a case only if it finds opposing motion.
+   The camera view draws boxes and arrows only from the tracks of the frame it shows (switch
+   *Boxes*). One event is analysed at a time; the inject buttons count down until the next one
+   is possible. If a camera ends at its recording or time limit, room 1 explains how to continue.
 3. Use the black bottom arrows to follow the same selected ticket to room 2
    (assessment, clip and model answer), room 3 (human review: confirm or deny)
    and room 4 (deadline and report). Technical stage identifiers and hashes open under details.
@@ -22,8 +25,10 @@ and reports are simulated. A visible time-jump label identifies the shortened wa
 4. For a second, separate example, first choose the fixed **bird** response and start a fresh
    camera case before injecting a bird. A visual candidate receives the predefined
    no-hazard response and closes. The offline response does not inspect the clip.
-5. Image and video workflows are available in the locally installed app (section 2).
-   The hosted road demo does not accept uploads.
+5. The second header button opens the reusable image and video workflows. In the hosted demo
+   they run only the two bundled templates on server-generated sample inputs; uploads, file
+   paths and cameras are rejected. Your own media can be checked in the locally installed app
+   (section 2).
 
 The public demo uses synthetic traffic, fixed offline model answers and a simulated authority
 inbox. Each camera session ends after two minutes; at most four sessions run at once (“All demo

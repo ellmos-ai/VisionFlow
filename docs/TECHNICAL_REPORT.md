@@ -73,7 +73,12 @@ diagrams. In short:
    including model errors and timeouts, goes to a human with a 60-second server deadline. No
    decision means an automatic report; a later rejection sends a linked all-clear.
 5. Every transition is in the trace and the case journal; the browser shows the same server
-   state in four rooms.
+   state in four rooms. The camera view draws boxes, arrows and the *OPPOSING MOTION* label only
+   from the direction tracks of the very frame it shows (served together by
+   `/road/sessions/{id}/analysis-frame`), with the measured analysis rate and delay; a switch
+   turns the overlay off. One scenario event is analysed at a time: the server rejects an earlier
+   event with `409 event_cooldown` and `Retry-After`, and the inject buttons count down. A camera
+   that ends at its recording or time limit reports `end_reason`, and room 1 explains it.
 
 Model output can never add a media source or an output destination. All notifications go to a
 simulated inbox.
@@ -84,8 +89,10 @@ simulated inbox.
   (arm64) t4g.small instance running Ubuntu 24.04 serves `visionflow serve --public-demo` on
   loopback behind nginx; Amazon CloudFront provides HTTPS and adds a secret origin header that
   nginx checks; the security group only admits the CloudFront origin-facing prefix list; there is
-  no SSH (SSM only). The public-demo mode only reads the synthetic road simulation, rejects
-  uploads and runs at most four live road sessions; nginx rate
+  no SSH (SSM only). The public-demo mode reads the synthetic road simulation and runs the two
+  bundled document and motion templates unchanged on server-generated samples (any other
+  workflow, upload, file path or camera is rejected; one sample run per session, at most eight
+  at once, only the 32 newest finished runs kept). It runs at most four live road sessions; nginx rate
   limits session creation and uploads; systemd restarts the service with an empty data
   directory every 24 hours.
 * **Cloud acceptance** (`cloud/template.json`, `cloud/buildspec.yml`, `cloud/acceptance.py`):
