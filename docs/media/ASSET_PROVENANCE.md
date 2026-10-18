@@ -28,3 +28,12 @@ The owner selected MIT for VisionFlow's original source on 15 October 2026; see 
 The generated-image provenance above is retained separately. Upstream software notices are
 listed in [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md); those components are not
 relicensed by the project's license choice.
+
+# README video preview
+
+`visionflow-video-thumbnail.jpg` is the custom YouTube thumbnail of the demo video
+(made in the video project from its road-scene render), as served by YouTube on
+18 October 2026. A red play badge, the caption "watch the video" and a 10 px red frame
+were added with a Pillow script (1300×740 px, SHA-256
+`2c6f27b5705a251b4d79e384790b7d3d190b4acf99862103d6411f5de48fa6a1`). The earlier
+`visionflow-video-thumbnail.png` belongs to the previous video and stays for existing links.

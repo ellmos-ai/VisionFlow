@@ -13,8 +13,8 @@ Live-Demo, Video und alle Belege. Gebaut von Lukas Geiger (Einzelteilnahme) für
 [Öffentliche AWS-Demo](https://d2fmnfnvxb0cs1.cloudfront.net/?lang=de) ·
 [Devpost-Projekt](https://devpost.com/software/visionflow-yibs83).
 
-[Vorführvideo ansehen](https://youtu.be/hyKPwB1lc6M) – 2:59 Minuten, englisch,
-mit zwei echten aufgezeichneten Abläufen und elektronischer Originalmusik.
+[Vorführvideo ansehen](https://youtu.be/4QTY6OESj2I) – 3:01 Minuten, englisch,
+mit zwei echten aufgezeichneten Abläufen und eigens synthetisierter Originalmusik.
 
 ![Spuren des Richtungswerkzeugs: grün mit dem Verkehr, rot dagegen](docs/media/direction-tracks.png)
 
