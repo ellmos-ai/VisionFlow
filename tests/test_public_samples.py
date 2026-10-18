@@ -211,6 +211,48 @@ def test_busy_sample_slots_report_their_own_code(tmp_path, monkeypatch):
         server.server_close()
 
 
+def test_parallel_sample_starts_respect_the_limits(tmp_path, monkeypatch):
+    """M-1: admission, start and registration are one step."""
+    import visionflow.api as api
+
+    monkeypatch.setattr(api, "MAX_ACTIVE_PUBLIC_SAMPLE_RUNS", 3)
+    server, thread, client = _serve(tmp_path)
+    try:
+        template = _templates(client)["document-quality"]
+        config = _config(template, "samples/document-blurred.png")
+        clients = [client] + [ApiClient(client.base_url) for _ in range(5)]
+        for other in clients[1:]:
+            other.bootstrap()
+        barrier = threading.Barrier(12)
+        results = []
+        lock = threading.Lock()
+
+        def start(owner):
+            barrier.wait()
+            outcome = _post(owner, "/runs", config)
+            with lock:
+                results.append((owner, outcome[0], outcome[1]))
+
+        # Six sessions start twice each, all at once.
+        workers = [threading.Thread(target=start, args=(owner,)) for owner in clients for _ in range(2)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=20)
+        open_runs = 0
+        for owner in clients:
+            mine = [payload["run_id"] for who, status, payload in results if who is owner and status == 202]
+            states = [_status(owner, run_id) for run_id in mine]
+            assert sum(state not in {"completed", "failed", "cancelled"} for state in states) <= 1, states
+            open_runs += sum(state not in {"completed", "failed", "cancelled"} for state in states)
+        assert open_runs <= 3
+        assert all(status in {202, 503} for _who, status, _payload in results)
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
 def test_public_demo_keeps_only_a_bounded_number_of_finished_sample_runs(tmp_path, monkeypatch):
     import visionflow.api as api
 

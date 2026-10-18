@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hmac
 import json
 import mimetypes
@@ -100,6 +101,8 @@ class _ApiState:
         self.run_sessions: dict[str, str] = {}
         # Public sample runs in start order: run_id -> (session_id, input kind, started at).
         self.sample_runs: dict[str, tuple[str, str, float]] = {}
+        # Admission, start and registration of a sample run form one step.
+        self.sample_lock = threading.Lock()
         self.lock = threading.RLock()
         def forget_owner(run_id: str) -> None:
             with self.lock:
@@ -536,7 +539,8 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
     def _admit_public_sample_run(self, session_id: str, body: Any) -> str:
         """Allow only an unchanged bundled template on its own samples, within bounds.
 
-        The session's own open run is replaced (a reload or language switch loses its
+        Runs under state.sample_lock together with start and registration. The
+        session's own open run is replaced (a reload or language switch loses its
         ID in the page), and runs left waiting for input end after a few minutes.
         """
         from visionflow.samples import matching_sample_template
@@ -922,18 +926,19 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                     getattr(getattr(workflow, "input", None), "source", None),
                 )
                 public = self.server.state.public_demo
-                sample_kind = self._admit_public_sample_run(session_id, body) if public else None
-                road_source_id = self._authorize_workflow_source(session_id, workflow)
-                result = self.server.state.controller.start(workflow)
-                run_id = getattr(result, "run_id", None)
-                if not isinstance(run_id, str) or not run_id:
-                    raise _ApiFault(500, "invalid_controller_response", "The controller returned no run ID.")
-                with self.server.state.lock:
-                    if run_id in self.server.state.run_sessions:
-                        raise _ApiFault(409, "run_id_conflict", "The controller returned a duplicate run ID.")
-                    self.server.state.run_sessions[run_id] = session_id
-                    if sample_kind is not None:
-                        self.server.state.sample_runs[run_id] = (session_id, sample_kind, time.monotonic())
+                with self.server.state.sample_lock if public else contextlib.nullcontext():
+                    sample_kind = self._admit_public_sample_run(session_id, body) if public else None
+                    road_source_id = self._authorize_workflow_source(session_id, workflow)
+                    result = self.server.state.controller.start(workflow)
+                    run_id = getattr(result, "run_id", None)
+                    if not isinstance(run_id, str) or not run_id:
+                        raise _ApiFault(500, "invalid_controller_response", "The controller returned no run ID.")
+                    with self.server.state.lock:
+                        if run_id in self.server.state.run_sessions:
+                            raise _ApiFault(409, "run_id_conflict", "The controller returned a duplicate run ID.")
+                        self.server.state.run_sessions[run_id] = session_id
+                        if sample_kind is not None:
+                            self.server.state.sample_runs[run_id] = (session_id, sample_kind, time.monotonic())
                 if road_source_id is not None:
                     try:
                         self._road_service().bind_run(session_id, road_source_id, run_id)
