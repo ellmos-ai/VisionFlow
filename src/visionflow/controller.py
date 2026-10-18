@@ -194,6 +194,7 @@ class Controller:
             run.pending_proposal = None
             source, run.source = run.source, None
             run.image_frame = None
+            self._release_live_locked(run)
             self._record_locked(run, {"type": "state_change", "state": "cancelled"})
             snapshot = copy.deepcopy(run.result)
         self._close_source(source)
@@ -310,6 +311,8 @@ class Controller:
             self._fail(run, exc)
         finally:
             with run.lock:
+                if run.result.status in _TERMINAL:
+                    self._release_live_locked(run)
                 if self.retention and run.result.status in _TERMINAL:
                     run.tool_states.clear()
                     run.image_frame = None
@@ -498,6 +501,8 @@ class Controller:
         """Expose the newest analysed frame before an observation publishes its findings."""
         analysed_at = float(self.clock.monotonic())
         with run.lock:
+            if run.result.status in _TERMINAL:
+                return
             run.live_times.append(analysed_at)
             del run.live_times[:-_LIVE_HISTORY]
             run.live_frame = frame
@@ -509,6 +514,13 @@ class Controller:
                 "timestamp_seconds": float(frame.timestamp_seconds),
                 "metrics": copy.deepcopy(finding.metrics),
             }
+
+    @staticmethod
+    def _release_live_locked(run: _Run) -> None:
+        """Drop the live-view frame of a run that can no longer analyse anything."""
+        run.live_frame = None
+        run.live_analysis = None
+        run.live_times.clear()
 
     def live_analysis(self, run_id: str) -> dict[str, Any] | None:
         """Copy of the newest analysed frame's result, with the measured analysis rate.
