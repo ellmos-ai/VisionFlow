@@ -5,12 +5,12 @@ A camera, a video or a single image goes in; OpenCV measures; the measurement op
 asks for more evidence, involves a model and a human under a deadline, and ends in a bounded,
 logged action. The flagship example is a **wrong-way driver warning** you can try in the browser.
 
-[![Watch the 2:59 VisionFlow demonstration](docs/media/visionflow-video-thumbnail.png)](https://youtu.be/hyKPwB1lc6M)
+[![Watch the 3:01 VisionFlow demonstration](docs/media/visionflow-video-thumbnail.jpg)](https://youtu.be/4QTY6OESj2I)
 
 | Try it | Where |
 |---|---|
 | **Live demo** (no install, synthetic traffic) | [Open the AWS control room](https://d2fmnfnvxb0cs1.cloudfront.net/) |
-| Demo video (2:59, English) | [Watch on YouTube](https://youtu.be/hyKPwB1lc6M) |
+| Demo video (3:01, English) | [Watch on YouTube](https://youtu.be/4QTY6OESj2I) |
 | Local install | [Quick start](#quick-start) below |
 | Technical report | [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) |
 
