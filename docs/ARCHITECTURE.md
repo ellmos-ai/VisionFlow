@@ -61,9 +61,12 @@ flowchart LR
   `--public-demo` runs the bounded road case workflow and, besides it, only the unchanged
   bundled document and motion templates on server-generated sample media
   (`GET /samples`, `samples/*`); uploads, file paths, cameras and any other workflow are
-  rejected. Each session runs at most one sample workflow at a time, at most eight run at
-  once, and only the 32 newest finished sample runs are kept (older ones lose their files
-  and records). At most four live road sessions run at once, and systemd
+  rejected. Each session has at most one open sample workflow (a new start replaces it), at
+  most eight run at once (`503 public_demo_samples_busy`), runs left waiting for input are
+  cancelled after 180 s once a new run is admitted, and only the 32 newest finished sample
+  runs are kept; older ones lose their files and records, the starting session's own runs
+  first. Sample runs are bounded by these counts, not by the retention byte budget below.
+  At most four live road sessions run at once, and systemd
   restarts the service with an empty data directory every 24 hours. No SSH; the instance is
   managed through SSM. Provider calls and cameras are disabled in this mode.
   A shared retention manager admits at most 32 retained sources against a 512 MiB data

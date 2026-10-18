@@ -572,6 +572,8 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         if len(active) >= MAX_ACTIVE_PUBLIC_SAMPLE_RUNS:
             raise _ApiFault(503, "public_demo_samples_busy",
                             "All public sample workflow slots are busy. Please try again shortly.", retry_after=30)
+        # Evict the session's own finished runs first, then the oldest of others.
+        finished.sort(key=lambda row: not hmac.compare_digest(row[1], session_id))
         for run_id, _owner in finished[: max(0, len(known) + 1 - MAX_PUBLIC_SAMPLE_RUNS)]:
             try:
                 controller.forget_run(run_id)  # deletes its evidence, then the record

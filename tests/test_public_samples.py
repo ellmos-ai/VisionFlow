@@ -253,6 +253,32 @@ def test_parallel_sample_starts_respect_the_limits(tmp_path, monkeypatch):
         server.server_close()
 
 
+def test_eviction_removes_the_sessions_own_finished_runs_first(tmp_path, monkeypatch):
+    """M-2: a busy session cannot push out another session's results first."""
+    import visionflow.api as api
+
+    monkeypatch.setattr(api, "MAX_PUBLIC_SAMPLE_RUNS", 3)
+    server, thread, mine = _serve(tmp_path)
+    try:
+        template = _templates(mine)["motion-observation"]
+        config = _config(template, "samples/motion.avi")
+        other = ApiClient(mine.base_url)
+        other.bootstrap()
+        foreign = _post(other, "/runs", config)[1]["run_id"]
+        _wait(other, foreign, {"completed"})
+        own = []
+        for _ in range(3):
+            run_id = _post(mine, "/runs", config)[1]["run_id"]
+            _wait(mine, run_id, {"completed"})
+            own.append(run_id)
+        assert mine.request("GET", f"/runs/{own[0]}", origin=mine.base_url)[0] == 404
+        assert other.request("GET", f"/runs/{foreign}", origin=other.base_url)[0] == 200
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
 def test_public_demo_keeps_only_a_bounded_number_of_finished_sample_runs(tmp_path, monkeypatch):
     import visionflow.api as api
 
