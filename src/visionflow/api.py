@@ -36,10 +36,12 @@ SESSION_TTL_SECONDS = 8 * 60 * 60
 MAX_PUBLIC_SESSIONS = 128
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 DEFAULT_PUBLIC_UPLOAD_QUOTA_BYTES = 200 * 1024 * 1024
-# Public sample workflows: one active run per session, a few at once, and only
-# the newest finished runs are kept (older ones lose their files and records).
+# Public sample workflows: one open run per session (a new start replaces it), a
+# few at once, runs abandoned while waiting for input end after a few minutes, and
+# only the newest finished runs are kept (older ones lose their files and records).
 MAX_PUBLIC_SAMPLE_RUNS = 32
 MAX_ACTIVE_PUBLIC_SAMPLE_RUNS = 8
+MAX_SAMPLE_WAIT_SECONDS = 180.0
 _PUBLIC_UPLOAD_REF = re.compile(r"uploads/vf_[0-9a-f]{48}\.bin")
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
@@ -96,8 +98,8 @@ class _ApiState:
         self.road_unavailable_reason = road_unavailable_reason or "ffmpeg_required"
         self.sessions: dict[str, tuple[str, float]] = {}
         self.run_sessions: dict[str, str] = {}
-        # Public sample runs in start order: run_id -> (session_id, input kind).
-        self.sample_runs: dict[str, tuple[str, str]] = {}
+        # Public sample runs in start order: run_id -> (session_id, input kind, started at).
+        self.sample_runs: dict[str, tuple[str, str, float]] = {}
         self.lock = threading.RLock()
         def forget_owner(run_id: str) -> None:
             with self.lock:
@@ -532,7 +534,11 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         return isinstance(source, str) and SAMPLE_SOURCES.get(source, ("",))[0] == kind
 
     def _admit_public_sample_run(self, session_id: str, body: Any) -> str:
-        """Allow only an unchanged bundled template on its own samples, within bounds."""
+        """Allow only an unchanged bundled template on its own samples, within bounds.
+
+        The session's own open run is replaced (a reload or language switch loses its
+        ID in the page), and runs left waiting for input end after a few minutes.
+        """
         from visionflow.samples import matching_sample_template
 
         template = matching_sample_template(body)
@@ -543,22 +549,25 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
         controller = state.controller
         with state.lock:
             known = list(state.sample_runs.items())
+        now = time.monotonic()
         active = []
         finished = []
-        for run_id, (owner, _kind) in known:
+        for run_id, (owner, _kind, started_at) in known:
             try:
                 status = controller.status(run_id).status
             except UnknownRun:
                 with state.lock:
                     state.sample_runs.pop(run_id, None)
                 continue
+            own = hmac.compare_digest(owner, session_id)
+            abandoned = status in {"waiting_for_input", "waiting_for_approval"} and now - started_at >= MAX_SAMPLE_WAIT_SECONDS
+            if status not in {"completed", "failed", "cancelled"} and (own or abandoned):
+                controller.cancel(run_id)
+                status = "cancelled"
             (finished if status in {"completed", "failed", "cancelled"} else active).append((run_id, owner))
-        if any(hmac.compare_digest(owner, session_id) for _run, owner in active):
-            raise _ApiFault(429, "public_demo_run_limit",
-                            "Finish or cancel your running sample workflow first.", retry_after=5)
         if len(active) >= MAX_ACTIVE_PUBLIC_SAMPLE_RUNS:
-            from visionflow.retention import RetentionCapacityError
-            raise RetentionCapacityError("The public sample workflow slots are busy.")
+            raise _ApiFault(503, "public_demo_samples_busy",
+                            "All public sample workflow slots are busy. Please try again shortly.", retry_after=30)
         for run_id, _owner in finished[: max(0, len(known) + 1 - MAX_PUBLIC_SAMPLE_RUNS)]:
             try:
                 controller.forget_run(run_id)  # deletes its evidence, then the record
@@ -912,9 +921,8 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                     getattr(getattr(workflow, "input", None), "kind", None),
                     getattr(getattr(workflow, "input", None), "source", None),
                 )
-                sample_kind = None
-                if self.server.state.public_demo:
-                    sample_kind = self._admit_public_sample_run(session_id, body)
+                public = self.server.state.public_demo
+                sample_kind = self._admit_public_sample_run(session_id, body) if public else None
                 road_source_id = self._authorize_workflow_source(session_id, workflow)
                 result = self.server.state.controller.start(workflow)
                 run_id = getattr(result, "run_id", None)
@@ -925,7 +933,7 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                         raise _ApiFault(409, "run_id_conflict", "The controller returned a duplicate run ID.")
                     self.server.state.run_sessions[run_id] = session_id
                     if sample_kind is not None:
-                        self.server.state.sample_runs[run_id] = (session_id, sample_kind)
+                        self.server.state.sample_runs[run_id] = (session_id, sample_kind, time.monotonic())
                 if road_source_id is not None:
                     try:
                         self._road_service().bind_run(session_id, road_source_id, run_id)

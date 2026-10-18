@@ -82,9 +82,9 @@
       "Das vorherige Ereignis wird noch analysiert. Das nächste Ereignis ist gleich wieder möglich.",
       "The previous event is still being analysed. The next event is possible again shortly.",
     ),
-    public_demo_run_limit: L(
-      "Dein Beispiel-Ablauf läuft noch. Schließe ihn ab oder brich ihn ab, bevor du einen neuen startest.",
-      "Your sample workflow is still running. Finish or cancel it before starting a new one.",
+    public_demo_samples_busy: L(
+      "Alle Plätze für Beispiel-Abläufe der öffentlichen Demo sind gerade belegt. Bitte in einer halben Minute erneut versuchen.",
+      "All sample workflow slots of the public demo are busy right now. Please try again in half a minute.",
     ),
     public_demo_workflow_disabled: L(
       "Die öffentliche Demo führt nur die unveränderten Vorlagen mit ihren Beispiel-Eingaben aus.",

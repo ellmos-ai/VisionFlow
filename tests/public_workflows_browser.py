@@ -37,6 +37,20 @@ def run(public_url: str, output: Path) -> dict:
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
         try:
+            # A language switch reloads the page and forgets the open run; starting
+            # again must replace it instead of locking the session (review I-1).
+            page.goto(public_url.rstrip("/") + "/?lang=en", wait_until="networkidle")
+            page.locator("#analysis-tab").click()
+            page.locator("#start-button").click()
+            page.locator("#input-panel").wait_for(timeout=30000)
+            page.goto(public_url.rstrip("/") + "/?lang=de", wait_until="networkidle")
+            page.locator("#analysis-tab").click()
+            page.locator("#start-button").click()
+            page.locator("#input-panel").wait_for(timeout=30000)
+            assert not page.locator("#setup-message").evaluate("el => el.classList.contains('error-message')")
+            page.locator("#cancel-button").click()
+            page.wait_for_function("() => document.querySelector('#status-badge').dataset.state === 'cancelled'", timeout=15000)
+            checks["restart_after_language_switch_replaces_the_open_run"] = True
             for lang, done in (("en", "Completed"), ("de", "Abgeschlossen")):
                 page.goto(public_url.rstrip("/") + f"/?lang={lang}", wait_until="networkidle")
                 page.locator(".road-cartoon-stage").wait_for()

@@ -148,18 +148,67 @@ def test_public_resume_accepts_only_a_sample_without_extra_input(public):
     assert status == 200
 
 
-def test_public_demo_runs_one_sample_workflow_per_session_at_a_time(public):
+def _status(client, run_id: str) -> str:
+    return client.request("GET", f"/runs/{run_id}", origin=client.base_url)[1]["status"]
+
+
+def test_a_new_sample_run_replaces_the_sessions_open_run_even_after_reload(public):
+    """I-1: a reload or language switch forgets the run ID; starting again must work."""
     _server, client = public
     template = _templates(client)["document-quality"]
-    first = _post(client, "/runs", _config(template, "samples/document-blurred.png"))
-    assert first[0] == 202
-    _wait(client, first[1]["run_id"], {"waiting_for_input"})
-    status, payload, headers = _post(client, "/runs", _config(template, "samples/document-blurred.png"))
-    assert status == 429
-    assert payload["error"]["code"] == "public_demo_run_limit"
-    assert int(headers["retry-after"]) >= 1
-    _post(client, f"/runs/{first[1]['run_id']}/cancel", {})
-    assert _post(client, "/runs", _config(template, "samples/document-blurred.png"))[0] == 202
+    first = _post(client, "/runs", _config(template, "samples/document-blurred.png"))[1]["run_id"]
+    _wait(client, first, {"waiting_for_input"})
+    reloaded = ApiClient(client.base_url)  # same browser cookie, page state lost
+    reloaded.cookie = client.cookie
+    assert reloaded.request("GET", "/session", origin=client.base_url)[0] == 200
+    reloaded.csrf_token = reloaded.request("GET", "/session", origin=client.base_url)[1]["csrf_token"]
+    status, started, _ = _post(reloaded, "/runs", _config(template, "samples/document-blurred.png"))
+    assert status == 202, started
+    assert _status(client, first) == "cancelled"
+    assert _wait(client, started["run_id"], {"waiting_for_input"})["status"] == "waiting_for_input"
+
+
+def test_abandoned_waiting_sample_runs_are_cancelled_after_the_wait_limit(tmp_path, monkeypatch):
+    import visionflow.api as api
+
+    monkeypatch.setattr(api, "MAX_ACTIVE_PUBLIC_SAMPLE_RUNS", 1)
+    monkeypatch.setattr(api, "MAX_SAMPLE_WAIT_SECONDS", 0.3)
+    server, thread, abandoned = _serve(tmp_path)
+    try:
+        template = _templates(abandoned)["document-quality"]
+        first = _post(abandoned, "/runs", _config(template, "samples/document-blurred.png"))[1]["run_id"]
+        _wait(abandoned, first, {"waiting_for_input"})
+        time.sleep(0.4)
+        other = ApiClient(abandoned.base_url)
+        other.bootstrap()
+        status, payload, _ = _post(other, "/runs", _config(template, "samples/document-blurred.png"))
+        assert status == 202, payload
+        assert _status(abandoned, first) == "cancelled"
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def test_busy_sample_slots_report_their_own_code(tmp_path, monkeypatch):
+    import visionflow.api as api
+
+    monkeypatch.setattr(api, "MAX_ACTIVE_PUBLIC_SAMPLE_RUNS", 1)
+    server, thread, first = _serve(tmp_path)
+    try:
+        template = _templates(first)["document-quality"]
+        run_id = _post(first, "/runs", _config(template, "samples/document-blurred.png"))[1]["run_id"]
+        _wait(first, run_id, {"waiting_for_input"})
+        second = ApiClient(first.base_url)
+        second.bootstrap()
+        status, payload, headers = _post(second, "/runs", _config(template, "samples/document-blurred.png"))
+        assert status == 503
+        assert payload["error"]["code"] == "public_demo_samples_busy"
+        assert int(headers["retry-after"]) >= 1
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
 
 
 def test_public_demo_keeps_only_a_bounded_number_of_finished_sample_runs(tmp_path, monkeypatch):
