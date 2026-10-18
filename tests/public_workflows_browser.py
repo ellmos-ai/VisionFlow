@@ -51,6 +51,27 @@ def run(public_url: str, output: Path) -> dict:
             page.locator("#cancel-button").click()
             page.wait_for_function("() => document.querySelector('#status-badge').dataset.state === 'cancelled'", timeout=15000)
             checks["restart_after_language_switch_replaces_the_open_run"] = True
+            # A waiting run that the server ended (slots full, waited too long) explains
+            # itself when the visitor finally answers (review R-1).
+            with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/runs")) as started:
+                page.locator("#start-button").click()
+            page.locator("#input-panel").wait_for(timeout=30000)
+            origin = public_url.rstrip("/")
+            csrf = page.context.request.get(origin + "/session").json()["csrf_token"]
+            ended = page.context.request.post(
+                origin + f"/runs/{started.value.json()['run_id']}/cancel", data="{}",
+                headers={"Content-Type": "application/json", "Origin": origin, "X-CSRF-Token": csrf},
+            )
+            assert ended.status == 200, ended.status
+            before = len(errors)
+            page.locator("#resume-button").click()
+            page.wait_for_function("() => document.querySelector('#run-message').textContent.includes('Inaktivität')", timeout=15000)
+            assert page.locator("#status-badge").evaluate("el => el.dataset.state") == "cancelled"
+            # The browser logs the expected 409 of that resume as a failed resource.
+            expected = [e for e in errors[before:] if "409" in e]
+            assert len(expected) <= 1, errors[before:]
+            del errors[before:before + len(expected)]
+            checks["resume_after_server_cancel_explains_inactivity"] = True
             for lang, done in (("en", "Completed"), ("de", "Abgeschlossen")):
                 page.goto(public_url.rstrip("/") + f"/?lang={lang}", wait_until="networkidle")
                 page.locator(".road-cartoon-stage").wait_for()

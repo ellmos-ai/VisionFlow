@@ -190,6 +190,41 @@ def test_abandoned_waiting_sample_runs_are_cancelled_after_the_wait_limit(tmp_pa
         server.server_close()
 
 
+def test_overdue_waiting_runs_keep_running_while_slots_are_free(tmp_path, monkeypatch):
+    """R-1: the wait limit only frees slots when they are actually short."""
+    import visionflow.api as api
+
+    monkeypatch.setattr(api, "MAX_ACTIVE_PUBLIC_SAMPLE_RUNS", 3)
+    monkeypatch.setattr(api, "MAX_SAMPLE_WAIT_SECONDS", 0.3)
+    server, thread, slow = _serve(tmp_path)
+    try:
+        template = _templates(slow)["document-quality"]
+        config = _config(template, "samples/document-blurred.png")
+        first = _post(slow, "/runs", config)[1]["run_id"]
+        _wait(slow, first, {"waiting_for_input"})
+        time.sleep(0.4)
+        others = [ApiClient(slow.base_url) for _ in range(2)]
+        for other in others:
+            other.bootstrap()
+        second = _post(others[0], "/runs", config)
+        assert second[0] == 202, second[1]
+        _wait(others[0], second[1]["run_id"], {"waiting_for_input"})
+        assert _status(slow, first) == "waiting_for_input"  # two of three slots used: keep it
+        third = _post(others[1], "/runs", config)
+        assert third[0] == 202, third[1]
+        _wait(others[1], third[1]["run_id"], {"waiting_for_input"})
+        time.sleep(0.4)
+        fourth = ApiClient(slow.base_url)
+        fourth.bootstrap()
+        assert _post(fourth, "/runs", config)[0] == 202  # slots full: the oldest overdue run gives way
+        assert _status(slow, first) == "cancelled"
+        assert _status(others[0], second[1]["run_id"]) == "waiting_for_input"
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
 def test_busy_sample_slots_report_their_own_code(tmp_path, monkeypatch):
     import visionflow.api as api
 

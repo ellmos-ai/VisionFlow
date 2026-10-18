@@ -111,7 +111,9 @@
       ));
     }
     if (error && typeof error.message === "string") {
-      return new Error(`${error.message} (HTTP ${status})`);
+      const other = new Error(`${error.message} (HTTP ${status})`);
+      other.code = error.code;
+      return other;
     }
     return new Error(L(`Die lokale Anfrage ist fehlgeschlagen (HTTP ${status}).`, `The local request failed (HTTP ${status}).`));
   }
@@ -710,7 +712,23 @@
       if (pollTimer) window.clearTimeout(pollTimer);
       pollTimer = window.setTimeout(pollStatus, 150);
     } catch (error) {
-      setMessage($("run-message"), error.message, true);
+      let text = error.message;
+      if (error.code === "invalid_transition") {
+        try {
+          const run = await jsonRequest(`/runs/${encodeURIComponent(currentRunId)}`);
+          if (run && run.status === "cancelled") {
+            currentResult = run;
+            renderResult(run);
+            text = L(
+              "Der Ablauf wurde wegen Inaktivität beendet. Bitte starte ihn neu.",
+              "The workflow was ended after a period of inactivity. Please start it again.",
+            );
+          }
+        } catch (_statusError) {
+          // Keep the original message.
+        }
+      }
+      setMessage($("run-message"), text, true);
     }
   }
 

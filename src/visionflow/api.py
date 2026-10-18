@@ -38,8 +38,9 @@ MAX_PUBLIC_SESSIONS = 128
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 DEFAULT_PUBLIC_UPLOAD_QUOTA_BYTES = 200 * 1024 * 1024
 # Public sample workflows: one open run per session (a new start replaces it), a
-# few at once, runs abandoned while waiting for input end after a few minutes, and
-# only the newest finished runs are kept (older ones lose their files and records).
+# few at once, runs waiting for input longer than a few minutes give way when the
+# slots are full, and only the newest finished runs are kept (older ones lose their
+# files and records).
 MAX_PUBLIC_SAMPLE_RUNS = 32
 MAX_ACTIVE_PUBLIC_SAMPLE_RUNS = 8
 MAX_SAMPLE_WAIT_SECONDS = 180.0
@@ -541,7 +542,8 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
 
         Runs under state.sample_lock together with start and registration. The
         session's own open run is replaced (a reload or language switch loses its
-        ID in the page), and runs left waiting for input end after a few minutes.
+        ID in the page); when all slots are taken, the oldest run left waiting for
+        input longer than MAX_SAMPLE_WAIT_SECONDS gives way.
         """
         from visionflow.samples import matching_sample_template
 
@@ -563,12 +565,21 @@ class _VisionFlowHandler(BaseHTTPRequestHandler):
                 with state.lock:
                     state.sample_runs.pop(run_id, None)
                 continue
-            own = hmac.compare_digest(owner, session_id)
-            abandoned = status in {"waiting_for_input", "waiting_for_approval"} and now - started_at >= MAX_SAMPLE_WAIT_SECONDS
-            if status not in {"completed", "failed", "cancelled"} and (own or abandoned):
+            if status not in {"completed", "failed", "cancelled"} and hmac.compare_digest(owner, session_id):
                 controller.cancel(run_id)
                 status = "cancelled"
-            (finished if status in {"completed", "failed", "cancelled"} else active).append((run_id, owner))
+            if status in {"completed", "failed", "cancelled"}:
+                finished.append((run_id, owner))
+            else:
+                overdue = status in {"waiting_for_input", "waiting_for_approval"} and now - started_at >= MAX_SAMPLE_WAIT_SECONDS
+                active.append((run_id, owner, overdue))
+        # Only a real shortage ends runs that wait too long, oldest first.
+        for row in [row for row in active if row[2]]:
+            if len(active) < MAX_ACTIVE_PUBLIC_SAMPLE_RUNS:
+                break
+            controller.cancel(row[0])
+            active.remove(row)
+            finished.append(row[:2])
         if len(active) >= MAX_ACTIVE_PUBLIC_SAMPLE_RUNS:
             raise _ApiFault(503, "public_demo_samples_busy",
                             "All public sample workflow slots are busy. Please try again shortly.", retry_after=30)
