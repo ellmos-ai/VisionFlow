@@ -56,10 +56,29 @@ def run(public_url: str, output: Path) -> dict:
             with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/runs")) as started:
                 page.locator("#start-button").click()
             page.locator("#input-panel").wait_for(timeout=30000)
+            run_id = started.value.json()["run_id"]
             origin = public_url.rstrip("/")
+            waiting = page.context.request.get(origin + f"/runs/{run_id}").text()
+            # Until the visitor answers, the page's status poll keeps seeing the waiting
+            # run (otherwise it hides the input panel before the click); the answer
+            # itself and every later poll reach the real server.
+            held = {"on": True}
+
+            def hold_waiting(route):
+                if held["on"] and route.request.method == "GET":
+                    route.fulfill(status=200, content_type="application/json", body=waiting)
+                else:
+                    route.continue_()
+
+            def release(route):
+                held["on"] = False
+                route.continue_()
+
+            page.route(f"**/runs/{run_id}", hold_waiting)
+            page.route(f"**/runs/{run_id}/input", release)
             csrf = page.context.request.get(origin + "/session").json()["csrf_token"]
             ended = page.context.request.post(
-                origin + f"/runs/{started.value.json()['run_id']}/cancel", data="{}",
+                origin + f"/runs/{run_id}/cancel", data="{}",
                 headers={"Content-Type": "application/json", "Origin": origin, "X-CSRF-Token": csrf},
             )
             assert ended.status == 200, ended.status
@@ -71,6 +90,8 @@ def run(public_url: str, output: Path) -> dict:
             expected = [e for e in errors[before:] if "409" in e]
             assert len(expected) <= 1, errors[before:]
             del errors[before:before + len(expected)]
+            page.unroute(f"**/runs/{run_id}")
+            page.unroute(f"**/runs/{run_id}/input")
             checks["resume_after_server_cancel_explains_inactivity"] = True
             for lang, done in (("en", "Completed"), ("de", "Abgeschlossen")):
                 page.goto(public_url.rstrip("/") + f"/?lang={lang}", wait_until="networkidle")
