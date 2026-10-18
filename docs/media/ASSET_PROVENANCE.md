@@ -11,8 +11,8 @@ service is contacted during a demonstration. Portraits and icons decorate the
 interface only. They are not input to the OpenCV analysis or evidence recording.
 
 The die-cast toy police car shown driving after a report (`patrol-side.png`) was generated
-on 17 October 2026 with Google Imagen 3 through Antigravity (agy) and keyed out of a green
-background with OpenCV (colour-difference alpha, spill suppression). The delivered
+on 17 October 2026 via Antigravity (agy); agy reported Google Imagen 3 as the image model.
+It was keyed out of a green background with OpenCV (colour-difference alpha, spill suppression). The delivered
 1536×1024 side view was cropped to its alpha box and scaled to 520×194 px for the web
 (premultiplied resampling); SHA-256 of the bundled file:
 `ca9b36f56410b6f30f12c167d0f057db71eaaa03175d931a0d661c21fc392502` (delivered master:
