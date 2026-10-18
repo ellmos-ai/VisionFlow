@@ -1220,6 +1220,9 @@ body { background: var(--control-sky); }
 .intro-details .hero { background: var(--control-paper); border-color: var(--control-line); margin: .7rem 0; }
 .intro-details .hero h2, .intro-details .hero-step-label { color: var(--control-ink); }
 .intro-details .hero-lead, .intro-details .hero-reuse, .intro-details .hero-steps li { color: #445d71; }
+/* Light tiles on the light intro: dark text keeps WCAG AA (>= 4.5:1). */
+.intro-details .hero-steps li { background: #f4f8fb; border-right-color: var(--control-line); border-bottom-color: var(--control-line); border-left-color: var(--control-line); color: #2f4a60; }
+.intro-details .public-demo-note { background: #fff6dc; border-color: #c9952e; color: #6b4300; }
 .workspace-tabs .button { font-size: .85rem; }
 .workspace-tabs .button.secondary { color: var(--control-ink); background: #fff; border-color: var(--control-line); }
 .workspace-tabs .button.primary { background: var(--control-blue); color: #fff; border-color: var(--control-blue); }
@@ -1397,11 +1400,9 @@ body { background: var(--control-sky); }
 .traffic-monitor { gap: .25rem; }
 .traffic-monitor__header { gap: .35rem; flex-wrap: wrap; padding: .15rem .25rem; }
 .traffic-monitor__header .chunky-btn--power { min-height: 36px; padding: .35rem .65rem; font-size: .78rem; }
-@media (min-width: 851px) {
-  #cartoon-feed-mount { max-height: 335px; }
-  #cartoon-feed-mount .road-camera__viewport { height: 100%; }
-  #cartoon-feed-mount .road-camera__frame { object-fit: contain; }
-}
+/* W8: the camera scene fills the monitor edge to edge at 16:9 (no letterbox). */
+#cartoon-feed-mount .road-camera__viewport { height: 100%; border: 0; border-radius: 0; }
+#cartoon-feed-mount .road-camera__frame { object-fit: cover; }
 
 /* Workspace choice belongs in the global header; IDs retain their bindings. */
 .app-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: .6rem 1rem; }
@@ -1418,11 +1419,22 @@ body { background: var(--control-sky); }
   .app-header > .workspace-tabs { display: grid; grid-template-columns: 1fr; width: 100%; }
   .app-header .connection-status { max-width: 15ch; }
 }
-/* Keep the complete dispatch vehicle inside a generous, unclipped scene. */
-.patrol-car-stage { display: grid; justify-items: start; align-items: start; gap: .5rem; min-height: 0; padding: .75rem 1rem; overflow: visible; }
 .patrol-dispatch-label { margin: 0; }
-.patrol-car { position: relative; left: auto; bottom: auto; width: 210px; max-width: 100%; display: block; }
-.patrol-car > img, .patrol-car > svg { display: block; width: 100%; height: auto; max-height: 145px; object-fit: contain; }
-.patrol-car.dispatching { animation: patrolArrive 1.2s ease-out both; }
-.patrol-car-road { bottom: 18px; }
-@keyframes patrolArrive { from { transform: translateX(-8px); opacity: .5; } to { transform: translateX(0); opacity: 1; } }
+/* A source that ended at a limit explains why and how to continue (M1). */
+.source-ended-notice { margin: .25rem 0; padding: .45rem .65rem; border-left: 3px solid #c9952e; border-radius: 4px; background: #fff6dc; color: #6b4300; font-size: .85rem; line-height: 1.45; }
+/* W9: the dispatched patrol car (side view, front to the right) drives once from
+   left to right across its road. */
+.patrol-car-stage { display: block; position: relative; overflow: hidden; min-height: 150px; padding: .6rem 1rem; }
+.patrol-car-road { position: absolute; left: 0; right: 0; bottom: 16px; height: 4px; }
+.patrol-car { position: absolute; left: 0; bottom: 14px; width: clamp(170px, 24vw, 280px); max-width: none; transform: translateX(-110%); }
+.patrol-car > img, .patrol-car > svg { display: block; width: 100%; height: auto; max-height: none; }
+.patrol-car.dispatching { animation: patrolDrive 7s linear both; }
+@keyframes patrolDrive { from { left: 0; transform: translateX(-110%); } to { left: 100%; transform: translateX(10%); } }
+@media (prefers-reduced-motion: reduce) {
+  /* No driving for reduced motion: the car stays visible in the middle of its road. */
+  .patrol-car.dispatching { left: 50%; transform: translateX(-50%); }
+}
+/* W8: event banners sit at the bottom so the analysis header line stays readable. */
+.traffic-anomaly-banner { top: auto; bottom: 10px; }
+/* W4: countdown until the next scenario event can be injected. */
+.event-cooldown-note { margin: 0; padding: .45rem .6rem; border-left: 3px solid var(--control-blue); border-radius: 4px; background: #e3f0fa; color: #164c74; font-size: .85rem; line-height: 1.45; }

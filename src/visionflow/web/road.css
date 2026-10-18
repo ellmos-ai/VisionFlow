@@ -331,6 +331,58 @@
   pointer-events: none;
 }
 
+.road-camera__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.road-camera__analysis-bar {
+  /* Header line under the REC/CAM row, as in the V3 camera scene. */
+  position: absolute;
+  top: 30px;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(2, 6, 23, 0.62);
+  color: #f8fafc;
+  font: 600 0.75rem/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.road-camera__analysis-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  /* Narrow monitors keep the tool and rate line; the legend would cover the scene. */
+  .road-camera__analysis-detail {
+    display: none;
+  }
+}
+
+.road-camera__overlay-toggle {
+  flex: none;
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 1px solid #94a3b8;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #f8fafc;
+  font: inherit;
+  cursor: pointer;
+}
+
+.road-camera__overlay-toggle[aria-pressed="true"] {
+  border-color: #34d399;
+}
+
 .road-camera__rec-indicator {
   display: inline-flex;
   align-items: center;
@@ -919,5 +971,99 @@
 
   .road-decision-actions > .road-btn {
     flex: 1 1 100%;
+  }
+}
+
+/* ========================================================
+   TECHNISCHE FALLANSICHT: SPALTEN, VIDEOS, LANGE AUSGABEN (W10)
+   Kein Element wird breiter als seine Spalte; lange Rohdaten scrollen
+   in ihrer Box statt die Seite zu verbreitern oder zu verlängern.
+   ======================================================== */
+.road-model-media-column,
+.road-model-details-column,
+.road-video-container,
+.road-case-container,
+.road-inbox-card,
+.road-laptop-screen-content {
+  min-width: 0;
+}
+
+.road-video-container {
+  width: 100%;
+}
+
+.road-video-player {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  max-height: 70vh;
+  background: #000;
+  border-radius: var(--road-radius-sm);
+}
+
+pre.road-stream-output {
+  margin: 0 0 12px;
+  max-height: 18rem;
+  overflow: auto;
+  padding: 10px 12px;
+  background: #060a12;
+  border: 1px solid var(--road-border-subtle);
+  border-radius: var(--road-radius-md);
+  color: #dbeafe;
+  font: 0.8rem/1.5 ui-monospace, "Cascadia Code", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.road-model-section-title {
+  margin: 14px 0 6px;
+  font-size: 0.9rem;
+  color: var(--road-text-secondary);
+}
+
+.road-panel-title,
+.road-panel-meta,
+.road-model-field-value,
+.road-case-field-value,
+.road-inbox-hash,
+.road-inbox-receipt-link,
+.road-model-clip-status,
+.road-timeline-case,
+.road-timeline-list li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.road-laptop-screen-frame {
+  width: 94%;
+}
+
+.road-laptop-base {
+  width: 100%;
+  max-width: none;
+}
+
+.road-model-evidence-image {
+  max-width: 240px;
+}
+
+.road-inbox-video-container {
+  max-width: 720px;
+}
+
+@media (max-width: 1100px) {
+  .road-model-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .road-workspace-panel {
+    padding: 1rem;
+  }
+
+  .road-laptop-screen-frame {
+    width: 100%;
   }
 }

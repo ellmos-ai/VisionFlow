@@ -4,8 +4,9 @@ Run manually; this script is not collected by pytest. It starts its own
 loopback VisionFlow server with a fresh data directory (FFmpeg with libx264 is
 required) and drives two complete road cases through the game:
 
-1. Profile ``pending``: inject a wrong-way driver and a leaf into the running
-   analysis, wait for the real human review, check that the game shows the
+1. Profile ``pending``: inject a wrong-way driver, check that a second event
+   (leaf) waits for the countdown and the server rejects it while the first is
+   analysed, wait for the real human review, check that the game shows the
    backend's assessment, the server-verified clip hash and that a second event
    starts the next case on the same camera during review, then confirm in room 3.
 2. Profile ``leaf``: inject a bird into a fresh case and check that the game
@@ -33,7 +34,7 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
-from browser_support import REPO, launch_browser, venv_python
+from browser_support import REPO, assert_event_cooldown, launch_browser, venv_python
 from road_browser_acceptance import evidence_directory, free_port, wait_for_port
 
 
@@ -106,9 +107,10 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         print("Banner:", banner)
         assert "Ticket" not in banner and "detektiert" not in banner, banner
         page.screenshot(path=str(out_dir / "01_wrong_way_injected.png"))
-        page.locator("#btn-sim-leaf").click()
-        _wait_text(page, "#live-anomaly-banner", "Blatt", 20000)
-        checks["events_injected_into_running_case"] = True
+        # One event per analysis: the leaf waits for the countdown; the server enforces it.
+        cooldown = assert_event_cooldown(page)
+        print("Cooldown:", cooldown)
+        checks["second_event_waits_for_countdown"] = True
 
         print("Waiting for the detection that creates ticket #1 ...")
         created = _wait_text(page, "#live-anomaly-banner", "Ticket #1 erstellt", 90000)
@@ -127,7 +129,7 @@ def run_verification(base_url: str, out_dir: Path) -> dict[str, Any]:
         assert "Fahrzeug · Gefahr · Sicherheit 0,80" in verdict, verdict
         page.locator("#cartoon-room-2 details > summary").click()
         technical = _text(page, "#datacenter-case-detail")
-        assert "Profil „pending“" in technical and "Falschfahrer → " in technical
+        assert "Profil „pending“" in technical and "Falschfahrer" in technical
         assert "Feste Offline-Testantwort" in _text(page, "#transparency-pill-text")
         assert "fixture/pending" in _text(page, "#transparency-profile-val")
         page.screenshot(path=str(out_dir / "02_room2_real_assessment.png"))

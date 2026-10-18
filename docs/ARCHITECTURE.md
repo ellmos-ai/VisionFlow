@@ -58,8 +58,15 @@ flowchart LR
 * **Public demo** (`cloud/demo/demo-stack.yaml`): one Graviton instance runs the unchanged
   server. It still binds to loopback; nginx forwards only requests that carry CloudFront's
   secret header and rewrites Host/Origin to the loopback values the server expects. In
-  `--public-demo` runs only the bounded road case workflow; uploads and generic workflow
-  execution are disabled. At most four live road sessions run at once, and systemd
+  `--public-demo` runs the bounded road case workflow and, besides it, only the unchanged
+  bundled document and motion templates on server-generated sample media
+  (`GET /samples`, `samples/*`); uploads, file paths, cameras and any other workflow are
+  rejected. Each session has at most one open sample workflow (a new start replaces it), at
+  most eight run at once (`503 public_demo_samples_busy`; when all are taken, the oldest
+  run waiting for input for more than 180 s is cancelled instead), and only the 32 newest finished sample
+  runs are kept; older ones lose their files and records, the starting session's own runs
+  first. Sample runs are bounded by these counts, not by the retention byte budget below.
+  At most four live road sessions run at once, and systemd
   restarts the service with an empty data directory every 24 hours. No SSH; the instance is
   managed through SSM. Provider calls and cameras are disabled in this mode.
   A shared retention manager admits at most 32 retained sources against a 512 MiB data

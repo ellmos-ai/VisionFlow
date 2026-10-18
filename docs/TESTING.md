@@ -137,8 +137,9 @@ without that decoder fails the check. See [Playwright browser and codec document
 `road_browser_acceptance.py` writes `acceptance.json`, the server log and screenshots.
 `game_multievent_acceptance.py` plays three cases:
 
-1. **Profile `pending`:** inject a wrong-way driver and a leaf into the running analysis; check
-   the real model answer `0.80`; start the next case on the same camera during review; load the
+1. **Profile `pending`:** inject a wrong-way driver; a second event (leaf) waits for the countdown
+   and the server rejects it with `event_cooldown` while the first is analysed; check the real
+   model answer `0.80`; start the next case on the same camera during review; load the
    server clip with confirmed SHA-256 and confirm the hazard.
 2. **Profile `leaf` with an injected bird:** the interface shows the fixture answer "leaf", not
    the scenario.

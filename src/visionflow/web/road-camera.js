@@ -55,6 +55,15 @@ const FIXTURE_PROFILE_LABELS = {
   error: L("Offline-Testantwort · Modellfehler", "Offline test answer · model error"),
 };
 const LOCKED_CASE_PHASES = new Set(["model_review", "human_review", "no_response"]);
+const OVERLAY_KEY = "visionflow.road.overlay";
+
+function overlayPreference() {
+  try {
+    return window.localStorage.getItem(OVERLAY_KEY) !== "off";
+  } catch (_error) {
+    return true;
+  }
+}
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -67,6 +76,19 @@ function button(text, className = "button secondary") {
   const node = element("button", className, text);
   node.type = "button";
   return node;
+}
+
+// Why a source stopped producing, as reported by the server (end_reason).
+function sourceEndedText(reason, errorCode) {
+  if (reason === "recording_limit") {
+    return L("Die Quelle hat ihr Aufnahmelimit erreicht und wurde beendet; Tickets und Clips bleiben erhalten.", "The source reached its recording limit and was stopped; tickets and clips are kept.");
+  }
+  if (reason === "time_limit") {
+    return L("Die Quelle hat ihre Höchstdauer erreicht und wurde beendet; Tickets und Clips bleiben erhalten.", "The source reached its maximum duration and was stopped; tickets and clips are kept.");
+  }
+  return errorCode
+    ? L("Quelle mit einem technischen Fehler beendet.", "Source ended with a technical error.")
+    : L("Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.", "Source ended; the last real camera image stays visible.");
 }
 
 function formatNumber(value, digits = 1) {
@@ -113,6 +135,12 @@ export function mountRoadCamera(container, apiClient) {
   let frameObjectUrl = null;
   const pendingFrameUrls = new Set();
   let autoDemoActive = false;
+  let endReason = null;
+  let nextEventAt = null; // server estimate: when the previous event has been analysed
+  let eventBusyUntil = 0; // the server reported the previous event as still in analysis
+  let overlayEnabled = overlayPreference();
+  let shownAnalysis = null;
+  let shownState = "none";
 
   const root = element("section", "road-camera");
   root.setAttribute("aria-labelledby", `road-camera-title-${instanceId}`);
@@ -194,7 +222,16 @@ export function mountRoadCamera(container, apiClient) {
   frame.alt = L("Aktuelles Bild der synthetischen Straßenkamera", "Current image of the synthetic road camera");
   frame.decoding = "async";
   frame.src = getStandbyUrl();
-  viewport.append(frame, hud);
+  // Boxes, arrows and labels come only from the direction result of the shown frame.
+  const overlay = element("canvas", "road-camera__overlay");
+  overlay.setAttribute("aria-hidden", "true");
+  const analysisBar = element("div", "road-camera__analysis-bar");
+  const analysisText = element("span", "road-camera__analysis-text", "");
+  const overlayToggle = button("", "road-camera__overlay-toggle");
+  overlayToggle.id = "road-camera-overlay-toggle";
+  analysisBar.append(analysisText, overlayToggle);
+  analysisBar.hidden = true;
+  viewport.append(frame, overlay, hud, analysisBar);
   const frameMeta = element("p", "road-camera__frame-meta", L("Bereit. Starte eine Sitzung oder nutze die ⚡ 1-Klick Demo.", "Ready. Start a session or use the ⚡ 1-click demo."));
   livePanel.append(liveTitle, viewport, frameMeta);
 
@@ -282,8 +319,96 @@ export function mountRoadCamera(container, apiClient) {
     runTimer = null;
   }
 
+  function analysisCaption(analysis, state) {
+    if (!overlayEnabled) return L("Analyse-Rahmen ausgeblendet · Livebild", "Analysis boxes hidden · live image");
+    if (!analysis && state === "active") return L("OpenCV-5-Richtungswerkzeug · Analyse läuft · gerade kein passendes Analysebild · Livebild", "OpenCV 5 direction tool · analysis running · no matching analysed frame right now · live image");
+    if (!analysis) return L("OpenCV-5-Richtungswerkzeug · keine laufende Analyse · Livebild", "OpenCV 5 direction tool · no analysis running · live image");
+    const rate = formatNumber(analysis.analyses_per_second, 1);
+    const lag = formatNumber(analysis.lag_seconds, 1);
+    // The legend and lag are a second part that narrow monitors may hide.
+    return [
+      L(`OpenCV-5-Richtungswerkzeug · ${rate} Analysen/s`, `OpenCV 5 direction tool · ${rate} analyses/s`),
+      L(` · grün = mit dem Verkehr, rot = dagegen · Analysebild ${lag} s hinter Live`, ` · green = with traffic, red = against · analysed frame ${lag} s behind live`),
+    ];
+  }
+
+  function updateOverlayToggle() {
+    overlayToggle.textContent = overlayEnabled ? L("Rahmen: an", "Boxes: on") : L("Rahmen: aus", "Boxes: off");
+    overlayToggle.setAttribute("aria-pressed", String(overlayEnabled));
+    overlayToggle.setAttribute("aria-label", L("Analyse-Rahmen im Kamerabild ein- oder ausblenden", "Show or hide the analysis boxes in the camera image"));
+  }
+
+  function drawOverlay(analysis, state = analysis ? "paired" : "none") {
+    shownAnalysis = analysis || null;
+    shownState = state;
+    const width = frame.clientWidth;
+    const height = frame.clientHeight;
+    const ratio = window.devicePixelRatio || 1;
+    overlay.width = Math.max(1, Math.round(width * ratio));
+    overlay.height = Math.max(1, Math.round(height * ratio));
+    const context = overlay.getContext("2d");
+    const space = analysis && Array.isArray(analysis.coordinate_space) ? analysis.coordinate_space : null;
+    const active = Boolean(overlayEnabled && analysis && Array.isArray(analysis.tracks) && space && context);
+    viewport.dataset.overlayFrameId = active ? String(analysis.frame_id) : "";
+    viewport.dataset.overlayTracks = active ? String(analysis.tracks.length) : "0";
+    const caption = analysisCaption(analysis, state);
+    const [main, detail] = Array.isArray(caption) ? caption : [caption, ""];
+    analysisText.replaceChildren(document.createTextNode(main), element("span", "road-camera__analysis-detail", detail));
+    if (!context) return;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, overlay.width, overlay.height);
+    if (!active) return;
+    // Map source pixels onto the displayed image (object-fit contain, cover or fill).
+    const fit = getComputedStyle(frame).objectFit;
+    const fx = width / space[0];
+    const fy = height / space[1];
+    const uniform = fit === "cover" ? Math.max(fx, fy) : Math.min(fx, fy);
+    const kx = fit === "fill" ? fx : uniform;
+    const ky = fit === "fill" ? fy : uniform;
+    const ox = (width - space[0] * kx) / 2;
+    const oy = (height - space[1] * ky) / 2;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.lineJoin = "round";
+    for (const track of analysis.tracks) {
+      if (!track || !Array.isArray(track.region) || track.region.length !== 4) continue;
+      const [x, y, w, h] = track.region.map(Number);
+      const color = track.opposition ? "#ff4d4d" : "#34d399";
+      const pad = 4;
+      const left = ox + x * kx - pad;
+      const top = oy + y * ky - pad;
+      context.strokeStyle = color;
+      context.fillStyle = color;
+      context.lineWidth = 2;
+      context.strokeRect(left, top, w * kx + 2 * pad, h * ky + 2 * pad);
+      const cx = ox + (x + w / 2) * kx;
+      const cy = oy + (y + h / 2) * ky;
+      const ex = cx + Number(track.dx_px) * 3 * kx;
+      const ey = cy + Number(track.dy_px) * 3 * ky;
+      const angle = Math.atan2(ey - cy, ex - cx);
+      context.beginPath();
+      context.moveTo(cx, cy);
+      context.lineTo(ex, ey);
+      context.stroke();
+      context.beginPath();
+      context.moveTo(ex, ey);
+      context.lineTo(ex - 8 * Math.cos(angle - 0.45), ey - 8 * Math.sin(angle - 0.45));
+      context.lineTo(ex - 8 * Math.cos(angle + 0.45), ey - 8 * Math.sin(angle + 0.45));
+      context.closePath();
+      context.fill();
+      if (track.opposition) {
+        const label = L("GEGENBEWEGUNG", "OPPOSING MOTION");
+        context.font = "700 12px system-ui, sans-serif";
+        context.lineWidth = 3;
+        context.strokeStyle = "rgba(10, 10, 10, 0.85)";
+        context.strokeText(label, left, Math.max(12, top - 5));
+        context.fillText(label, left, Math.max(12, top - 5));
+      }
+    }
+  }
+
   function clearFrameImage() {
     frameSequence += 1;
+    drawOverlay(null);
     frame.src = getStandbyUrl();
     for (const url of pendingFrameUrls) URL.revokeObjectURL(url);
     pendingFrameUrls.clear();
@@ -291,32 +416,32 @@ export function mountRoadCamera(container, apiClient) {
     frameObjectUrl = null;
   }
 
-  function setFrameImage(encoded) {
+  function setFrameImage(encoded, analysis = null, frameId = "", state = "none") {
     const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
     const url = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
     const sequence = ++frameSequence;
     pendingFrameUrls.add(url);
-    frame.onload = () => {
-      if (!pendingFrameUrls.has(url)) return;
-      pendingFrameUrls.delete(url);
+    // Decode off screen first: swapping src to an undecoded image leaves the monitor
+    // unpainted for some compositor frames while the overlay is already drawn (W3).
+    const next = new Image();
+    next.src = url;
+    next.decode().then(() => {
+      if (!pendingFrameUrls.delete(url)) return;
       if (sequence !== frameSequence) {
         URL.revokeObjectURL(url);
         return;
       }
-      if (frameObjectUrl && frameObjectUrl !== url) URL.revokeObjectURL(frameObjectUrl);
+      if (frameObjectUrl) URL.revokeObjectURL(frameObjectUrl);
       for (const pending of pendingFrameUrls) URL.revokeObjectURL(pending);
       pendingFrameUrls.clear();
       frameObjectUrl = url;
-      frame.onload = null;
-      frame.onerror = null;
-    };
-    frame.onerror = () => {
+      // Image and its own overlay change together.
+      frame.src = url;
+      viewport.dataset.frameId = frameId;
+      drawOverlay(analysis, state);
+    }, () => {
       if (pendingFrameUrls.delete(url)) URL.revokeObjectURL(url);
-      if (frameObjectUrl === url) frameObjectUrl = null;
-      frame.onload = null;
-      frame.onerror = null;
-    };
-    frame.src = url;
+    });
   }
 
   function clearRecordingTimer() {
@@ -398,11 +523,10 @@ export function mountRoadCamera(container, apiClient) {
           L(`${state} · ${frames} Frames · ${fps} Bilder/Sek. gemessen · ${seconds} Sek. · ${compressed} Byte`, `${state} · ${frames} frames · ${fps} frames/s measured · ${seconds} s · ${compressed} bytes`);
         if (payload.closed) {
           sourceOpen = false;
+          endReason = typeof payload.end_reason === "string" ? payload.end_reason : endReason;
           clearFrameTimer();
           updateEventControls();
-          setStatus(payload.error_code
-            ? L("Quelle mit einem technischen Fehler beendet.", "Source ended with a technical error.")
-            : L("Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.", "Source ended; the last real camera image stays visible."));
+          setStatus(sourceEndedText(endReason, payload.error_code));
         }
       }
     } catch (error) {
@@ -427,12 +551,23 @@ export function mountRoadCamera(container, apiClient) {
     const view = viewGeneration;
     if (!source || !sourceOpen || destroyed) return;
     try {
+      const route = overlayEnabled ? "analysis-frame" : "frame";
       const payload = await apiClient.get(
-        `/road/sessions/${encodeURIComponent(source)}/frame`,
+        `/road/sessions/${encodeURIComponent(source)}/${route}`,
       );
       if (!current(source, generation, view)) return;
+      analysisBar.hidden = false;
+      if (typeof payload.next_event_in_seconds === "number") {
+        nextEventAt = Date.now() + payload.next_event_in_seconds * 1000;
+        // Stay busy between polls; only the server ends the wait (or 5 s without polls).
+        eventBusyUntil = Date.now() + 5000;
+      } else {
+        nextEventAt = null;
+        eventBusyUntil = 0;
+      }
       if (typeof payload.image_base64 === "string" && payload.image_base64) {
-        setFrameImage(payload.image_base64);
+        const analysis = payload.analysis && payload.analysis.frame_id === payload.frame_id ? payload.analysis : null;
+        setFrameImage(payload.image_base64, analysis, String(payload.frame_id || ""), String(payload.analysis_state || "none"));
         frameMeta.textContent =
           L(`Frame ${String(payload.frame_id || "–")} · Quellenzeit ${formatNumber(payload.timestamp_seconds, 2)} Sek.`, `Frame ${String(payload.frame_id || "–")} · source time ${formatNumber(payload.timestamp_seconds, 2)} s`);
         recText.textContent = " LIVE / REC";
@@ -440,13 +575,12 @@ export function mountRoadCamera(container, apiClient) {
       }
       if (payload.closed) {
         sourceOpen = false;
+        endReason = typeof payload.end_reason === "string" ? payload.end_reason : null;
         clearFrameTimer();
         updateEventControls();
         recText.textContent = " STANDBY";
         recDot.classList.add("road-camera__rec-dot--standby");
-        setStatus(payload.error_code
-          ? L("Quelle mit einem technischen Fehler beendet.", "Source ended with a technical error.")
-          : L("Quelle beendet; das letzte echte Kamerabild bleibt sichtbar.", "Source ended; the last real camera image stays visible."));
+        setStatus(sourceEndedText(endReason, payload.error_code));
         refreshRecording(source, generation, view);
         return;
       }
@@ -728,6 +862,9 @@ export function mountRoadCamera(container, apiClient) {
     warmedUp = false;
     sourceId = nextSource;
     sourceOpen = true;
+    endReason = null;
+    nextEventAt = null; // a new source has no event in analysis yet
+    eventBusyUntil = 0;
     root.dataset.sourceId = nextSource;
     currentClipId = null;
     sourceSummary.textContent = L("Quelle: ", "Source: ") + nextSource;
@@ -781,9 +918,16 @@ export function mountRoadCamera(container, apiClient) {
     });
   }
 
+  function eventCooldownSeconds() {
+    if (nextEventAt === null) return 0;
+    const remaining = Math.ceil((nextEventAt - Date.now()) / 1000);
+    return Date.now() < eventBusyUntil ? Math.max(1, remaining) : Math.max(0, remaining);
+  }
+
   function injectBlocker() {
     if (destroyed) return "destroyed";
     if (!sourceId || !sourceOpen) return "source_closed";
+    if (eventCooldownSeconds() > 0) return "event_cooldown";
     if (!warmedUp) return "warming_up";
     if (!runActive) return "run_inactive";
     return null;
@@ -802,12 +946,32 @@ export function mountRoadCamera(container, apiClient) {
       if (source !== sourceId || generation !== sourceGeneration) {
         return { injected: false, reason: "source_changed" };
       }
+      // The polled run state can be half a second old; an event must reach a run
+      // that still analyses the scene, so confirm the run state first.
+      if (runId) {
+        try {
+          const latest = await apiClient.get("/runs/" + encodeURIComponent(runId));
+          if (current(source, generation)) renderRun(latest);
+        } catch (_error) {
+          // Keep the polled state; the server still validates the event.
+        }
+      }
       const blockedNow = injectBlocker();
       if (blockedNow) return { injected: false, reason: blockedNow };
-      await apiClient.post(
-        `/road/sessions/${encodeURIComponent(source)}/events`,
-        { event },
-      );
+      try {
+        await apiClient.post(
+          `/road/sessions/${encodeURIComponent(source)}/events`,
+          { event },
+        );
+      } catch (error) {
+        if (error && error.code === "event_cooldown") {
+          nextEventAt = Date.now() + (Number(error.retryAfter) || 1) * 1000;
+          return { injected: false, reason: "event_cooldown" };
+        }
+        throw error;
+      }
+      // Until the next frame poll corrects it, assume the event needs its scene time.
+      nextEventAt = Date.now() + 10000;
       if (current(source, generation)) {
         const label = { wrong_way: L("Falschfahrer", "Wrong-way driver"), bird: L("Vogel", "Bird"), leaf: L("Blatt", "Leaf") }[event] || L("Szenarioereignis", "Scenario event");
         setStatus(L(`${label} in die Szene eingeblendet. Das ist noch kein Analysebefund.`, `${label} injected into the scene. This is not an analysis finding yet.`));
@@ -1019,6 +1183,19 @@ export function mountRoadCamera(container, apiClient) {
     injectEvent().catch((error) => setStatus(error.message, true));
   });
   modeSelect.addEventListener("change", updateSourceControls);
+  overlayToggle.addEventListener("click", () => {
+    overlayEnabled = !overlayEnabled;
+    try {
+      window.localStorage.setItem(OVERLAY_KEY, overlayEnabled ? "on" : "off");
+    } catch (_error) {
+      // The choice still applies to this page.
+    }
+    updateOverlayToggle();
+    drawOverlay(overlayEnabled ? shownAnalysis : null, shownState);
+  });
+  updateOverlayToggle();
+  const resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => drawOverlay(shownAnalysis, shownState)) : null;
+  if (resizeObserver) resizeObserver.observe(viewport);
 
   function setCase(caseInfo) {
     const nextId = caseInfo && typeof caseInfo.case_id === "string"
@@ -1063,6 +1240,7 @@ export function mountRoadCamera(container, apiClient) {
     clearRecordingTimer();
     clearRunTimer();
     clearFrameImage();
+    if (resizeObserver) resizeObserver.disconnect();
     for (const entry of clipUrls.values()) URL.revokeObjectURL(entry.url);
     clipUrls.clear();
     clipInflight.clear();
@@ -1080,6 +1258,9 @@ export function mountRoadCamera(container, apiClient) {
       warmedUp,
       available: roadAvailable,
       capabilities,
+      endReason,
+      overlayEnabled,
+      eventCooldownSeconds: eventCooldownSeconds(),
       injectBlocker: injectBlocker(),
     };
   }

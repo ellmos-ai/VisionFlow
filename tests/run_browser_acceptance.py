@@ -64,8 +64,8 @@ def start_server(output, public, env):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--only", choices=("errors", "guidance", "recovery"))
-    parser.add_argument("--probe", choices=("errors", "guidance", "recovery"), help=argparse.SUPPRESS)
+    parser.add_argument("--only", choices=("errors", "guidance", "recovery", "layout", "workflows"))
+    parser.add_argument("--probe", choices=("errors", "guidance", "recovery", "layout", "workflows"), help=argparse.SUPPRESS)
     parser.add_argument("--base-url", help=argparse.SUPPRESS)
     parser.add_argument("--public-url", help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -80,6 +80,12 @@ def main():
             elif args.probe == "guidance":
                 from ticket_guidance_browser import run
                 result = run(args.base_url, output)
+            elif args.probe == "layout":
+                from layout_regression_browser import run
+                result = run(args.base_url, output)
+            elif args.probe == "workflows":
+                from public_workflows_browser import run
+                result = run(args.public_url, output)
             else:
                 from road_recovery_browser import run
                 result = run(args.base_url, output)
@@ -103,7 +109,7 @@ def main():
         servers.append(local)
         public = start_server(output, True, env)
         servers.append(public)
-        for probe in ([args.only] if args.only else ["errors", "guidance", "recovery"]):
+        for probe in ([args.only] if args.only else ["errors", "guidance", "recovery", "layout", "workflows"]):
             command = [sys.executable, str(Path(__file__).resolve()), "--probe", probe,
                        "--base-url", local[2], "--public-url", public[2], "--output", str(output / probe)]
             with (output / f"{probe}.log").open("w", encoding="utf-8") as log:

@@ -76,8 +76,17 @@ Each detection creates a numbered ticket that appears at its current station: mo
 in room 2, human review in room 3, and expired deadlines in room 4. A second event during a
 review starts the next case on the same camera; stopping the camera keeps sealed tickets decidable.
 
+The camera view draws boxes, motion arrows and an *OPPOSING MOTION* label only from the direction
+tool's tracks of the very frame it shows; the header line reports the measured analyses per second
+and the delay behind live, and a *Boxes* switch turns the overlay off (on by default). One scenario
+event is analysed at a time: the inject buttons count down until the previous event has been
+analysed, and the server rejects an earlier event with `409 event_cooldown` and `Retry-After`. When a
+camera ends at its recording or time limit, room 1 says so and explains how to continue.
+
 The public demo runs in **offline-profile mode**: the model step returns a fixed, selectable
-answer and does not look at the image. Everything else is real: rendered frames, OpenCV
+answer and does not look at the image. Its second header button opens the reusable workflows,
+which there run only the two bundled templates (document quality, motion observation) on
+server-generated sample inputs; uploads, file paths and cameras are rejected. Everything else is real: rendered frames, OpenCV
 analysis, clip export with SHA-256, deadlines and the simulated authority inbox. Live Gemini
 video review is available locally with an explicit cost opt-in (see below).
 
@@ -139,7 +148,8 @@ clip and evidence frames to the model, at most two requests per case.
 
 * **Public demo:** the unchanged loopback-only server runs with `--public-demo` on an
   **AWS Graviton (arm64) EC2** instance behind nginx, with **Amazon CloudFront** for HTTPS. The
-  security group only admits CloudFront, there is no SSH (SSM only), uploads are disabled, at most
+  security group only admits CloudFront, there is no SSH (SSM only), uploads are disabled, the
+  reusable workflows run only the bundled templates on server-generated samples, at most
   four live road sessions run at once and the service restarts fresh every day.
   Stack and deploy script: [`cloud/demo/`](cloud/demo/).
 * **Reproducible cloud acceptance:** [`cloud/template.json`](cloud/template.json) and
@@ -191,7 +201,8 @@ in [docs/TESTING.md](docs/TESTING.md).
 
 The server binds to loopback only. In local mode, workflows may read files the server account
 can read, so do not expose it to untrusted users; the hosted demo uses `--public-demo`, which only
-reads the synthetic road simulation and rejects media uploads. Camera access needs an explicit
+reads the synthetic road simulation and runs the two bundled document and motion templates on
+server-generated samples; media uploads, file paths and cameras are rejected. Camera access needs an explicit
 `--camera NAME=INDEX` mapping. Provider calls need an explicit cost opt-in and never carry
 credentials in source. VisionFlow is a decision-support prototype: a human or a documented policy
 stays responsible for every escalation.

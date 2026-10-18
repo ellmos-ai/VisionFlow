@@ -26,6 +26,19 @@ _LANE_CENTERS = tuple(
     + [_CARRIAGEWAY_RIGHT[0] + _LANE_WIDTH * (i + 0.5) for i in range(3)]
 )
 _AWAY_LANES = 3
+# Regular traffic uses the two outer lanes of each carriageway; every lane moves at
+# one shared speed, so cars keep their spacing and never drive into each other.
+# The inner lanes next to the median stay free: the wrong-way driver uses one of
+# them (lane 2 for even seeds, lane 3 for odd seeds) and is never drawn over a car.
+_TRAFFIC_LANES = (0, 1, 4, 5)
+_CARS_PER_LANE = 2
+_WRONG_WAY_LANES = (2, 3)
+# Event speeds in pixels per second at 540 px height (scaled with the scene). Slow
+# enough that bird and leaf stay trackable even when a loaded host analyses only
+# about two frames per second (measured, see docs/SYNTHETIC_EVALUATION.md).
+_WRONG_WAY_SPEED = 70.0
+_BIRD_SPEED = 75.0
+_LEAF_SPEED = 65.0
 _CAR_COLORS = (
     (72, 95, 186),
     (42, 140, 212),
@@ -80,7 +93,7 @@ class RoadWorld:
             raise ValueError(f"unknown road event: {event!r}")
 
         color = self._rng.choice(_CAR_COLORS)
-        lane = (4 if self._seed % 2 else 1) if event == "wrong_way" else None
+        lane = _WRONG_WAY_LANES[self._seed % 2] if event == "wrong_way" else None
         self._events.append(
             _SceneEvent(
                 kind=event,
@@ -109,16 +122,18 @@ class RoadWorld:
 
     def _make_traffic(self) -> tuple[_TrafficCar, ...]:
         cars: list[_TrafficCar] = []
-        phases = ((0, 0.24), (1, 0.68), (2, 0.45), (3, 0.31), (4, 0.73), (5, 0.12), (1, 0.05))
-        for lane, phase in phases:
-            cars.append(
-                _TrafficCar(
-                    lane=lane,
-                    phase=phase,
-                    speed=self._rng.uniform(0.09, 0.13),
-                    color=self._rng.choice(_CAR_COLORS),
+        for lane in _TRAFFIC_LANES:
+            speed = self._rng.uniform(0.09, 0.13)
+            offset = self._rng.uniform(0.0, 1.0)
+            for index in range(_CARS_PER_LANE):
+                cars.append(
+                    _TrafficCar(
+                        lane=lane,
+                        phase=(offset + index / _CARS_PER_LANE) % 1.0,
+                        speed=speed,
+                        color=self._rng.choice(_CAR_COLORS),
+                    )
                 )
-            )
         return tuple(cars)
 
     def _draw_background(self) -> np.ndarray:
@@ -292,7 +307,8 @@ class RoadWorld:
     def _lane_width_px(self, depth: float) -> float:
         return _LANE_WIDTH * self.width * (_VANISH + (1.0 - _VANISH) * depth)
 
-    def _draw_traffic(self, image: np.ndarray, source_time: float) -> None:
+    def _traffic_positions(self, source_time: float):
+        """Yield (car, x, y, depth, direction) for every regular car at *source_time*."""
         horizon = self._horizon
         travel = max(1, self.height - 1 - horizon)
         for car in self._traffic:
@@ -304,7 +320,57 @@ class RoadWorld:
                 depth = distance
                 direction = 1
             y = horizon + depth * travel
-            x = self._lane_center(car.lane, y)
+            yield car, self._lane_center(car.lane, y), y, depth, direction
+
+    def _wrong_way_position(self, event: _SceneEvent, source_time: float):
+        """Return (lane, x, y, depth, direction) while the driver is on the road, else None.
+
+        The driver enters where its lane's traffic leaves: at the horizon when it
+        drives down, at the bottom edge when it drives up, so it crosses the whole road.
+        """
+        elapsed = source_time - event.start_time
+        if elapsed < 0:
+            return None
+        lane = _WRONG_WAY_LANES[1] if event.lane is None else event.lane
+        travelled = elapsed * _WRONG_WAY_SPEED * self.height / 540.0
+        if lane < _AWAY_LANES:
+            direction = 1
+            y = self._horizon + travelled
+        else:
+            direction = -1
+            y = self.height * 1.02 - travelled
+        if not self._horizon <= y <= self.height * 1.1:
+            return None
+        return lane, self._lane_center(lane, y), y, self._depth(y), direction
+
+    def _vehicle_tiles(self, source_time: float) -> list[dict[str, object]]:
+        """Every drawn car as (x0, y0, premultiplied, alpha) tile (scene geometry for tests)."""
+        rows: list[dict[str, object]] = []
+        for car, x, y, depth, direction in self._traffic_positions(source_time):
+            rows.append({"kind": "traffic", "lane": car.lane,
+                         "tile": self._car_tile(x, y, depth, car.color, direction, car.lane)})
+        for event in self._events:
+            if event.kind != "wrong_way":
+                continue
+            position = self._wrong_way_position(event, source_time)
+            if position is not None:
+                lane, x, y, depth, direction = position
+                rows.append({"kind": "wrong_way", "lane": lane,
+                             "tile": self._car_tile(x, y, depth, event.color, direction, lane)})
+        return rows
+
+    def _car_size(self, depth: float) -> tuple[int, int]:
+        # Cars fill a bit less than half a lane and grow with it towards the camera.
+        car_width = max(5, round(self._lane_width_px(depth) * 0.44))
+        return car_width, max(9, round(car_width * 1.8))
+
+    def _lane_angle(self, lane: int) -> float:
+        top_x, bottom_x = _persp(_LANE_CENTERS[lane])
+        travel = max(1, self.height - 1 - self._horizon)
+        return math.degrees(math.atan2((bottom_x - top_x) * self.width, travel))
+
+    def _draw_traffic(self, image: np.ndarray, source_time: float) -> None:
+        for car, x, y, depth, direction in self._traffic_positions(source_time):
             self._draw_car(image, x, y, depth, car.color, direction, car.lane)
 
     def _draw_events(self, image: np.ndarray, source_time: float) -> None:
@@ -315,25 +381,19 @@ class RoadWorld:
             if elapsed < 0:
                 continue
             if event.kind == "wrong_way":
-                lane = 4 if event.lane is None else event.lane
-                if lane < _AWAY_LANES:
-                    direction = 1
-                    y = self.height * 0.43 + elapsed * 82.0 * speed
-                else:
-                    direction = -1
-                    y = self.height * 0.73 - elapsed * 82.0 * speed
-                if -self.height * 0.15 <= y <= self.height * 1.1:
-                    depth = self._depth(y)
-                    x = self._lane_center(lane, y)
+                position = self._wrong_way_position(event, source_time)
+                if position is not None:
+                    lane, x, y, depth, direction = position
                     self._draw_car(image, x, y, depth, event.color, direction, lane)
             elif event.kind == "bird":
-                y = self.height * 0.65 - elapsed * 105.0 * speed
+                # The bird enters at the bottom edge and flies up the whole frame.
+                y = self.height * 1.02 - elapsed * _BIRD_SPEED * speed
                 if -self.height * 0.1 <= y <= self.height * 1.1:
                     depth = self._depth(y)
                     x = self._lane_center(4, y)
                     self._draw_bird(image, x, y, depth, elapsed, event.color)
             else:
-                y = self._horizon + self.height * 0.025 + elapsed * 90.0 * speed
+                y = self._horizon + self.height * 0.025 + elapsed * _LEAF_SPEED * speed
                 if -self.height * 0.1 <= y <= self.height * 1.1:
                     depth = self._depth(y)
                     wind = math.sin(elapsed * 2.7) * self.width * 0.01
@@ -355,19 +415,8 @@ class RoadWorld:
         The tile is drawn twice (black and white background); their difference gives
         an exact anti-aliased alpha without a key colour.
         """
-        scale = min(self.width / 960.0, self.height / 540.0)
-        # Cars fill a bit less than half a lane and grow with it towards the camera.
-        car_width = max(5, round(self._lane_width_px(depth) * 0.44))
-        car_height = max(9, round(car_width * 1.8))
-        top_x, bottom_x = _persp(_LANE_CENTERS[lane])
-        travel = max(1, self.height - 1 - self._horizon)
-        angle = math.degrees(math.atan2((bottom_x - top_x) * self.width, travel))
-        premultiplied, alpha = _car_sprite(
-            tuple(color), direction, car_width, car_height, round(angle, 2), scale
-        )
+        x0, y0, premultiplied, alpha = self._car_tile(center_x, center_y, depth, color, direction, lane)
         side = premultiplied.shape[0]
-        half = side // 2
-        x0, y0 = round(center_x) - half, round(center_y) - half
         ix0, iy0 = max(0, x0), max(0, y0)
         ix1, iy1 = min(image.shape[1], x0 + side), min(image.shape[0], y0 + side)
         if ix0 >= ix1 or iy0 >= iy1:
@@ -378,6 +427,24 @@ class RoadWorld:
         a = alpha[ty0:ty1, tx0:tx1]
         blended = region * (1.0 - a) + premultiplied[ty0:ty1, tx0:tx1]
         image[iy0:iy1, ix0:ix1] = np.clip(blended, 0, 255).astype(np.uint8)
+
+    def _car_tile(
+        self,
+        center_x: float,
+        center_y: float,
+        depth: float,
+        color: tuple[int, int, int],
+        direction: int,
+        lane: int,
+    ) -> tuple[int, int, np.ndarray, np.ndarray]:
+        """Top-left corner, premultiplied colour and alpha of one car as drawn."""
+        scale = min(self.width / 960.0, self.height / 540.0)
+        car_width, car_height = self._car_size(depth)
+        premultiplied, alpha = _car_sprite(
+            tuple(color), direction, car_width, car_height, round(self._lane_angle(lane), 2), scale
+        )
+        half = premultiplied.shape[0] // 2
+        return round(center_x) - half, round(center_y) - half, premultiplied, alpha
 
     @staticmethod
     def _draw_car_upright(

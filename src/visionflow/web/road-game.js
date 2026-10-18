@@ -60,7 +60,23 @@
     warming_up: L("Die Analyse wärmt sich noch auf (drei echte Startframes).", "The analysis is still warming up (three real start frames)."),
     run_inactive: L("Der Analyse-Lauf dieses Falls ist beendet.", "The analysis run of this case has ended."),
     source_changed: L("Die Kameraquelle wurde inzwischen gewechselt.", "The camera source has been changed in the meantime."),
+    event_cooldown: L("Das vorherige Ereignis wird noch analysiert. Bitte warte den Countdown ab.", "The previous event is still being analysed. Please wait for the countdown."),
   };
+  const INJECT_BUTTONS = ["btn-sim-wrongway", "btn-sim-bird", "btn-sim-leaf"];
+  // A camera that stopped at one of its limits says so instead of silently showing STANDBY.
+  function sourceEndedNotice(reason) {
+    const isPublic = Boolean($("public-demo-note")) && !$("public-demo-note").hidden;
+    if (reason === "recording_limit") {
+      return isPublic
+        ? L("Die Kamera hat das Aufnahmelimit der öffentlichen Demo erreicht und wurde beendet. Alle Tickets und Clips bleiben erhalten. Schalte die Kamera mit „Kamera ein / aus“ wieder ein, um mit einer neuen Aufnahme weiterzumachen.", "The camera reached the public demo's recording limit and was stopped. All tickets and clips are kept. Switch the camera back on with “Camera on / off” to continue with a new recording.")
+        : L("Die Kamera hat ihr Aufnahmelimit erreicht und wurde beendet. Alle Tickets und Clips bleiben erhalten. Schalte die Kamera mit „Kamera ein / aus“ wieder ein, um mit einer neuen Aufnahme weiterzumachen.", "The camera reached its recording limit and was stopped. All tickets and clips are kept. Switch the camera back on with “Camera on / off” to continue with a new recording.");
+    }
+    if (reason === "time_limit") {
+      return L("Die Kamera-Sitzung hat ihre Höchstdauer von zwei Minuten erreicht und wurde beendet. Alle Tickets und Clips bleiben erhalten. Schalte die Kamera mit „Kamera ein / aus“ wieder ein, um weiterzumachen.", "The camera session reached its two-minute maximum and was stopped. All tickets and clips are kept. Switch the camera back on with “Camera on / off” to continue.");
+    }
+    return null;
+  }
+
   const REVIEW_PHASES = new Set(["model_review", "human_review"]);
   const ACTIVE_PHASES = new Set(["starting", "running", "model_review", "human_review"]);
   const MONITOR_PHASES = new Set(["starting", "running"]);
@@ -86,6 +102,7 @@
   let startPromise = null;
   let eventBusy = false;
   let bannerTimer = null;
+  let notifiedEndReason = null;
   let clipView = { caseId: null, clipId: null, url: null, generation: 0 };
 
   // Translation table (static labels; live case data is shown as delivered)
@@ -224,6 +241,7 @@
         exchanges: [],
         lastPhase: null,
         dispatched: false,
+        observedLive: false, // set when this page started the case and saw its injections
       };
       tickets.set(caseId, ticket);
       ticketOrder.unshift(caseId);
@@ -280,6 +298,12 @@
   }
 
   function onTicketCreated(ticket) {
+    // Injected events are only known for cases this page started; a resumed case says so.
+    if (!ticket.observedLive) {
+      showBanner(L(`${ticketName(ticket)} wiederaufgenommen: Die Bildanalyse hatte in diesem Fall angeschlagen. Eingeblendete Ereignisse sind nach dem Neuladen nicht bekannt. Clip gesichert → Rechenzentrum`, `${ticketName(ticket)} resumed: the image analysis had triggered in this case. Injected events are not known after reloading. Clip sealed → datacenter`));
+      appendDatacenterLog(L(`[${ticketName(ticket)}] Ticket nach Wiederaufnahme aus gespeichertem Fall übernommen`, `[${ticketName(ticket)}] Ticket taken over from a stored case after resuming`));
+      return;
+    }
     const scenario = ticket.scenario.length ? scenarioText(ticket) : L("ohne eingeblendetes Ereignis", "without an injected event");
     showBanner(L(`${ticketName(ticket)} erstellt: Die Bildanalyse hat angeschlagen (${scenario}). Clip gesichert → Rechenzentrum`, `${ticketName(ticket)} created: the image analysis triggered (${scenario}). Clip sealed → datacenter`));
     appendDatacenterLog(L(`[${ticketName(ticket)}] Neues Ticket aus Befund der Bildanalyse`, `[${ticketName(ticket)}] New ticket from an image-analysis finding`));
@@ -310,6 +334,7 @@
   }
 
   function scenarioText(ticket) {
+    if (ticket && ticket.scenario.length === 0 && !ticket.observedLive) return L("nicht bekannt (Fall nach dem Neuladen wiederaufgenommen)", "not known (case resumed after reloading)");
     if (!ticket || ticket.scenario.length === 0) return L("keine Ereignisse aus dem Spiel eingeblendet", "no events injected from the game");
     return ticket.scenario.map((entry) => EVENT_LABELS[entry.type] || entry.type).join(" → ");
   }
@@ -376,6 +401,7 @@
     const detail = event && event.detail ? event.detail : {};
     if (typeof detail.caseId !== "string") return;
     const ticket = ticketFor(detail.caseId);
+    ticket.observedLive = true;
     if (detail.case) updateTicket(detail.caseId, detail.case);
     selectedCaseId = ticket.caseId;
     appendDatacenterLog(L(`[${ticketName(ticket)}] Neuer Fall auf ${detail.sourceId || "Kamera"} gestartet · ${modelSourceText(ticket)}`, `[${ticketName(ticket)}] New case started on ${detail.sourceId || "camera"} · ${modelSourceText(ticket)}`));
@@ -501,6 +527,7 @@
       const state = cameraState();
       if (!state) throw new Error(INJECT_BLOCK_REASONS.destroyed);
       if (!state.injectBlocker) return state;
+      if (state.injectBlocker === "event_cooldown") throw new Error(INJECT_BLOCK_REASONS.event_cooldown);
       if (state.injectBlocker === "run_inactive" && state.warmedUp) {
         throw new Error(INJECT_BLOCK_REASONS[state.injectBlocker]);
       }
@@ -547,6 +574,29 @@
       const button = $(id);
       if (button) button.disabled = Boolean(disabled);
     }
+    if (!disabled) renderEventCooldown();
+  }
+
+  // W4: one event at a time. The inject buttons count down until the server says the
+  // previous event has been analysed (scene left without a candidate, or case reviewed).
+  function renderEventCooldown() {
+    const state = cameraState();
+    const remaining = state && state.sourceOpen ? state.eventCooldownSeconds || 0 : 0;
+    for (const id of INJECT_BUTTONS) {
+      const button = $(id);
+      if (!button) continue;
+      if (!button.dataset.label) button.dataset.label = button.textContent;
+      const label = remaining > 0 ? `${button.dataset.label} · ${remaining} s` : button.dataset.label;
+      if (button.textContent !== label) button.textContent = label;
+      if (!eventBusy) button.disabled = remaining > 0;
+    }
+    const note = $("event-cooldown-note");
+    if (note) {
+      note.hidden = remaining <= 0;
+      setText("event-cooldown-note", remaining > 0
+        ? L(`Nächstes Ereignis in ${remaining} s: Das vorherige Ereignis durchläuft noch die Analyse (Erkennung, Beweisclip, Modellprüfung).`, `Next event in ${remaining} s: the previous event is still being analysed (detection, evidence clip, model review).`)
+        : "");
+    }
   }
 
   async function triggerEvent(eventType) {
@@ -560,6 +610,9 @@
     if (global.RoadSFX) global.RoadSFX.playEventTrigger();
     try {
       let state = cameraState();
+      if (state && state.injectBlocker === "event_cooldown") {
+        throw new Error(INJECT_BLOCK_REASONS.event_cooldown);
+      }
       if (!state.available) {
         throw new Error((capabilities && capabilities.message) || L("Die Straßenkamera ist nicht verfügbar (FFmpeg mit libx264 erforderlich).", "The road camera is not available (FFmpeg with libx264 required)."));
       }
@@ -572,7 +625,14 @@
         await startNewCase(true);
       }
       state = await waitForInjectable(20000);
-      const result = await env.roadMount.injectScenarioEvent(eventType);
+      let result = await env.roadMount.injectScenarioEvent(eventType);
+      if (result && !result.injected && result.reason === "run_inactive") {
+        // The case ended between the click and the event; open the next one first.
+        setText("speech-alex", L("Die Kamera läuft weiter. Ich öffne darauf einen neuen Fall und warte auf drei echte Startframes …", "The camera keeps running. I am opening a new case on it and waiting for three real start frames …"));
+        await startNewCase(true);
+        state = await waitForInjectable(20000);
+        result = await env.roadMount.injectScenarioEvent(eventType);
+      }
       if (!result || !result.injected) {
         throw new Error(INJECT_BLOCK_REASONS[result && result.reason] || L("Das Ereignis wurde nicht eingeblendet.", "The event was not injected."));
       }
@@ -1004,6 +1064,14 @@
     setText("cartoon-cam-status", state && state.sourceOpen
       ? (state.runActive ? L("[● LIVE · ANALYSE LÄUFT]", "[● LIVE · ANALYSIS RUNNING]") : "[● LIVE]")
       : "[● STANDBY]");
+    const endedNotice = state && !state.sourceOpen ? sourceEndedNotice(state.endReason) : null;
+    const notice = $("cartoon-source-notice");
+    if (notice) {
+      notice.hidden = !endedNotice;
+      if (endedNotice) setText("cartoon-source-notice", endedNotice);
+    }
+    if (endedNotice && notifiedEndReason !== state.endReason) setText("speech-alex", endedNotice);
+    notifiedEndReason = endedNotice ? state.endReason : null;
     renderDatacenter();
     renderSchmidt();
     renderBeta();
@@ -1100,6 +1168,7 @@
       h("div", { className: "traffic-screen-wrap" }, [
         h("div", { className: "traffic-monitor" }, [
           h("div", { className: "traffic-monitor__header" }, [h("span", { textContent: L("B4 Nord · synthetische Straße", "B4 North · synthetic road") }), h("span", { id: "cartoon-cam-status", textContent: "[● STANDBY]" }), action("btn-toggle-cam", L("Kamera ein / aus", "Camera on / off"), () => void toggleCamera(), "chunky-btn--power")]),
+          h("p", { id: "cartoon-source-notice", className: "source-ended-notice", role: "status", hidden: true }),
           h("div", { id: "cartoon-feed-mount", className: "traffic-feed-box" }),
         ]),
         h("div", { className: "traffic-control-panel" }, [
@@ -1111,6 +1180,7 @@
             inject("bird", "btn-sim-bird", "bird", L("Vogel einblenden", "Inject bird"), "chunky-btn--bird"),
             inject("leaf", "btn-sim-leaf", "leaf", L("Blatt einblenden", "Inject leaf"), "chunky-btn--leaf"),
           ]),
+          h("p", { id: "event-cooldown-note", className: "event-cooldown-note", role: "status", hidden: true }),
           h("p", { className: "scenario-note", textContent: L("Ein Ereignis verändert die Szene. Erst die Bildanalyse erstellt ein Ticket.", "An event changes the scene. Only the image analysis creates a ticket.") }),
         ]),
       ]),
@@ -1156,7 +1226,7 @@
         details(L("Meldungsbeleg und weitere Tickets", "Report receipt and other tickets"), [h("p", { id: "beta-receipt-detail", className: "case-technical-data" }), h("div", { id: "beta-ticket-list", className: "beta-ticket-list" })]),
       ]),
     ]);
-    root.appendChild(h("div", { className: "patrol-car-stage", hidden: true, "aria-label": L("Simulierter Einsatz", "Simulated dispatch") }, [h("p", { className: "patrol-dispatch-label", textContent: L("Meldung an simuliertes Behördenpostfach gesendet", "Report sent to simulated authority inbox") }), h("div", { className: "patrol-car-road" }), h("div", { id: "cartoon-patrol-car", className: "patrol-car" }, [h("img", { src: "/assets/patrol.png", alt: L("Spielzeug-Polizeiauto für den simulierten Einsatz", "Toy police car for the simulated dispatch"), width: "210", height: "145" })])]));
+    root.appendChild(h("div", { className: "patrol-car-stage", hidden: true, "aria-label": L("Simulierter Einsatz", "Simulated dispatch") }, [h("p", { className: "patrol-dispatch-label", textContent: L("Meldung an simuliertes Behördenpostfach gesendet", "Report sent to simulated authority inbox") }), h("div", { className: "patrol-car-road" }), h("div", { id: "cartoon-patrol-car", className: "patrol-car" }, [h("img", { src: "/assets/patrol-side.png", alt: L("Metall-Spielzeug-Polizeiauto für den simulierten Einsatz", "Die-cast toy police car for the simulated dispatch"), width: "520", height: "194" })])]));
     root.querySelector("#journey-ticket-select").addEventListener("change", event => selectTicket(event.target.value));
     return root;
   }
@@ -1220,6 +1290,7 @@
     const modeSelect = $("cartoon-model-mode");
     if (modeSelect) modeSelect.addEventListener("change", renderModelOptions);
     const tickTimer = window.setInterval(() => {
+      renderEventCooldown();
       renderBeta();
       if (currentRoom === 3) renderSchmidt();
     }, 500);

@@ -11,7 +11,31 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from browser_support import launch_browser
+from browser_support import (
+    assert_camera_image_always_painted,
+    assert_event_cooldown,
+    assert_overlay_bound_to_frames,
+    launch_browser,
+)
+
+# WCAG 2.x contrast of every visible intro text against its first opaque background.
+INTRO_CONTRAST_JS = """() => {
+  const parse = (c) => { const m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null;
+    const p = m[1].split(',').map(Number); return {r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1}; };
+  const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const back = (el) => { for (let n = el; n; n = n.parentElement) { const c = parse(getComputedStyle(n).backgroundColor);
+    if (c && c.a > 0.5) return c; } return {r: 255, g: 255, b: 255}; };
+  const rows = [];
+  for (const el of document.querySelectorAll('.intro-details :is(#hero-title, .hero-lead, #public-demo-note, #hero-reuse, .hero-steps li > span)')) {
+    if (el.offsetParent === null) continue;
+    const cs = getComputedStyle(el), fg = parse(cs.color), bg = back(el);
+    const a = lum(fg), b = lum(bg), size = parseFloat(cs.fontSize), weight = Number(cs.fontWeight);
+    rows.push({text: el.textContent.trim().slice(0, 30), ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+               required: size >= 24 || (size >= 18.66 && weight >= 700) ? 3 : 4.5});
+  }
+  return rows;
+}"""
 
 
 def run(base_url: str, output: Path) -> dict:
@@ -44,6 +68,10 @@ def run(base_url: str, output: Path) -> dict:
             assert page.locator(".intro-details > summary").is_visible()
             page.locator(".intro-details > summary").click()
             assert page.locator("#hero-title").is_visible()
+            contrast = page.evaluate(INTRO_CONTRAST_JS)
+            result["intro_contrast"] = contrast
+            assert len(contrast) >= 7 and all(row["ratio"] >= row["required"] for row in contrast), contrast
+            checks["intro_text_contrast_wcag_aa"] = True
             page.locator(".intro-details > summary").click()
             checks["hero_closed_by_default_and_accessible"] = True
             assert page.locator(".traffic-monitor #btn-toggle-cam").count() == 1
@@ -81,7 +109,12 @@ def run(base_url: str, output: Path) -> dict:
             page.locator("#nav-node-room-1").click()
             page.locator("#cartoon-fixture-profile").select_option("pending")
             page.locator("#btn-sim-wrongway").click()
-            page.locator("#btn-sim-leaf").click()
+            result["overlay"] = assert_overlay_bound_to_frames(page)
+            checks["analysis_overlay_bound_to_its_frame"] = True
+            result["cooldown"] = assert_event_cooldown(page)
+            checks["second_event_waits_for_countdown_and_server_rejects_it"] = True
+            result["painted"] = assert_camera_image_always_painted(page)
+            checks["live_camera_image_never_unpainted"] = True
             page.wait_for_function("() => document.querySelector('#journey-ticket-title').textContent === 'Ticket #1'", timeout=90000)
             page.wait_for_function("() => document.querySelector('#journey-ticket-status').textContent.includes('Human review')", timeout=90000)
             case_id = page.locator("#journey-ticket-select").input_value()
@@ -118,6 +151,15 @@ def run(base_url: str, output: Path) -> dict:
             page.locator("#nav-node-room-4").click()
             page.wait_for_function("() => !document.querySelector('#beta-alert-msg').hidden", timeout=70000)
             assert page.locator("#journey-ticket-select").input_value() == case_id
+            # The automatic report dispatches the patrol car; it must drive left to right.
+            car_x = "() => document.querySelector('#cartoon-patrol-car').getBoundingClientRect().left"
+            page.wait_for_function("() => document.querySelector('#cartoon-patrol-car').classList.contains('dispatching')", timeout=10000)
+            first_x = page.evaluate(car_x)
+            time.sleep(1.5)
+            second_x = page.evaluate(car_x)
+            result["patrol_car_x"] = [first_x, second_x]
+            assert second_x > first_x + 40, (first_x, second_x)
+            checks["patrol_car_drives_after_report"] = True
             page.screenshot(path=str(output / "ticket1-deadline-expired.png"), full_page=True)
             page.wait_for_function("() => !document.querySelector('#btn-weber-reject').disabled", timeout=10000)
             page.locator("#btn-weber-reject").click()

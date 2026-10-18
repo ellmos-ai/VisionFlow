@@ -21,12 +21,30 @@ from typing import Any
 
 import cv2
 
-from visionflow.contracts import UnknownRun
+from visionflow.contracts import Frame, UnknownRun
 from visionflow.recording import ClipNotReady, ClipRef, RecordingError, RecordingStore
-from visionflow.simulation import SimulationCapacityError, SimulationSession, SimulationStore
+from visionflow.simulation import (
+    ProducerLimitReached,
+    SimulationCapacityError,
+    SimulationSession,
+    SimulationStore,
+)
 
 
 ROAD_SOURCE_PREFIX = "road-sim-"
+# Analysis overlay: only during dense sampling and while the analysed frame is recent.
+_OVERLAY_MIN_RATE = 1.2
+_OVERLAY_MAX_LAG_SECONDS = 4.0
+# One scenario event per analysis (W4). Without a candidate, an event is over once
+# the analysis has looked at this many seconds of footage after it (the slowest
+# object crosses the scene in about 8.5 s); this is measured on the analysed
+# frames, so a lagging analysis extends the wait. Once the run moved past the node
+# that watched the event, a candidate keeps the source busy through its 10 s tail,
+# clip and model review until the run ends (the estimate only feeds the countdown).
+# The cap bounds every wait.
+_EVENT_SCENE_SECONDS = 10.0
+_EVENT_REVIEW_SECONDS = 20.0
+_EVENT_MAX_COOLDOWN_SECONDS = 60.0
 _TERMINAL_RUN_STATES = frozenset({"completed", "failed", "cancelled"})
 # RecordingStore.finish() reports a session without frames as ClipNotReady.
 _EMPTY_RECORDING_CODES = frozenset({"empty_recording", "clip_not_ready"})
@@ -119,10 +137,11 @@ def road_monitor_workflow() -> dict[str, Any]:
 class RoadSessionError(RuntimeError):
     """A safe road-service error with a stable code and HTTP status."""
 
-    def __init__(self, code: str, message: str, status: int = 409) -> None:
+    def __init__(self, code: str, message: str, status: int = 409, *, retry_after: int | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.status = status
+        self.retry_after = retry_after
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +213,11 @@ class RoadSessionService:
         self._bindings: dict[str, _RunBinding] = {}
         self._bindings_by_source: dict[tuple[str, str], list[str]] = {}
         self._active_by_source: dict[tuple[str, str], str] = {}
+        # (owner, source) -> [run_id, analysing node, injected at, candidate seen at]
+        self._last_events: dict[tuple[str, str], list[Any]] = {}
+        # Serialises check, injection and record of scenario events. Taken before
+        # self._lock and the controller's locks, never while holding them.
+        self._event_lock = threading.Lock()
 
     def create(self, owner_id: str, seed: int = 42) -> dict[str, Any]:
         owner = self._identifier(owner_id, "owner_id")
@@ -233,7 +257,13 @@ class RoadSessionService:
             source_id = source_ref.get("source_id")
             if source_id is None:
                 raise RecordingError("source_not_open", "Die Aufnahmequelle wurde nicht geöffnet.")
-            self.recordings.append(source_id, frame)
+            try:
+                self.recordings.append(source_id, frame)
+            except RecordingError as exc:
+                # A full recording ends the camera like its time cap, not as a fault.
+                if exc.code in {"byte_limit", "duration_limit"}:
+                    raise ProducerLimitReached("recording_limit") from None
+                raise
 
         session = self.sessions.create(owner_id, seed, on_frame=append_frame,
                                        **({"on_closed": producer_closed} if self.retention else {}))
@@ -293,6 +323,48 @@ class RoadSessionService:
             raise KeyError(source_id)
         return self.get(owner, source_id).open_reader()
 
+    def _live_progress(self, run_id: str | None) -> tuple[str | None, float | None]:
+        """Node and source time of the run's newest analysed frame."""
+        if run_id is None:
+            return None, None
+        try:
+            live = self.controller.live_analysis(run_id)
+        except (UnknownRun, AttributeError):
+            return None, None
+        if not live:
+            return None, None
+        return live.get("node_id"), live.get("timestamp_seconds")
+
+    def event_cooldown(self, owner_id: str, source_id: str) -> float | None:
+        """Seconds until the previous event of this source has been analysed, else None."""
+        key = (owner_id, source_id)
+        with self._lock:
+            record = self._last_events.get(key)
+            active = self._active_by_source.get(key)
+        if record is None:
+            return None
+        run_id, node_id, injected_at, candidate_at, event_source_time = record
+        now = time.monotonic()
+        if run_id is None:
+            # No run watched the event: keep at least its scene time, so two objects
+            # never start on top of each other.
+            remaining = _EVENT_SCENE_SECONDS - (now - injected_at)
+            return remaining if remaining > 0 else None
+        if active != run_id or now - injected_at >= _EVENT_MAX_COOLDOWN_SECONDS:
+            return None
+        live_node, analysed_time = self._live_progress(run_id)
+        if candidate_at is not None or (node_id is not None and live_node not in (None, node_id)):
+            # The watching node stopped: a candidate is in its tail, clip and review.
+            if candidate_at is None:
+                with self._lock:
+                    candidate_at = record[3] = now
+            return max(1.0, candidate_at + _EVENT_REVIEW_SECONDS - now)
+        if isinstance(analysed_time, (int, float)) and isinstance(event_source_time, (int, float)):
+            remaining = event_source_time + _EVENT_SCENE_SECONDS - analysed_time
+        else:
+            remaining = _EVENT_SCENE_SECONDS - (now - injected_at)
+        return remaining if remaining > 0 else None
+
     @_protected_source
     def inject(self, owner_id: str, source_id: str, event: str) -> dict[str, Any]:
         session = self.get(owner_id, source_id)
@@ -300,20 +372,106 @@ class RoadSessionService:
             raise RoadSessionError("source_closed", "Die Kameraquelle ist beendet.")
         if event not in {"wrong_way", "bird", "leaf"}:
             raise RoadSessionError("event_rejected", "Dieses Verkehrsszenario ist nicht verfügbar.", 422)
-        try:
-            session.inject(event)
-        except ValueError as exc:
-            raise RoadSessionError("event_rejected", "Dieses Verkehrsszenario ist nicht verfügbar.", 422) from exc
-        except RuntimeError as exc:
-            raise RoadSessionError("source_closed", "Die Kameraquelle ist beendet.") from exc
+        with self._event_lock:
+            remaining = self.event_cooldown(owner_id, source_id)
+            if remaining is not None:
+                raise RoadSessionError(
+                    "event_cooldown",
+                    "Das vorherige Ereignis wird noch analysiert. Bitte warte, bis es abgeschlossen ist.",
+                    409,
+                    retry_after=max(1, math.ceil(remaining)),
+                )
+            with self._lock:
+                run_id = self._active_by_source.get((owner_id, source_id))
+            node_id, _analysed = self._live_progress(run_id)
+            try:
+                event_source_time = float(session.latest_frame().timestamp_seconds)
+                session.inject(event)
+            except ValueError as exc:
+                raise RoadSessionError("event_rejected", "Dieses Verkehrsszenario ist nicht verfügbar.", 422) from exc
+            except RuntimeError as exc:
+                raise RoadSessionError("source_closed", "Die Kameraquelle ist beendet.") from exc
+            with self._lock:
+                self._last_events[(owner_id, source_id)] = [run_id, node_id, time.monotonic(), None, event_source_time]
         # Acknowledgement confirms only scene injection, never a detector result.
         return {"source_id": source_id, "accepted": True}
 
-    @_protected_source
-    def frame(self, owner_id: str, source_id: str) -> dict[str, Any]:
-        session = self.get(owner_id, source_id)
+    def _live_overlay(self, owner_id: str, source_id: str, session: SimulationSession):
+        """Pair the bound run's newest direction result with that very analysed frame.
+
+        Only while the run samples densely (watch phase, >= 1.2 analyses/s) and the
+        analysed frame is at most 4 s behind the camera; otherwise there is no
+        overlay. The measured lag behind the newest camera frame is reported.
+        """
+        with self._lock:
+            run_id = self._active_by_source.get((owner_id, source_id))
+        if run_id is None or session.closed:
+            return None, None
         try:
-            frame = session.latest_frame()
+            live = self.controller.live_analysis(run_id)
+        except (UnknownRun, AttributeError):
+            return None, None
+        if not live or live.get("tool") != "direction" or live.get("region") is not None:
+            return None, None
+        metrics = live.get("metrics") or {}
+        tracks = metrics.get("tracks")
+        frame = live.get("frame")
+        rate = live.get("analyses_per_second")
+        try:
+            newest = session.latest_frame()
+        except RuntimeError:
+            return None, None
+        if (
+            not isinstance(frame, Frame)
+            or frame.frame_id != live.get("frame_id")
+            or not isinstance(tracks, list)
+            or not isinstance(rate, (int, float))
+            or rate < _OVERLAY_MIN_RATE
+            or newest.timestamp_seconds - frame.timestamp_seconds > _OVERLAY_MAX_LAG_SECONDS
+        ):
+            return None, None
+        height, width = frame.image.shape[:2]
+        return frame, {
+            "frame_id": frame.frame_id,
+            "run_id": run_id,
+            "tool": "direction",
+            "coordinate_space": [int(width), int(height)],
+            "opposition_count": metrics.get("opposition_count"),
+            "analyses_per_second": live.get("analyses_per_second"),
+            "lag_seconds": round(max(0.0, newest.timestamp_seconds - frame.timestamp_seconds), 2),
+            "tracks": [
+                {
+                    "region": list(track["region"]),
+                    "dx_px": track["dx_px"],
+                    "dy_px": track["dy_px"],
+                    "opposition": track["opposition"],
+                    "frames": len(track.get("frame_ids", [])),
+                }
+                for track in tracks
+                if isinstance(track, dict)
+            ],
+        }
+
+    @_protected_source
+    def frame(self, owner_id: str, source_id: str, *, analysed: bool = False) -> dict[str, Any]:
+        """Newest camera frame; with *analysed* the frame the bound run analysed last.
+
+        The analysed variant carries that frame's own direction tracks, so an
+        overlay can only ever show results of the image it is drawn on. Without
+        a densely sampling run it falls back to the newest frame and analysis null.
+        """
+        session = self.get(owner_id, source_id)
+        analysis = None
+        analysis_state = "none"
+        try:
+            frame = None
+            if analysed:
+                frame, analysis = self._live_overlay(owner_id, source_id, session)
+                with self._lock:
+                    bound = (owner_id, source_id) in self._active_by_source
+                analysis_state = "paired" if analysis else "active" if bound and not session.closed else "none"
+            if frame is None:
+                frame = session.latest_frame()
             ok, encoded = cv2.imencode(".jpg", frame.image, [cv2.IMWRITE_JPEG_QUALITY, 88])
             if not ok or encoded.size == 0:
                 raise RoadSessionError("frame_unavailable", "Das aktuelle Kamerabild ist nicht verfügbar.")
@@ -321,6 +479,7 @@ class RoadSessionService:
             jpeg = encoded.tobytes()
         except RuntimeError as exc:
             # Closed producers retain only one compressed preview and its identity.
+            analysis = None
             jpeg = session.final_preview_jpeg()
             metadata = session.final_preview_metadata()
             if jpeg is None or metadata is None:
@@ -333,9 +492,17 @@ class RoadSessionService:
             "frame_id": frame_id,
             "timestamp_seconds": float(timestamp),
             "image_base64": base64.b64encode(jpeg).decode("ascii"),
+            "analysis": analysis,
         }
+        if analysed:
+            # paired: image and tracks of one analysed frame; active: a run analyses
+            # this source but no recent analysed frame fits; none: no analysis run.
+            payload["analysis_state"] = analysis_state if analysis or analysis_state != "paired" else "none"
         if session.closed:
             payload["closed"] = True
+        cooldown = None if session.closed else self.event_cooldown(owner_id, source_id)
+        payload["next_event_in_seconds"] = None if cooldown is None else round(cooldown, 1)
+        payload["end_reason"] = session.end_reason
         if session.error_code:
             payload["error_code"] = session.error_code
         return payload
@@ -360,6 +527,7 @@ class RoadSessionService:
         result.update(
             source_id=source_id,
             closed=session.closed,
+            end_reason=session.end_reason,
             error_code=session.error_code,
             clips=clips,
         )
@@ -717,6 +885,7 @@ class RoadSessionService:
                 self._run_sources.pop(binding.run_id, None)
             self._active_by_source.pop((owner_id, source_id), None)
             self._bindings_by_source.pop((owner_id, source_id), None)
+            self._last_events.pop((owner_id, source_id), None)
             self._sessions_by_source.pop(source_id, None)
             self._source_owners.pop(source_id, None)
             self.sessions.forget(owner_id, source_id)
@@ -864,6 +1033,8 @@ def dispatch_road_get(
         _owned_source(service, owner_id, source_id)
         if parts[3] == "frame":
             return RoadHttpResponse(200, service.frame(owner_id, source_id))
+        if parts[3] == "analysis-frame":
+            return RoadHttpResponse(200, service.frame(owner_id, source_id, analysed=True))
         if parts[3] == "recording":
             return RoadHttpResponse(200, service.recording(owner_id, source_id))
     return None

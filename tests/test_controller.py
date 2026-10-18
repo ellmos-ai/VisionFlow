@@ -854,3 +854,27 @@ def test_observer_tool_state_is_separate_for_full_frame_and_roi(tmp_path):
     assert result.findings[1].region == (0.0, 0.0, 2.0, 2.0)
     assert result.findings[0].frame_ids == result.findings[1].frame_ids == ["same-frame-id"]
     assert result.findings[0].evidence_ref != result.findings[1].evidence_ref
+
+
+def test_live_analysis_frame_is_released_when_a_run_ends(tmp_path):
+    """I-3: the newest analysed frame is held for live views only while the run is open."""
+    from visionflow.config import validate_workflow
+    from visionflow.runtime import create_controller, create_registry
+    from visionflow.workflow_resources import load_builtin_workflow
+
+    controller = create_controller(tmp_path, samples=True)
+    motion = load_builtin_workflow("motion-observation.json", create_registry())
+    motion.input.source = "samples/motion.avi"
+    finished = controller.start(motion)
+    assert controller.join(finished.run_id, timeout=20).status == "completed"
+    assert controller.live_analysis(finished.run_id) is None
+    assert controller._runs[finished.run_id].live_frame is None
+
+    document = load_builtin_workflow("document-quality.json", create_registry())
+    document.input.source = "samples/document-blurred.png"
+    waiting = controller.start(document)
+    assert controller.wait(waiting.run_id, timeout=20).status == "waiting_for_input"
+    assert controller.live_analysis(waiting.run_id) is not None  # open run: live view available
+    controller.cancel(waiting.run_id)
+    assert controller.live_analysis(waiting.run_id) is None
+    assert controller._runs[waiting.run_id].live_frame is None

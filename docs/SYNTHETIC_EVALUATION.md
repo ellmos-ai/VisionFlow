@@ -1,5 +1,18 @@
 # Synthetic evaluation
 
+## Update 2026-10-17: renderer v4 (lane-keeping traffic, longer event paths)
+
+Regular traffic now uses the two outer lanes of each carriageway at one shared speed per lane, so
+cars never drive into each other; the inner lanes stay free for the wrong-way car, which enters
+at the start of its path (horizon or bottom edge) instead of mid-frame. The bird also enters at the
+bottom edge; bird (75 px/s) and leaf (65 px/s) move more slowly than before. In a separate
+diagnostic with five seeds and the event injected after three seconds, at two analyses per second
+the bird was detected in 5/5 and the leaf in 4/5 runs (previous renderer: 3/5 and 4/5); at five
+analyses per second all events were detected in both renderers. With the unchanged protocol (`evaluation/results/roadworld-renderer-v4.json`) the
+counts are unchanged: normal 0/4, wrong-way 4/4, bird 4/4, leaf 4/4 (TP 4, FP 8, TN 4, FN 0).
+First-candidate frames moved later for most event sequences (wrong-way seed 18 and 102 from frame
+2 to 3; bird 2–3 → 4–8; leaf 3–5 → 5–8); all remain within the 24 analysed frames.
+
 ## Update 2026-10-13: portable RoadWorld script and the new scene renderer
 
 `evaluation/roadworld_eval.py` implements the RoadWorld part of the protocol below (seeds 17,

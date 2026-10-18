@@ -13,7 +13,7 @@ from collections.abc import Callable
 
 from .decision_policy import DecisionPolicy, DecisionStore
 from .model_exchange import ModelExchangeStore
-from .road_api import RoadSessionService, make_source_override
+from .road_api import ROAD_SOURCE_PREFIX, RoadSessionService, make_source_override
 from .road_cases import RoadCaseService, RoadModelRouter
 from .runtime import create_controller
 from .simulated_authority import SimulatedAuthorityInbox
@@ -139,7 +139,10 @@ def build_road_runtime(
         allowed_camera_sources=cameras,
         source_override=source_override,
         model_factory=router,
-        **({"retention": retention} if retention else {}),
+        samples=True,
+        # Hosted retention budgets road sources; sample runs are bounded by the API.
+        **({"retention": retention,
+            "retention_scope": lambda source: source.startswith(ROAD_SOURCE_PREFIX)} if retention else {}),
     )
     controller_ref["controller"] = controller
     controller_ref["evidence_root"] = Path(
