@@ -793,3 +793,53 @@ def test_event_cooldown_follows_the_analysed_footage_and_a_candidate(road_server
     assert service.event_cooldown("owner-a", source_id) >= 1.0
     service.cancel_run("owner-a", run.run_id)
     assert service.event_cooldown("owner-a", source_id) is None
+
+
+def _parallel_injects(service, source_id: str, count: int = 16) -> list[str]:
+    from visionflow.road_api import RoadSessionError
+
+    barrier = threading.Barrier(count)
+    outcomes: list[str] = []
+    lock = threading.Lock()
+
+    def worker():
+        barrier.wait()
+        try:
+            service.inject("owner-a", source_id, "wrong_way")
+            outcome = "accepted"
+        except RoadSessionError as exc:
+            outcome = exc.code
+        with lock:
+            outcomes.append(outcome)
+
+    threads = [threading.Thread(target=worker) for _ in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    return outcomes
+
+
+def test_parallel_events_are_admitted_once_while_a_run_watches(road_server):
+    """I-2: the cooldown check and the injection are one atomic step."""
+    _base_url, service, controller, _sessions = road_server
+    source_id = service.create("owner-a", seed=42)["source_id"]
+    run = _waiting_camera_run(controller, source_id)
+    service.bind_run("owner-a", source_id, run.run_id, monitor_clip=False)
+    outcomes = _parallel_injects(service, source_id)
+    assert outcomes.count("accepted") == 1, outcomes
+    assert outcomes.count("event_cooldown") == 15, outcomes
+
+
+def test_events_without_a_watching_run_still_keep_their_scene_time(road_server):
+    """I-2: without a bound run two wrong-way drivers must not start on top of each other."""
+    from visionflow.road_api import RoadSessionError
+
+    _base_url, service, _controller, _sessions = road_server
+    source_id = service.create("owner-a", seed=42)["source_id"]
+    outcomes = _parallel_injects(service, source_id)
+    assert outcomes.count("accepted") == 1, outcomes
+    with pytest.raises(RoadSessionError) as rejected:
+        service.inject("owner-a", source_id, "bird")
+    assert rejected.value.code == "event_cooldown" and rejected.value.retry_after >= 1
+    assert service.frame("owner-a", source_id)["next_event_in_seconds"] > 0

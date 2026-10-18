@@ -215,6 +215,9 @@ class RoadSessionService:
         self._active_by_source: dict[tuple[str, str], str] = {}
         # (owner, source) -> [run_id, analysing node, injected at, candidate seen at]
         self._last_events: dict[tuple[str, str], list[Any]] = {}
+        # Serialises check, injection and record of scenario events. Taken before
+        # self._lock and the controller's locks, never while holding them.
+        self._event_lock = threading.Lock()
 
     def create(self, owner_id: str, seed: int = 42) -> dict[str, Any]:
         owner = self._identifier(owner_id, "owner_id")
@@ -342,7 +345,12 @@ class RoadSessionService:
             return None
         run_id, node_id, injected_at, candidate_at, event_source_time = record
         now = time.monotonic()
-        if run_id is None or active != run_id or now - injected_at >= _EVENT_MAX_COOLDOWN_SECONDS:
+        if run_id is None:
+            # No run watched the event: keep at least its scene time, so two objects
+            # never start on top of each other.
+            remaining = _EVENT_SCENE_SECONDS - (now - injected_at)
+            return remaining if remaining > 0 else None
+        if active != run_id or now - injected_at >= _EVENT_MAX_COOLDOWN_SECONDS:
             return None
         live_node, analysed_time = self._live_progress(run_id)
         if candidate_at is not None or (node_id is not None and live_node not in (None, node_id)):
@@ -364,26 +372,27 @@ class RoadSessionService:
             raise RoadSessionError("source_closed", "Die Kameraquelle ist beendet.")
         if event not in {"wrong_way", "bird", "leaf"}:
             raise RoadSessionError("event_rejected", "Dieses Verkehrsszenario ist nicht verfügbar.", 422)
-        remaining = self.event_cooldown(owner_id, source_id)
-        if remaining is not None:
-            raise RoadSessionError(
-                "event_cooldown",
-                "Das vorherige Ereignis wird noch analysiert. Bitte warte, bis es abgeschlossen ist.",
-                409,
-                retry_after=max(1, math.ceil(remaining)),
-            )
-        with self._lock:
-            run_id = self._active_by_source.get((owner_id, source_id))
-        node_id, _analysed = self._live_progress(run_id)
-        try:
-            event_source_time = float(session.latest_frame().timestamp_seconds)
-            session.inject(event)
-        except ValueError as exc:
-            raise RoadSessionError("event_rejected", "Dieses Verkehrsszenario ist nicht verfügbar.", 422) from exc
-        except RuntimeError as exc:
-            raise RoadSessionError("source_closed", "Die Kameraquelle ist beendet.") from exc
-        with self._lock:
-            self._last_events[(owner_id, source_id)] = [run_id, node_id, time.monotonic(), None, event_source_time]
+        with self._event_lock:
+            remaining = self.event_cooldown(owner_id, source_id)
+            if remaining is not None:
+                raise RoadSessionError(
+                    "event_cooldown",
+                    "Das vorherige Ereignis wird noch analysiert. Bitte warte, bis es abgeschlossen ist.",
+                    409,
+                    retry_after=max(1, math.ceil(remaining)),
+                )
+            with self._lock:
+                run_id = self._active_by_source.get((owner_id, source_id))
+            node_id, _analysed = self._live_progress(run_id)
+            try:
+                event_source_time = float(session.latest_frame().timestamp_seconds)
+                session.inject(event)
+            except ValueError as exc:
+                raise RoadSessionError("event_rejected", "Dieses Verkehrsszenario ist nicht verfügbar.", 422) from exc
+            except RuntimeError as exc:
+                raise RoadSessionError("source_closed", "Die Kameraquelle ist beendet.") from exc
+            with self._lock:
+                self._last_events[(owner_id, source_id)] = [run_id, node_id, time.monotonic(), None, event_source_time]
         # Acknowledgement confirms only scene injection, never a detector result.
         return {"source_id": source_id, "accepted": True}
 
